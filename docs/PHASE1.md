@@ -4,7 +4,7 @@ P1 adds offline capture health diagnostics, message extraction, schema/mapping d
 
 ## Checkout and scope
 
-This repository is an imported checkout: local `master` is `38db76b` (import) followed by P1 commits. `origin` is `m413w4r3/D3li1B0tN3t`; `origin/master` at `4406f09` is README-only and ahead. There is no upstream remote. The Phase 0 snapshot `8f62ba4` is absent. Phase 0's report also records its original snapshot separately; these checkout facts are documented in [UPSTREAM](UPSTREAM.md#checkout-reality-phase-1).
+This repository is an imported checkout: local `master` is `38db76b` (import) followed by P1 commits. `origin` is `m413w4r3/D3li1B0tN3t`; `origin/master` at `4406f09` was README-only and ahead, and was merged into `master` as merge commit `3302402`. The README conflict was resolved in favor of the remote cleanup (`README.md` is now `doto`). Local `master` is ahead of `origin/master` by the P1 commits and zero behind. There is no upstream remote. The Phase 0 snapshot `8f62ba4` is absent. Phase 0's report also records its original snapshot separately; these checkout facts are documented in [UPSTREAM](UPSTREAM.md#checkout-reality-phase-1).
 
 P1 stayed within the existing script, network, and protocol architecture. It added no second CLI/framework or protobuf decoder, and used no Rust, Frida, or PostgreSQL. No real captures or credentials were committed.
 

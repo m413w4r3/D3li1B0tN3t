@@ -13,8 +13,10 @@ is MIT licensed. At that historical baseline, the solution had 9 projects under
 The current checkout has `origin` at
 `git@github.com:m413w4r3/D3li1B0tN3t.git`; it has no configured `upstream`
 remote. The original Phase 0 report's upstream URL is historical and does not
-describe the current remotes. The fetched `origin/master` is one commit ahead of
-local `master`, with a README-only change. See [Checkout reality (Phase 1)](#checkout-reality-phase-1).
+describe the current remotes. The fetched `origin/master` was one README-only
+commit ahead; it was merged into local `master` as merge commit `3302402`, with
+the `README.md` conflict resolved in favor of the remote cleanup. See
+[Checkout reality (Phase 1)](#checkout-reality-phase-1).
 
 ### Recommended follow-up
 
@@ -84,10 +86,13 @@ intermediate output, and local environment files out of commits as well.
 
 ## Checkout reality (Phase 1)
 
-Verified in the re-imported checkout: local `master` is `38db76b` (`first`),
-and the configured `origin` is `m413w4r3/D3li1B0tN3t`. Fetched `origin/master`
-is `4406f09`, one commit ahead, changing only `README.md`; local `master` is
-zero commits ahead and one behind. The worktree was clean at inspection. No
-`upstream` remote is configured. This checkout does not establish push or pull
-request history. The Phase 0 snapshot `29b8fb1` and objects `8f62ba4`, `29b8fb1`,
-and `0a995ad` are absent here.
+Verified in the re-imported checkout: local `master` started at `38db76b`
+(`first`), and the configured `origin` is `m413w4r3/D3li1B0tN3t`. Fetched
+`origin/master` was `4406f09` ("Clean up README by removing project details"),
+changing only `README.md`. It was merged into local `master` as merge commit
+`3302402`; the `README.md` conflict was resolved in favor of the remote cleanup.
+After the merge, local `master` is ahead of `origin/master` by the P1 commits and
+zero behind. The worktree was clean at inspection. No `upstream` remote is
+configured. This checkout does not establish push or pull request history. The
+Phase 0 snapshot `29b8fb1` and objects `8f62ba4`, `29b8fb1`, and `0a995ad` are
+absent here.
