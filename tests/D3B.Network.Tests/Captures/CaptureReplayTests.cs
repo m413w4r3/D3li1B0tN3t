@@ -57,6 +57,42 @@ public sealed class CaptureReplayTests
         return frames;
     }
 
+    private static async Task<(byte[] Client, byte[] Server)> ReplayBytesAsync(IEnumerable<CaptureRecord> records)
+    {
+        var fromClient = new Pipe();
+        var fromServer = new Pipe();
+        var replay = CaptureReplay.PlayAsync(records, fromClient.Writer, fromServer.Writer, TestContext.Current.CancellationToken);
+        var client = ReadToEndAsync(fromClient.Reader);
+        var server = ReadToEndAsync(fromServer.Reader);
+
+        await replay.WaitAsync(_timeout, TestContext.Current.CancellationToken);
+
+        return (await client, await server);
+    }
+
+    private static List<byte[]> ParseFrames(byte[] bytes)
+    {
+        var reader = new SequenceReader<byte>(new ReadOnlySequence<byte>(bytes));
+        var frames = new List<byte[]>();
+
+        while (FrameReader.TryReadFrame(ref reader, out var frame))
+            frames.Add(frame.ToArray());
+
+        Assert.Equal(0, reader.Remaining);
+
+        return frames;
+    }
+
+    private static byte[] EncodeFrames(params byte[][] frames)
+    {
+        var bytes = new ArrayBufferWriter<byte>();
+
+        foreach (var frame in frames)
+            FrameWriter.Write(bytes, frame);
+
+        return bytes.WrittenSpan.ToArray();
+    }
+
     private static SequencePosition Frames(ReadOnlySequence<byte> buffer, List<byte[]> frames)
     {
         var reader = new SequenceReader<byte>(buffer);
@@ -166,5 +202,94 @@ public sealed class CaptureReplayTests
         await replay.WaitAsync(_timeout, TestContext.Current.CancellationToken);
 
         Assert.Equal(frames, await read);
+    }
+
+    [Fact]
+    public async Task DifferentReadFragmentationsProduceTheSameParsedFrames()
+    {
+        byte[][] expected = [[0x08, 0x01], [0x10, 0x02], [0x18, 0x03]];
+        var encoded = EncodeFrames(expected);
+        var wholeRead = new[] { new CaptureRecord(CaptureRecordKind.FromClient, TimeSpan.Zero, encoded) };
+        var fragmentedReads = new[]
+        {
+            new CaptureRecord(CaptureRecordKind.FromClient, TimeSpan.Zero, encoded.AsMemory(0, 1)),
+            new CaptureRecord(CaptureRecordKind.FromClient, TimeSpan.FromTicks(1), encoded.AsMemory(1, 2)),
+            new CaptureRecord(CaptureRecordKind.FromClient, TimeSpan.FromTicks(2), encoded.AsMemory(3, 1)),
+            new CaptureRecord(CaptureRecordKind.FromClient, TimeSpan.FromTicks(3), encoded.AsMemory(4)),
+        };
+
+        var wholeReplay = await ReplayBytesAsync(wholeRead);
+        var fragmentedReplay = await ReplayBytesAsync(fragmentedReads);
+
+        Assert.Equal(expected, ParseFrames(wholeReplay.Client));
+        Assert.Equal(ParseFrames(wholeReplay.Client), ParseFrames(fragmentedReplay.Client));
+        Assert.Empty(wholeReplay.Server);
+        Assert.Empty(fragmentedReplay.Server);
+    }
+
+    [Fact]
+    public async Task SeveralFramesInOneReadRemainInOrder()
+    {
+        byte[][] expected = [[0x08, 0x01], [0x10, 0x02], [0x18, 0x03]];
+        var records = new[]
+        {
+            new CaptureRecord(CaptureRecordKind.FromClient, TimeSpan.Zero, EncodeFrames(expected)),
+        };
+
+        var replay = await ReplayBytesAsync(records);
+
+        Assert.Equal(expected, ParseFrames(replay.Client));
+    }
+
+    [Fact]
+    public async Task AFrameSplitAcrossRecordsIsParsedAfterThePipeCompletes()
+    {
+        var encoded = EncodeFrames([0x08, 0x01]);
+        var records = new[]
+        {
+            new CaptureRecord(CaptureRecordKind.FromServer, TimeSpan.Zero, encoded.AsMemory(0, 1)),
+            new CaptureRecord(CaptureRecordKind.FromServer, TimeSpan.FromTicks(1), encoded.AsMemory(1)),
+        };
+
+        var replay = await ReplayBytesAsync(records);
+
+        Assert.Equal([[0x08, 0x01]], ParseFrames(replay.Server));
+    }
+
+    [Fact]
+    public async Task AlternatingDirectionsPreserveEachDirectionFrameOrder()
+    {
+        byte[][] clientFrames = [[0x08, 0x01], [0x08, 0x02]];
+        byte[][] serverFrames = [[0x10, 0x01], [0x10, 0x02]];
+        var records = new[]
+        {
+            new CaptureRecord(CaptureRecordKind.FromClient, TimeSpan.Zero, EncodeFrames(clientFrames[..1])),
+            new CaptureRecord(CaptureRecordKind.FromServer, TimeSpan.FromTicks(1), EncodeFrames(serverFrames[..1])),
+            new CaptureRecord(CaptureRecordKind.FromClient, TimeSpan.FromTicks(2), EncodeFrames(clientFrames[1..])),
+            new CaptureRecord(CaptureRecordKind.FromServer, TimeSpan.FromTicks(3), EncodeFrames(serverFrames[1..])),
+        };
+
+        var replay = await ReplayBytesAsync(records);
+
+        Assert.Equal(clientFrames, ParseFrames(replay.Client));
+        Assert.Equal(serverFrames, ParseFrames(replay.Server));
+    }
+
+    [Fact]
+    public async Task RepeatedPipeReplaysProduceIdenticalBytesForEachDirection()
+    {
+        var records = new[]
+        {
+            new CaptureRecord(CaptureRecordKind.FromClient, TimeSpan.Zero, new byte[] { 1, 2 }),
+            new CaptureRecord(CaptureRecordKind.FromServer, TimeSpan.FromTicks(1), new byte[] { 3, 4 }),
+            new CaptureRecord(CaptureRecordKind.FromClient, TimeSpan.FromTicks(2), new byte[] { 5 }),
+            new CaptureRecord(CaptureRecordKind.FromServer, TimeSpan.FromTicks(3), new byte[] { 6 }),
+        };
+
+        var first = await ReplayBytesAsync(records);
+        var second = await ReplayBytesAsync(records);
+
+        Assert.Equal(first.Client, second.Client);
+        Assert.Equal(first.Server, second.Server);
     }
 }

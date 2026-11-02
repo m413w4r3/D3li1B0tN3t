@@ -16,6 +16,21 @@
   </Folder>
   <Folder Name="/scripts/capture/">
     <File Path="scripts/capture/CaptureCommand.cs" />
+    <File Path="scripts/capture/CaptureDiagnostics.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticByteSegment.cs" />
+    <File Path="scripts/capture/CaptureDiagnostic.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticBuild.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticCapture.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticDirection.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticDirections.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticFile.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticJsonContext.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticReport.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticSeverity.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticSeverityJsonConverter.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticStage.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticStageJsonConverter.cs" />
+    <File Path="scripts/capture/CaptureDiagnosticSummary.cs" />
     <File Path="scripts/capture/GameMessages.cs" />
     <File Path="scripts/capture/ProtobufShape.cs" />
     <File Path="scripts/capture/SchemaMatch.cs" />

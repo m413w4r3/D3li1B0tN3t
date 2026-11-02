@@ -35,6 +35,10 @@ internal static class CaptureCommand
         {
             Description = @"A build's mapping, such as %LOCALAPPDATA%\D3B\data\<version>\mapping-<format>.binpb: with --messages, also names each message the readable protocol pairs.",
         };
+        var json = new Option<bool>("--json")
+        {
+            Description = "Writes a JSON capture and framing health report with stable diagnostic codes.",
+        };
         var command = new RootCommand("Describes D3B's captures of relayed connections by their structure, never their content (D37).")
         {
             paths,
@@ -42,14 +46,15 @@ internal static class CaptureCommand
             schema,
             messages,
             mapping,
+            json,
         };
 
-        command.SetAction(result => Run(result.GetValue(paths) ?? [], result.GetValue(frames), result.GetValue(schema)?.FullName, result.GetValue(messages), result.GetValue(mapping)?.FullName));
+        command.SetAction(result => Run(result.GetValue(paths) ?? [], result.GetValue(frames), result.GetValue(schema)?.FullName, result.GetValue(messages), result.GetValue(mapping)?.FullName, result.GetValue(json)));
 
         return command;
     }
 
-    private static int Run(string[] paths, bool frames, string? schemaPath, bool messages, string? mappingPath)
+    private static int Run(string[] paths, bool frames, string? schemaPath, bool messages, string? mappingPath, bool json)
     {
         var files = (paths.Length is 0 ? [RelaySettings.DefaultCapturesDirectory] : paths)
             .SelectMany(path => Directory.Exists(path) ? Directory.GetFiles(path, "*" + CaptureWriter.FileExtension).Order(StringComparer.Ordinal).ToArray() : [path])
@@ -57,9 +62,25 @@ internal static class CaptureCommand
 
         if (files.Count is 0)
         {
+            if (json)
+            {
+                Console.Out.WriteLine(CaptureDiagnostics.ToJson(CaptureDiagnostics.Read([])));
+
+                return 2;
+            }
+
             Console.Error.WriteLine("No capture to describe. The host records them with --Network:Captures:Enabled true.");
 
             return 2;
+        }
+
+        if (json)
+        {
+            var report = CaptureDiagnostics.Read(files);
+
+            Console.Out.WriteLine(CaptureDiagnostics.ToJson(report));
+
+            return report.ExitCode;
         }
 
         SchemaMatch? schema = null;

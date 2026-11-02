@@ -83,7 +83,7 @@ dotnet tool run vpk pack --packId D3B.App ...  # the app's installer, as .github
 dotnet run --file scripts/client.cs        # which configuration the client reads, Ankama's or D3B's; restore gives it Ankama's back after a crash
 dotnet run --file scripts/capture.cs       # describes the captures by structure, never content; --frames shows each frame's protobuf shape
                                            # --schema <file> reads them with a schema, field by field
-                                           # --messages lists the game's messages in order by their type URLs, --mapping <file> naming them (D178)
+                                           # --messages lists the game's messages in order by their type URLs, --mapping <file> naming them (D178); --json writes capture/framing diagnostics
 dotnet run --file scripts/schema.cs        # writes the installed build's obfuscated protocol schema beside its pack; --proto <dir> as .proto text
 dotnet run --file scripts/mapping.cs       # matches the readable .proto files with that schema, audits, writes the build's mapping beside it
 dotnet run --file scripts/fights.cs        # replays the captured fights: what D3B.Engine foresees of each cast against the server's actions (D196); --details

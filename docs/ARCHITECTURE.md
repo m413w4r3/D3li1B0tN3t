@@ -91,7 +91,8 @@ This keeps the schema reader strict while allowing the distinct call ABIs.
 
 ## Diagnostics boundary
 
-Saved captures are an offline diagnostic input. `scripts/capture.cs` describes their structure,
+Saved captures are an offline diagnostic input. `scripts/capture.cs` describes their structure and its `--json` mode
+reports capture health and frame-boundary diagnostics from the script layer,
 `src/D3B.App/ViewModels/Inspector/InspectorViewModel.cs` inspects them, and
 `src/D3B.Network/Captures/CaptureReplay.cs` feeds recorded bytes into in-memory pipes for replay and tests; record timing
 is not recreated. Live runtime diagnostics are separate: the relay can record connections when capture is enabled,
@@ -100,10 +101,11 @@ logging payload values by default. An offline replay does not establish Linux cl
 that acceptance remains MANUAL/SUPERVISED. The default relay configuration includes port 443, which requires privilege
 on Linux.
 
-`tests/D3B.Scripts.Tests/` is a scoped exception to D10's scripts-have-no-tests rule: its project links
-`scripts/unity/ClientInstall.cs` and `ClientPlatform.cs` and tests the Windows/Linux path selection seam. The file-based
-tools remain outside the compiled application projects; this exception does not establish a general scripts test
-project.
+`tests/D3B.Scripts.Tests/` is a scoped exception to D10's scripts-have-no-tests rule: it links the Windows/Linux
+`scripts/unity/ClientInstall.cs` and `ClientPlatform.cs` seam, `scripts/schema/CallRegisters.cs`, and the capture
+diagnostic DTOs and reader in `scripts/capture/`. These tests exercise linked script sources without adding a second
+capture CLI or protocol dependency to `D3B.Network`. The file-based tools remain outside the compiled application
+projects; this exception does not establish a general scripts test project.
 
 ## Deliberate non-goals and incomplete work
 

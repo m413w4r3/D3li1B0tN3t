@@ -2,9 +2,25 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/D3B.Data/D3B.Data.csproj" />
+    <ProjectReference Include="../../src/D3B.Network/D3B.Network.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../../scripts/capture/CaptureDiagnostics.cs" Link="Scripts/Capture/CaptureDiagnostics.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticByteSegment.cs" Link="Scripts/Capture/CaptureDiagnosticByteSegment.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnostic.cs" Link="Scripts/Capture/CaptureDiagnostic.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticBuild.cs" Link="Scripts/Capture/CaptureDiagnosticBuild.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticCapture.cs" Link="Scripts/Capture/CaptureDiagnosticCapture.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticDirection.cs" Link="Scripts/Capture/CaptureDiagnosticDirection.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticDirections.cs" Link="Scripts/Capture/CaptureDiagnosticDirections.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticFile.cs" Link="Scripts/Capture/CaptureDiagnosticFile.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticJsonContext.cs" Link="Scripts/Capture/CaptureDiagnosticJsonContext.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticReport.cs" Link="Scripts/Capture/CaptureDiagnosticReport.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticSeverity.cs" Link="Scripts/Capture/CaptureDiagnosticSeverity.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticSeverityJsonConverter.cs" Link="Scripts/Capture/CaptureDiagnosticSeverityJsonConverter.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticStage.cs" Link="Scripts/Capture/CaptureDiagnosticStage.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticStageJsonConverter.cs" Link="Scripts/Capture/CaptureDiagnosticStageJsonConverter.cs" />
+    <Compile Include="../../scripts/capture/CaptureDiagnosticSummary.cs" Link="Scripts/Capture/CaptureDiagnosticSummary.cs" />
     <Compile Include="../../scripts/unity/ClientInstall.cs" Link="Scripts/Unity/ClientInstall.cs" />
     <Compile Include="../../scripts/unity/ClientPlatform.cs" Link="Scripts/Unity/ClientPlatform.cs" />
     <Compile Include="../../scripts/schema/CallRegisters.cs" Link="Scripts/Schema/CallRegisters.cs" />

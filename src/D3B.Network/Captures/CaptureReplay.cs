@@ -3,6 +3,10 @@ using System.IO.Pipelines;
 namespace D3B.Network.Captures;
 
 /// <summary>Replays a capture into pipes, in place of the network, for tests and for reading it again (D8, D37).</summary>
+/// <remarks>
+/// Given the same ordered records, replay writes the same byte sequence to each direction and produces the same parsed
+/// frame sequence. It preserves neither timing nor cross-pipe interleaving, and it opens no network connections.
+/// </remarks>
 public static class CaptureReplay
 {
     /// <summary>Writes a capture's records into two pipes, in the capture's order, leaving out the frames D3B sent the server itself.</summary>
@@ -21,7 +25,8 @@ public static class CaptureReplay
     /// <remarks>
     /// Each record is its own write and flush, so a reader gets the bytes cut where the network cut them, or coarser when
     /// it lags. A side closing completes its pipe, and all are completed at the end. Records are not timed: they follow
-    /// one another as fast as the readers take them.
+    /// one another as fast as the readers take them. Replaying the same ordered records gives the same per-direction
+    /// bytes and parsed frames, with no cross-pipe interleaving guarantee.
     /// </remarks>
     /// <param name="records">The records.</param>
     /// <param name="fromClient">Receives what the client sent.</param>
