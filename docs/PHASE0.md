@@ -61,4 +61,6 @@ P1 is plan only: first slice uses versioned synthetic/sanitized fixtures and off
 
 ## Artifacts and references
 
+Build identity and the later offline mapping diagnostic are recorded in [BUILD_IDENTITY](BUILD_IDENTITY.md): the schema reached matching/audit, `AuthenticationRequest` remained unmatched, and no mapping was produced. This is partial diagnostic evidence, not mapping acceptance.
+
 Pack: `/tmp/p04b/packs/3.7.12.12/data-8.pack`, format 8, 26,870,514 B, SHA-256 `fdd6e182a62308ef9d4d7d92a3a0e157c864d3c5784f85ebad64234bb5a1e175`. Schema: `schema-1.binpb`, 170,287 B, SHA-256 `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0`; connection.proto 37 messages/9 enums/92 fields; game.proto 2,175 messages/423 enums/6,302 fields. [BASELINE](BASELINE.md) · [TESTING](TESTING.md) · [ARCHITECTURE](ARCHITECTURE.md) · [UPSTREAM](UPSTREAM.md). This report describes the original Phase 0 snapshot `29b8fb1` (`29b8fb130dd4715f33cfd7b9a9885fe09f79852c`), absent from this re-imported checkout at `38db76b`; see [UPSTREAM](UPSTREAM.md#checkout-reality-phase-1) for checkout facts.
