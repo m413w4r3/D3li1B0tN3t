@@ -43,7 +43,7 @@ Commands in this section were run in Phase 0 unless labeled **FUTURE**. Run the 
 | Check | Command | Recorded result |
 | --- | --- | --- |
 | Solution build | `dotnet build D3B.slnx` | Passed: 20 projects, 0 warnings, 0 errors. |
-| Full test suite | `dotnet test --no-build --nologo -v minimal --max-parallel-test-modules 1` | Passed after all code changes: 1,202 total, 1,202 passed, 0 failed, 0 skipped, exit 0. Count: 1,187 base + 4 P0.6 characterization + 11 P0.3/P0.11 linked-script tests. |
+| Full test suite (Phase 1 final isolated run) | `/home/nill/.dotnet/dotnet test --no-build --max-parallel-test-modules 1` | PASS, 1,231 total, 1,231 passed, 0 failed, 0 skipped, exit 0. Count: 1,202 Phase 0 + 16 capture/replay + 13 message/schema/mapping tests. |
 | Formatting | `dotnet format --verify-no-changes` | Passed after the final code changes. |
 | Script help smoke | Commands below | All six exited 0 after the final code changes. |
 
@@ -69,7 +69,31 @@ dotnet run --artifacts-path /tmp/d3b-p03-artifacts/release --file scripts/releas
 dotnet run --artifacts-path /tmp/d3b-p03-artifacts/client --file scripts/client.cs -- --help
 ```
 
-All six smoke commands exited 0. The parent independently reran `inspect.cs` and `schema.cs` successfully. Keep artifact paths under `/tmp`; do not put generated output in the repository.
+All six Phase 0 smoke commands exited 0. The parent independently reran `inspect.cs` and `schema.cs` successfully. Keep artifact paths under `/tmp`; do not put generated output in the repository.
+
+## Phase 1 results
+
+The final isolated P1 checks used the pinned SDK. The Phase 1 full-suite count is 1,231: 1,202 Phase 0 tests + 16 capture/replay tests + 13 message/schema/mapping tests.
+
+| Check | Command | Recorded result |
+| --- | --- | --- |
+| Solution build | `/home/nill/.dotnet/dotnet build D3B.slnx` | PASS, 0 warnings, 0 errors. |
+| Full test suite | `/home/nill/.dotnet/dotnet test --no-build --max-parallel-test-modules 1` | PASS, 1,231 total, 1,231 passed, 0 failed, 0 skipped, exit 0. |
+| Formatting | `/home/nill/.dotnet/dotnet format --verify-no-changes` | PASS, exit 0. |
+| Script help smoke | `inspect`, `extract`, `schema`, `mapping`, `release`, and `client` `--help` commands listed above | All six exited 0. |
+
+P1 linked-script coverage in `tests/D3B.Scripts.Tests/Captures/` is 35 tests: 24 capture diagnostics and JSON contract, 9 `ClientInstall`, and 2 `CallRegisters`. `D3B.Network.Tests` has 117 tests, including 5 replay determinism tests (112 prior + 5). The 24 linked capture tests cover message extraction and schema/mapping diagnosis, including valid and invalid mappings.
+
+The capture CLI keeps text output available and adds JSON diagnostics. These command forms were exercised with synthetic fixtures under `/tmp/p1demo/fixtures`; they are not committed:
+
+```sh
+/home/nill/.dotnet/dotnet run --file scripts/capture.cs -- /tmp/p1demo/fixtures/valid.d3bcap  # text output, unchanged
+/home/nill/.dotnet/dotnet run --file scripts/capture.cs -- /tmp/p1demo/fixtures/valid.d3bcap --json  # exit 0; valid capture report
+/home/nill/.dotnet/dotnet run --file scripts/capture.cs -- /tmp/p1demo/fixtures/truncated.d3bcap --json  # exit 0; capture.record_truncated warning
+/home/nill/.dotnet/dotnet run --file scripts/capture.cs -- /tmp/p1demo/fixtures/unsupported.d3bcap --json  # exit 1; capture.format_unsupported error
+```
+
+Stderr was empty in all three JSON demonstrations. JSON adds message/schema/mapping sections. The invalid-mapping result `mapping.file_invalid`, exit 1, is linked-test/demo evidence only, not live compatibility. These are synthetic offline results, not real-client acceptance.
 
 ## Real-client procedures (manual/supervised)
 
@@ -95,7 +119,7 @@ An earlier Phase 0 schema attempt exited 1 after opening `Unity 6000.3.16f1, IL2
 
 - **Wrong SDK:** system `dotnet` 10.0.114 failed against the required SDK. Check `dotnet --version` and use `/home/nill/.dotnet/dotnet` for the Phase 0 environment.
 - **NuGet unavailable:** a first restore needs network access. An offline restore can fail before any build or test executes; distinguish that from a test failure.
-- **inotify exhaustion:** a default parallel `dotnet test` run under a tight inotify budget produced 1,197 passed and 5 environment failures across ClientRedirect tests, `HostRunnerTests`, and `StoragePreparation` (`host limit 128 on inotify instances`). Run the full suite with `--max-parallel-test-modules 1` to avoid this limit; the final isolated run passed all 1,202 tests.
+- **inotify exhaustion:** a default parallel `dotnet test` run under a tight inotify budget produced 1,197 passed and 5 environment failures across ClientRedirect tests, `HostRunnerTests`, and `StoragePreparation` (`host limit 128 on inotify instances`). Run the full suite with `--max-parallel-test-modules 1` to avoid this limit; the final Phase 0 isolated run passed all 1,202 tests, and the Phase 1 isolated run passed all 1,231.
 - **No display:** Avalonia Headless tests need no display server.
 - Do not weaken or delete tests to make a run pass. Fix the cause or report the failure with its exact output.
 - Do not add secrets, account data, captures, client files, extracted data, schemas, or packs to git.

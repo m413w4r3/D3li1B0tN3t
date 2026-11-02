@@ -59,6 +59,8 @@ See [RISKS](RISKS.md): live client acceptance; Windows schema unverified; Cpp2IL
 
 P1 is plan only: first slice uses versioned synthetic/sanitized fixtures and offline capture diagnostics reusing `CaptureReader`, `CaptureReplay`, and `TestRelay`; compare independently with SniffSniffSquared in the laboratory. Test fragmentation, multiple frames, partial/invalid frames, unknown messages, temporal order, identical replay, close, and annotations. Emit machine-readable and human diagnostics; exit when deterministic fixtures pass. Gate live protocol use behind supervised Linux relay/redirect acceptance with restore proof. P3–P5 navigation/harvest/combat are NOT STARTED.
 
+P1 was implemented and is documented in [PHASE1](PHASE1.md).
+
 ## Artifacts and references
 
 Build identity and the later offline mapping diagnostic are recorded in [BUILD_IDENTITY](BUILD_IDENTITY.md): the schema reached matching/audit, `AuthenticationRequest` remained unmatched, and no mapping was produced. This is partial diagnostic evidence, not mapping acceptance.

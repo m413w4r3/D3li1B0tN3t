@@ -1,7 +1,7 @@
 # Agent entry points
 
 - Start with `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/UPSTREAM.md`, `docs/BASELINE.md`, `docs/TESTING.md`,
-  `docs/RISKS.md`, and the actual worktree status.
+  `docs/RISKS.md`, `docs/BUILD_IDENTITY.md`, `docs/LINUX_ACCEPTANCE.md`, `docs/PHASE1.md`, and the actual worktree status.
 - Repository documentation and code are in English. Follow `CLAUDE.md` for scope, style, and project decisions.
 
 ## Linux SDK and checks
@@ -29,6 +29,9 @@
   /home/nill/.dotnet/dotnet run --file scripts/release.cs -- --help
   /home/nill/.dotnet/dotnet run --file scripts/embed.cs -- --help
   ```
+
+- Capture diagnostics smoke: `/home/nill/.dotnet/dotnet run --file scripts/capture.cs -- <capture-or-directory> --json`.
+  Use only approved synthetic or sanitized captures; `--json` reports structure and diagnostics, never payload values.
 
 ## Tests, client data, and delivery
 
