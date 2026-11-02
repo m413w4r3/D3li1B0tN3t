@@ -1,6 +1,6 @@
 # Phase 0 report
 
-D3B is a viable Linux base; no architectural rewrite is needed. The host, offline suite, Linux client detection, extraction, schema generation, and simulated relay checks work. Real-client compatibility is BLOCKED pending MANUAL/SUPERVISED Linux acceptance. Verified environment: Ubuntu 24.04, linux-x64, kernel 6.8.0-147-generic, runtime 10.0.14, SDK 10.0.403. System `dotnet` 10.0.114 fails the pinned SDK selection. Upstream base `0a995ad8a99f4417c99f2cf5eafe46cf13eb709b`; remote `https://github.com/AerafalDev/D3B.git`; license MIT; no fork remote, push, or PR.
+D3B is a viable Linux base; no architectural rewrite is needed. The host, offline suite, Linux client detection, extraction, schema generation, and simulated relay checks work. Real-client compatibility is BLOCKED pending MANUAL/SUPERVISED Linux acceptance. Verified environment: Ubuntu 24.04, linux-x64, kernel 6.8.0-147-generic, runtime 10.0.14, SDK 10.0.403. System `dotnet` 10.0.114 fails the pinned SDK selection. The report describes the original Phase 0 snapshot `29b8fb1` (absent from this re-imported checkout); this checkout is `38db76b`. Upstream base `0a995ad8a99f4417c99f2cf5eafe46cf13eb709b` and remote `https://github.com/AerafalDev/D3B.git` are historical report facts. Current checkout topology is recorded in [UPSTREAM](UPSTREAM.md#checkout-reality-phase-1). License: MIT.
 
 | Capacity | Status and evidence | Next |
 |---|---|---|
@@ -14,7 +14,7 @@ D3B is a viable Linux base; no architectural rewrite is needed. The host, offlin
 
 ## P0.1–P0.6
 
-- **P0.1 PASS:** upstream/base and MIT reuse strategy documented; no fork remote or publication.
+- **P0.1 PASS:** upstream/base and MIT reuse strategy documented; current remote topology and publication history are not established by the original report.
 - **P0.2 PASS:** Linux build/test baseline recorded.
 - **P0.3 PASS:** Linux install detection, version and fingerprint; 9 linked-script tests at P0.3. Two ABI tests added by P0.5/P0.11 bring the linked-script total to 11. Verified client files: `GameAssembly.so` 175,931,264 B; `UnityPlayer.so` 41,372,064 B; metadata 43,605,684 B.
 - **P0.4 PASS:** Linux Addressables bundle selection; extraction completed in 61.53 s.
@@ -23,7 +23,7 @@ D3B is a viable Linux base; no architectural rewrite is needed. The host, offlin
 
 ## Decisions and change inventory
 
-Reuse-first; keep Linux path and ABI seams localized; no `IClientEnvironment` framework; allow only the narrow linked-script exception to D10. Schema failure was Windows-register assumptions (`rcx/rdx/r8/r9`) applied to SysV (`rdi/rsi/rdx/rcx/r8/r9`), not a protocol change; strict matching rejects ambiguity. Cpp2IL Linux support works.
+Reuse-first; keep Linux path and ABI seams localized; no `IClientEnvironment` framework; allow only the narrow linked-script exception to D10. An earlier schema failure came from Windows-register assumptions (`rcx/rdx/r8/r9`) applied to SysV (`rdi/rsi/rdx/rcx/r8/r9`), not a protocol change; ABI-aware register handling resolved it, and strict matching rejects ambiguity. Cpp2IL Linux support works.
 
 Reused paths: `src/D3B.Network/Relay/`, `src/D3B.Network/Framing/`, `src/D3B.Network/Captures/`, `src/D3B.Protocol/Mapping/`, `src/D3B.Protocol/Translation/`, `src/D3B.Protocol/Pins/`, `src/D3B.Bot/Runtime/`, `src/D3B.Bot/Activities/`, `src/D3B.Bot/Movement/`, `src/D3B.Bot/Harvesting/`, `src/D3B.Bot/Fighting/`, `src/D3B.Engine/World/`, `src/D3B.Engine/Fights/`, `src/D3B.Data/Packs/`, `src/D3B.Data/Maps/`, `src/D3B.Data/World/`, `src/D3B.Storage/`, `src/D3B.Host/Program.cs`, `tests/`.
 
@@ -61,4 +61,4 @@ P1 is plan only: first slice uses versioned synthetic/sanitized fixtures and off
 
 ## Artifacts and references
 
-Pack: `/tmp/p04b/packs/3.7.12.12/data-8.pack`, format 8, 26,870,514 B, SHA-256 `fdd6e182a62308ef9d4d7d92a3a0e157c864d3c5784f85ebad64234bb5a1e175`. Schema: `schema-1.binpb`, 170,287 B, SHA-256 `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0`; connection.proto 37 messages/9 enums/92 fields; game.proto 2,175 messages/423 enums/6,302 fields. [BASELINE](BASELINE.md) · [TESTING](TESTING.md) · [ARCHITECTURE](ARCHITECTURE.md) · [UPSTREAM](UPSTREAM.md). Report based on main commit `29b8fb1` (`29b8fb130dd4715f33cfd7b9a9885fe09f79852c`); later doc refresh commits follow; see `git log`.
+Pack: `/tmp/p04b/packs/3.7.12.12/data-8.pack`, format 8, 26,870,514 B, SHA-256 `fdd6e182a62308ef9d4d7d92a3a0e157c864d3c5784f85ebad64234bb5a1e175`. Schema: `schema-1.binpb`, 170,287 B, SHA-256 `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0`; connection.proto 37 messages/9 enums/92 fields; game.proto 2,175 messages/423 enums/6,302 fields. [BASELINE](BASELINE.md) · [TESTING](TESTING.md) · [ARCHITECTURE](ARCHITECTURE.md) · [UPSTREAM](UPSTREAM.md). This report describes the original Phase 0 snapshot `29b8fb1` (`29b8fb130dd4715f33cfd7b9a9885fe09f79852c`), absent from this re-imported checkout at `38db76b`; see [UPSTREAM](UPSTREAM.md#checkout-reality-phase-1) for checkout facts.

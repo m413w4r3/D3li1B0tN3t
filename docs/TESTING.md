@@ -32,7 +32,7 @@ The expected version is `10.0.403`. The repository uses Microsoft.Testing.Platfo
 - **Characterization tests** pin important current behavior at boundaries. P0.6 added four tests for relay split writes, upstream refusal, varint wire order, and redirect restoration after a later hosted-service start fails. They protect observed behavior during subsequent changes.
 - **Linked-script tests** compile script source into `D3B.Scripts.Tests` to check shared script logic without launching each file-based app. P0.3 added this project; it has 9 tests. Script smoke commands separately check that the file-based entry points start and display help.
 - **Offline integration tests** combine real repository components using local fixtures or fakes, such as protocol translation, capture replay, pack readers, storage, and host composition. The full automated suite is intended to run without starting the game. These checks prove integration against the supplied fixture/test data, not compatibility with every installed client build.
-- **Manual/supervised client checks** use an installed official client and write generated artifacts to `/tmp`. Extraction completed in Phase 0. Schema generation reached Cpp2IL but is blocked in the protocol reader by `mew: field 1 is written 0 times`; it did not produce a schema. These checks are not CI tests, and CI must never launch a game.
+- **Manual/supervised client checks** use an installed official client and write generated artifacts to `/tmp`. Extraction and schema generation completed in Phase 0. These checks are not CI tests, and CI must never launch a game.
 
 The Avalonia tests use Avalonia Headless. They do not require a display server.
 
@@ -89,7 +89,7 @@ This command was run and exited 0 in 61.53 seconds. It extracted 17,722 maps; `d
 /home/nill/.dotnet/dotnet run --artifacts-path /tmp/p05verify/artifacts --file scripts/schema.cs -- --client /home/nill/.config/Ankama/Dofus-dofus3 --unity-version 6000.3.16f1 --output /tmp/p05verify/schema --proto /tmp/p05verify/proto
 ```
 
-This command was run and exited 1: `Unity 6000.3.16f1, IL2CPP metadata version 39, opened in 6.8 s`, then `The schema could not be read: mew: field 1 is written 0 times.` No schema was produced. Auto-detection without `--unity-version` also opens the same Unity version. Allow up to 10 minutes when investigating; this is a suggested supervision window, not a recorded timeout. The blocker is in the protocol-reader layer after Cpp2IL opens the client. Record the full diagnostic and client build, check whether the failure reproduces on the same installed client, then investigate the relevant field's write/call analysis in the protocol reader. Do not treat the Cpp2IL open as a successful schema run or commit partial output.
+An earlier Phase 0 schema attempt exited 1 after opening `Unity 6000.3.16f1, IL2CPP metadata version 39`: `The schema could not be read: mew: field 1 is written 0 times.` This is historical evidence; ABI-aware register handling resolved the failure. The final Linux schema generation succeeded: 170,287 B, SHA-256 `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0`; connection schema has 37 messages, 9 enums, and 92 fields; game schema has 2,175 messages, 423 enums, and 6,302 fields. Explicit Unity version selection and automatic detection both work. Windows is unverified. The 10-minute allowance is a suggested supervision window, not a recorded timeout.
 
 ## Failure modes and test rules
 
