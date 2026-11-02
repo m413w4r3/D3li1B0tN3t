@@ -154,7 +154,7 @@ in `%LOCALAPPDATA%\Ankama\Dofus-dofus3` and write under `%LOCALAPPDATA%\D3B`.
 | `embed.cs` | Puts a build's pack, schema and mapping beside the published app, or in a folder of your choice. |
 | `release.cs` | Publishes a build's pack, schema and mapping to its release; a dry run without `--publish`. |
 | `client.cs` | Says which configuration the client reads, Ankama's or D3B's; `restore` gives it Ankama's back. |
-| `capture.cs` | Describes capture structure, or writes a `--json` health and framing report without payload bytes. |
+| `capture.cs` | Describes capture structure, or writes a `--json` health, message, schema and mapping report without payload values or bytes. Supply `--schema` and `--mapping` to check message compatibility. |
 | `fights.cs` | Replays the captured fights and compares what D3B foresees of each cast with what the server did. |
 
 The repository's local tools, `dotnet-ef` for the database's migrations and Velopack's `vpk` for the installer, are

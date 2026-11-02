@@ -92,7 +92,9 @@ This keeps the schema reader strict while allowing the distinct call ABIs.
 ## Diagnostics boundary
 
 Saved captures are an offline diagnostic input. `scripts/capture.cs` describes their structure and its `--json` mode
-reports capture health and frame-boundary diagnostics from the script layer,
+reports capture and frame health, game-message counts, and schema/mapping compatibility when `--schema` and `--mapping`
+are supplied. The report includes stable diagnostic codes and artifact SHA-256 values, but no payload values or bytes.
+The diagnostics come from the script layer,
 `src/D3B.App/ViewModels/Inspector/InspectorViewModel.cs` inspects them, and
 `src/D3B.Network/Captures/CaptureReplay.cs` feeds recorded bytes into in-memory pipes for replay and tests; record timing
 is not recreated. Live runtime diagnostics are separate: the relay can record connections when capture is enabled,

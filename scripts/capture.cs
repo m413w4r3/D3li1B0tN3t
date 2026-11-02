@@ -12,6 +12,8 @@
 #:include capture/CaptureDiagnosticDirection.cs
 #:include capture/CaptureDiagnosticDirections.cs
 #:include capture/CaptureDiagnosticFile.cs
+#:include capture/CaptureDiagnosticMessageCount.cs
+#:include capture/CaptureDiagnosticMessages.cs
 #:include capture/CaptureDiagnosticJsonContext.cs
 #:include capture/CaptureDiagnosticReport.cs
 #:include capture/CaptureDiagnosticSeverity.cs
@@ -20,6 +22,7 @@
 #:include capture/CaptureDiagnosticStageJsonConverter.cs
 #:include capture/CaptureDiagnosticSummary.cs
 #:include capture/GameMessages.cs
+#:include capture/GameMessage.cs
 #:include capture/ProtobufShape.cs
 #:include capture/SchemaMatch.cs
 
@@ -33,7 +36,7 @@ using D3B.Scripts.Capture;
 // readable protocol does (D178). Never a value but a type URL: a capture holds an account's login ticket, and what this
 // tool prints may go into docs/client.md.
 // Usage: dotnet run --file scripts/capture.cs -- [<file or directory>...] [--frames] [--schema <file>] [--messages]
-// [--mapping <file>] [--json]; --help describes the options. --json writes capture health and framing diagnostics.
+// [--mapping <file>] [--json]; --help describes the options. --json writes capture, framing, message, schema and mapping diagnostics.
 // Exit code: 0 when every capture was read; 1 when one could not be; 2 when there is none.
 
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;

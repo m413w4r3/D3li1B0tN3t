@@ -37,7 +37,7 @@ internal static class CaptureCommand
         };
         var json = new Option<bool>("--json")
         {
-            Description = "Writes a JSON capture and framing health report with stable diagnostic codes.",
+            Description = "Writes a JSON capture, framing, message, schema and mapping report with stable diagnostic codes.",
         };
         var command = new RootCommand("Describes D3B's captures of relayed connections by their structure, never their content (D37).")
         {
@@ -76,7 +76,7 @@ internal static class CaptureCommand
 
         if (json)
         {
-            var report = CaptureDiagnostics.Read(files);
+            var report = CaptureDiagnostics.Read(files, schemaPath, mappingPath);
 
             Console.Out.WriteLine(CaptureDiagnostics.ToJson(report));
 

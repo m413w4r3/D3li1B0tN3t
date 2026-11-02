@@ -17,6 +17,88 @@ internal static class GameMessages
 {
     private const string TypeUrlPrefix = "type.ankama.com/";
 
+    /// <summary>Extracts complete frames and their message envelopes from capture records.</summary>
+    /// <param name="records">The capture records paired with their zero-based index.</param>
+    /// <param name="tolerateInvalidFrames">Whether to retain earlier frames if a side later has an invalid frame.</param>
+    public static IReadOnlyList<GameMessage> Extract(IReadOnlyList<(CaptureRecord Record, long Index)> records, bool tolerateInvalidFrames = false)
+    {
+        var frames = new List<GameMessage>();
+
+        foreach (var (kind, sideOrder, side) in new[]
+        {
+            (CaptureRecordKind.FromClient, 0, "client"),
+            (CaptureRecordKind.FromServer, 1, "server"),
+            (CaptureRecordKind.Injected, 2, "injected"),
+        })
+        {
+            var pending = new List<byte>();
+            var pendingOffset = 0L;
+            var frameIndex = 0L;
+
+            foreach (var (record, recordIndex) in records.Where(item => item.Record.Kind == kind))
+            {
+                pending.AddRange(record.Data.ToArray());
+
+                var reader = new SequenceReader<byte>(new ReadOnlySequence<byte>(pending.ToArray()));
+
+                try
+                {
+                    while (true)
+                    {
+                        var frameOffset = reader.Consumed;
+
+                        if (!FrameReader.TryReadFrame(ref reader, out var frame))
+                            break;
+
+                        var content = Content(frame.ToArray());
+
+                        frames.Add(new GameMessage
+                        {
+                            Member = content.Member,
+                            TypeUrl = content.TypeUrl,
+                            TypeName = content.TypeName,
+                            Content = content.Content,
+                            Offset = record.Offset,
+                            FrameIndex = frameIndex,
+                            RecordIndex = recordIndex,
+                            ByteOffset = pendingOffset + frameOffset,
+                            Side = side,
+                            SideOrder = sideOrder,
+                        });
+
+                        frameIndex++;
+                    }
+                }
+                catch (FrameFormatException) when (tolerateInvalidFrames)
+                {
+                    break;
+                }
+
+                pending.RemoveRange(0, (int)reader.Consumed);
+                pendingOffset += reader.Consumed;
+            }
+        }
+
+        return frames
+            .OrderBy(frame => frame.Offset)
+            .ThenBy(frame => frame.SideOrder)
+            .Select((frame, index) => new GameMessage
+            {
+                Member = frame.Member,
+                TypeUrl = frame.TypeUrl,
+                TypeName = frame.TypeName,
+                Content = frame.Content,
+                Offset = frame.Offset,
+                FrameIndex = frame.FrameIndex,
+                RecordIndex = frame.RecordIndex,
+                ByteOffset = frame.ByteOffset,
+                Side = frame.Side,
+                SideOrder = frame.SideOrder,
+                MessageIndex = index,
+            })
+            .ToArray();
+    }
+
     /// <summary>Writes a game capture's messages, one frame a line, with their fields when asked.</summary>
     /// <param name="output">Where to write.</param>
     /// <param name="records">The capture's records.</param>
@@ -25,67 +107,37 @@ internal static class GameMessages
     /// <param name="fields">Whether to write each message's fields.</param>
     public static void Write(TextWriter output, List<CaptureRecord> records, SchemaMatch? schema, IReadOnlyDictionary<string, string>? readable, bool fields)
     {
-        var frames = new List<(TimeSpan Offset, int Side, byte[] Frame)>();
-
-        foreach (var (kind, side) in new[] { (CaptureRecordKind.FromClient, 0), (CaptureRecordKind.FromServer, 1), (CaptureRecordKind.Injected, 2) })
-            frames.AddRange(FramesOf(records, kind).Select(frame => (frame.Offset, side, frame.Frame)));
-
+        var indexed = records.Select((record, index) => (Record: record, Index: (long)index)).ToArray();
+        var messages = Extract(indexed);
         var byName = schema?.Messages.ToDictionary(message => message.FullName, StringComparer.Ordinal);
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        var index = 0;
 
-        foreach (var (offset, side, frame) in frames.OrderBy(frame => frame.Offset).ThenBy(frame => frame.Side))
+        foreach (var message in messages)
         {
-            index++;
-
-            var (member, name, content) = Content(frame);
-            var label = name is null ? "no type URL" : readable?.GetValueOrDefault(name) is { } known ? $"{name} {known}" : name;
+            var label = message.TypeName is null ? "no type URL" : readable?.GetValueOrDefault(message.TypeName) is { } known ? $"{message.TypeName} {known}" : message.TypeName;
 
             counts[label] = counts.GetValueOrDefault(label) + 1;
-            output.WriteLine($"    {offset:hh\\:mm\\:ss\\.fff} {SideName(side)} {member} {label}, {content.Length} bytes");
+            output.WriteLine($"    {message.Offset:hh\\:mm\\:ss\\.fff} {TextSideName(message.SideOrder)} {message.Member} {label}, {message.Content.Length} bytes");
 
-            if (!fields || name is null)
+            if (!fields || message.TypeName is null)
                 continue;
 
-            var message = byName?.GetValueOrDefault(name);
+            var schemaMessage = byName?.GetValueOrDefault(message.TypeName);
 
-            if (message is null && byName is not null)
+            if (schemaMessage is null && byName is not null)
                 output.WriteLine("      not in the schema");
 
-            ProtobufShape.Write(output, content, 3, message);
+            ProtobufShape.Write(output, message.Content, 3, schemaMessage);
         }
 
-        output.WriteLine($"  {index} frames, {counts.Count} messages: "
+        output.WriteLine($"  {messages.Count} frames, {counts.Count} messages: "
             + string.Join(", ", counts.OrderByDescending(count => count.Value).ThenBy(count => count.Key, StringComparer.Ordinal).Select(count => $"{count.Key} {count.Value}")));
     }
 
-    private static IEnumerable<(TimeSpan Offset, byte[] Frame)> FramesOf(List<CaptureRecord> records, CaptureRecordKind kind)
-    {
-        var pending = new List<byte>();
-
-        foreach (var record in records.Where(record => record.Kind == kind))
-        {
-            pending.AddRange(record.Data.ToArray());
-
-            var reader = new SequenceReader<byte>(new ReadOnlySequence<byte>(pending.ToArray()));
-            var whole = new List<byte[]>();
-
-            while (FrameReader.TryReadFrame(ref reader, out var frame))
-                whole.Add(frame.ToArray());
-
-            pending.RemoveRange(0, (int)reader.Consumed);
-
-            foreach (var frame in whole)
-                yield return (record.Offset, frame);
-        }
-    }
-
-    // The envelope's members, by the numbers mapping 1 measured (D56): a response, an event or a request, each holding
-    // its Any at its own number.
-    private static (string Member, string? Name, byte[] Content) Content(byte[] frame)
+    private static (string Member, string? TypeUrl, string? TypeName, byte[] Content) Content(byte[] frame)
     {
         if (!ProtobufShape.TryFields(frame, out var members))
-            return ("not protobuf", null, []);
+            return ("not protobuf", null, null, []);
 
         foreach (var (number, wireType, start, length) in members)
         {
@@ -103,7 +155,7 @@ internal static class GameMessages
             var body = frame.AsSpan(start, length);
 
             if (!ProtobufShape.TryFields(body, out var bodyFields))
-                return (member, null, []);
+                return (member, null, null, []);
 
             foreach (var (fieldNumber, fieldWire, fieldStart, fieldLength) in bodyFields)
             {
@@ -113,40 +165,38 @@ internal static class GameMessages
                 return Any(member, body.Slice(fieldStart, fieldLength));
             }
 
-            return (member, null, []);
+            return (member, null, null, []);
         }
 
-        return ("unknown member", null, []);
+        return ("unknown member", null, null, []);
     }
 
-    private static (string Member, string? Name, byte[] Content) Any(string member, ReadOnlySpan<byte> any)
+    private static (string Member, string? TypeUrl, string? TypeName, byte[] Content) Any(string member, ReadOnlySpan<byte> any)
     {
         if (!ProtobufShape.TryFields(any, out var fields))
-            return (member, null, []);
+            return (member, null, null, []);
 
-        string? name = null;
+        string? typeUrl = null;
         var content = Array.Empty<byte>();
 
         foreach (var (number, wireType, start, length) in fields)
         {
             if (number is 1 && wireType is 2)
-            {
-                var url = Encoding.ASCII.GetString(any.Slice(start, length));
-
-                name = url.StartsWith(TypeUrlPrefix, StringComparison.Ordinal) ? url[TypeUrlPrefix.Length..] : url;
-            }
+                typeUrl = Encoding.ASCII.GetString(any.Slice(start, length));
             else if (number is 2 && wireType is 2)
-            {
                 content = any.Slice(start, length).ToArray();
-            }
         }
 
-        return (member, name, content);
+        var typeName = typeUrl is null
+            ? null
+            : typeUrl.StartsWith(TypeUrlPrefix, StringComparison.Ordinal) ? typeUrl[TypeUrlPrefix.Length..] : typeUrl;
+
+        return (member, typeUrl, typeName, content);
     }
 
-    private static string SideName(int side)
+    private static string TextSideName(int sideOrder)
     {
-        return side switch
+        return sideOrder switch
         {
             0 => "client",
             1 => "server",

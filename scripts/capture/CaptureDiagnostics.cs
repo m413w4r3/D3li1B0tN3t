@@ -1,9 +1,13 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using D3B.Network.Captures;
 using D3B.Network.Framing;
+using D3B.Protocol.Mapping;
+using Google.Protobuf;
+using Google.Protobuf.Reflection;
 
 namespace D3B.Scripts.Capture;
 
@@ -26,10 +30,53 @@ public static class CaptureDiagnostics
     /// <returns>The report.</returns>
     public static CaptureDiagnosticReport Read(IEnumerable<string> paths)
     {
+        return Read(paths, null, null);
+    }
+
+    /// <summary>Reads captures and optionally checks their messages against supplied schema and mapping files.</summary>
+    /// <param name="paths">The capture paths.</param>
+    /// <param name="schemaPath">A schema file, or null when schema diagnostics are unavailable.</param>
+    /// <param name="mappingPath">A mapping file, or null when mapping diagnostics are unavailable.</param>
+    /// <returns>The report.</returns>
+    public static CaptureDiagnosticReport Read(IEnumerable<string> paths, string? schemaPath = null, string? mappingPath = null)
+    {
         ArgumentNullException.ThrowIfNull(paths);
 
+        SchemaMatch? schema = null;
+        CaptureDiagnostic? schemaError = null;
+
+        if (schemaPath is not null)
+        {
+            try
+            {
+                schema = SchemaMatch.Load(schemaPath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidProtocolBufferException or DescriptorValidationException)
+            {
+                schemaError = InputError("schema.file_invalid", CaptureDiagnosticStage.Schema, "Schema file could not be loaded.");
+            }
+        }
+
+        ProtocolMapping? mapping = null;
+        string? mappingSha256 = null;
+        CaptureDiagnostic? mappingError = null;
+
+        if (mappingPath is not null)
+        {
+            try
+            {
+                var mappingBytes = File.ReadAllBytes(mappingPath);
+                mappingSha256 = Convert.ToHexStringLower(SHA256.HashData(mappingBytes));
+                mapping = MappingFile.Read(mappingPath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidProtocolBufferException)
+            {
+                mappingError = InputError("mapping.file_invalid", CaptureDiagnosticStage.Mapping, "Mapping file could not be loaded.");
+            }
+        }
+
         var captures = paths
-            .Select(ReadCapture)
+            .Select(path => ReadCapture(path, schema, schemaError, mapping, mappingSha256, mappingError))
             .OrderBy(capture => capture.Capture.Basename, StringComparer.Ordinal)
             .ThenBy(capture => capture.Capture.Sha256, StringComparer.Ordinal)
             .ThenBy(capture => capture.Capture.Size)
@@ -55,10 +102,23 @@ public static class CaptureDiagnostics
         return JsonSerializer.Serialize(report, CaptureDiagnosticJsonContext.Default.CaptureDiagnosticReport);
     }
 
-    private static CaptureDiagnosticCapture ReadCapture(string path)
+    private static CaptureDiagnosticCapture ReadCapture(
+        string path,
+        SchemaMatch? schema,
+        CaptureDiagnostic? schemaError,
+        ProtocolMapping? mapping,
+        string? mappingSha256,
+        CaptureDiagnostic? mappingError)
     {
         var fileName = Path.GetFileName(path);
         var diagnostics = new List<CaptureDiagnostic>();
+
+        if (schemaError is not null)
+            diagnostics.Add(schemaError);
+
+        if (mappingError is not null)
+            diagnostics.Add(mappingError);
+
         var records = new List<(CaptureRecord Record, long Index)>();
         string? sha256 = null;
         long? size = null;
@@ -163,6 +223,8 @@ public static class CaptureDiagnostics
         var client = SummarizeDirection(records, CaptureRecordKind.FromClient, CaptureRecordKind.ClientClosed, "client", diagnostics);
         var server = SummarizeDirection(records, CaptureRecordKind.FromServer, CaptureRecordKind.ServerClosed, "server", diagnostics);
         var injected = SummarizeDirection(records, CaptureRecordKind.Injected, null, "injected", diagnostics);
+        var messages = GameMessages.Extract(records, true);
+        var messageSummary = AnalyzeMessages(messages, schema, schemaError, mapping, mappingError, header?.ClientVersion, diagnostics);
 
         if (header is not null && records.Count is 0 && !truncated && diagnostics.Count is 0)
         {
@@ -193,8 +255,11 @@ public static class CaptureDiagnostics
             Build = new CaptureDiagnosticBuild
             {
                 ClientVersion = string.IsNullOrEmpty(header?.ClientVersion) ? null : header.ClientVersion,
-                SchemaVersion = null,
-                MappingVersion = null,
+                SchemaVersion = schema is null ? null : SchemaFile.FormatVersion.ToString(CultureInfo.InvariantCulture),
+                SchemaSha256 = schema?.Sha256,
+                MappingVersion = mapping is null ? null : mapping.FormatVersion.ToString(CultureInfo.InvariantCulture),
+                MappingSha256 = mappingSha256,
+                MappingClientVersionCompatible = mapping is null || string.IsNullOrEmpty(header?.ClientVersion) ? null : mapping.ClientVersion == header.ClientVersion,
             },
             Summary = new CaptureDiagnosticSummary
             {
@@ -202,10 +267,253 @@ public static class CaptureDiagnostics
                 RecordsByKind = counts,
                 BytesByKind = bytes,
                 Directions = new CaptureDiagnosticDirections { Client = client, Server = server, Injected = injected },
+                Messages = messageSummary,
                 Truncated = truncated,
             },
-            Diagnostics = diagnostics,
+            Diagnostics = diagnostics
+                .OrderBy(diagnostic => diagnostic.RecordIndex ?? -1)
+                .ThenBy(diagnostic => diagnostic.FrameIndex ?? -1)
+                .ThenBy(diagnostic => diagnostic.Code, StringComparer.Ordinal)
+                .ToArray(),
             Status = captureStatus,
+        };
+    }
+
+    private static CaptureDiagnosticMessages AnalyzeMessages(
+        IReadOnlyList<GameMessage> messages,
+        SchemaMatch? schema,
+        CaptureDiagnostic? schemaError,
+        ProtocolMapping? mapping,
+        CaptureDiagnostic? mappingError,
+        string? clientVersion,
+        List<CaptureDiagnostic> diagnostics)
+    {
+        var withTypeUrl = messages.Where(message => message.TypeUrl is not null).ToArray();
+        foreach (var message in messages.Where(message => message.TypeUrl is null))
+        {
+            diagnostics.Add(new CaptureDiagnostic
+            {
+                Code = "message.unknown_type",
+                Severity = CaptureDiagnosticSeverity.Info,
+                Stage = CaptureDiagnosticStage.Message,
+                Direction = message.Side,
+                RecordIndex = message.RecordIndex,
+                FrameIndex = message.FrameIndex,
+                ByteOffset = message.ByteOffset,
+                Message = "Frame has no message type URL.",
+                Details = new Dictionary<string, string>
+                {
+                    ["member"] = message.Member,
+                    ["messageIndex"] = message.MessageIndex.ToString(CultureInfo.InvariantCulture),
+                },
+            });
+        }
+
+        var known = 0L;
+        var unknown = 0L;
+        var mapped = 0L;
+        var unmapped = 0L;
+        var schemaMessages = schema?.Messages.ToDictionary(message => message.FullName, StringComparer.Ordinal);
+
+        if (schema is null)
+        {
+            if (schemaError is null && withTypeUrl.Length > 0)
+            {
+                diagnostics.Add(new CaptureDiagnostic
+                {
+                    Code = "schema.not_provided",
+                    Severity = CaptureDiagnosticSeverity.Info,
+                    Stage = CaptureDiagnosticStage.Schema,
+                    Message = "No schema was supplied; message types and payloads were not checked.",
+                });
+            }
+        }
+        else
+        {
+            foreach (var message in withTypeUrl)
+            {
+                var descriptor = schemaMessages!.GetValueOrDefault(message.TypeName!);
+
+                if (descriptor is null)
+                {
+                    unknown++;
+                    diagnostics.Add(MessageDiagnostic(
+                        message,
+                        "schema.message_unknown",
+                        CaptureDiagnosticSeverity.Warning,
+                        CaptureDiagnosticStage.Schema,
+                        "Type URL does not name a message in the supplied schema."));
+
+                    continue;
+                }
+
+                known++;
+
+                if (!SchemaMatch.Accepts(descriptor, message.Content))
+                {
+                    diagnostics.Add(MessageDiagnostic(
+                        message,
+                        "schema.payload_mismatch",
+                        CaptureDiagnosticSeverity.Error,
+                        CaptureDiagnosticStage.Schema,
+                        "Message payload fields do not fit the declared schema message."));
+                }
+            }
+        }
+
+        var mappingSupported = mapping is not null && mapping.FormatVersion == MappingFile.FormatVersion;
+
+        if (mapping is not null && !mappingSupported)
+        {
+            diagnostics.Add(new CaptureDiagnostic
+            {
+                Code = "mapping.format_unsupported",
+                Severity = CaptureDiagnosticSeverity.Error,
+                Stage = CaptureDiagnosticStage.Mapping,
+                Message = $"Mapping format {mapping.FormatVersion} is not supported; expected {MappingFile.FormatVersion}.",
+                Details = new Dictionary<string, string>
+                {
+                    ["formatVersion"] = mapping.FormatVersion.ToString(CultureInfo.InvariantCulture),
+                    ["supportedFormatVersion"] = MappingFile.FormatVersion.ToString(CultureInfo.InvariantCulture),
+                },
+            });
+        }
+
+        if (mappingSupported)
+        {
+            if (!string.IsNullOrEmpty(clientVersion) && mapping!.ClientVersion != clientVersion)
+            {
+                diagnostics.Add(new CaptureDiagnostic
+                {
+                    Code = "mapping.build_mismatch",
+                    Severity = CaptureDiagnosticSeverity.Error,
+                    Stage = CaptureDiagnosticStage.Mapping,
+                    Message = "Mapping client version does not match the capture header.",
+                    Details = new Dictionary<string, string>
+                    {
+                        ["captureClientVersion"] = clientVersion,
+                        ["mappingClientVersion"] = mapping.ClientVersion,
+                    },
+                });
+            }
+
+            if (schema is not null && !mapping!.SchemaSha256.Span.SequenceEqual(Convert.FromHexString(schema.Sha256)))
+            {
+                diagnostics.Add(new CaptureDiagnostic
+                {
+                    Code = "mapping.schema_mismatch",
+                    Severity = CaptureDiagnosticSeverity.Error,
+                    Stage = CaptureDiagnosticStage.Mapping,
+                    Message = "Mapping schema SHA-256 does not match the supplied schema file.",
+                    Details = new Dictionary<string, string>
+                    {
+                        ["mappingSchemaSha256"] = Convert.ToHexStringLower(mapping.SchemaSha256.Span),
+                        ["schemaSha256"] = schema.Sha256,
+                    },
+                });
+            }
+
+            var mappedNames = mapping!.Messages.Select(pair => pair.Obfuscated).ToHashSet(StringComparer.Ordinal);
+
+            foreach (var message in withTypeUrl)
+            {
+                if (mappedNames.Contains(message.TypeName!))
+                {
+                    mapped++;
+
+                    continue;
+                }
+
+                unmapped++;
+                diagnostics.Add(MessageDiagnostic(
+                    message,
+                    "mapping.message_unknown",
+                    CaptureDiagnosticSeverity.Info,
+                    CaptureDiagnosticStage.Mapping,
+                    "Type URL has no message entry in the supplied mapping."));
+            }
+        }
+        else if (mapping is null && mappingError is null && withTypeUrl.Length > 0)
+        {
+            diagnostics.Add(new CaptureDiagnostic
+            {
+                Code = "mapping.not_provided",
+                Severity = CaptureDiagnosticSeverity.Info,
+                Stage = CaptureDiagnosticStage.Mapping,
+                Message = "No mapping was supplied; readable message names were not checked.",
+            });
+        }
+
+        return new CaptureDiagnosticMessages
+        {
+            Total = messages.Count,
+            ByMember = CountBy(messages, message => message.Member),
+            BySide = CountBy(messages, message => message.Side),
+            ByTypeUrl = CountBy(messages, message => message.TypeUrl ?? "(none)"),
+            ByMemberAndTypeUrl = messages
+                .GroupBy(message => (message.Member, TypeUrl: message.TypeUrl ?? "(none)"))
+                .OrderBy(group => group.Key.Member, StringComparer.Ordinal)
+                .ThenBy(group => group.Key.TypeUrl, StringComparer.Ordinal)
+                .Select(group => new CaptureDiagnosticMessageCount
+                {
+                    Member = group.Key.Member,
+                    TypeUrl = group.Key.TypeUrl,
+                    Count = group.LongCount(),
+                })
+                .ToArray(),
+            Known = known,
+            Unknown = unknown,
+            Mapped = mapped,
+            Unmapped = unmapped,
+        };
+    }
+
+    private static CaptureDiagnostic MessageDiagnostic(
+        GameMessage message,
+        string code,
+        CaptureDiagnosticSeverity severity,
+        CaptureDiagnosticStage stage,
+        string description)
+    {
+        return new CaptureDiagnostic
+        {
+            Code = code,
+            Severity = severity,
+            Stage = stage,
+            Direction = message.Side,
+            RecordIndex = message.RecordIndex,
+            FrameIndex = message.FrameIndex,
+            ByteOffset = message.ByteOffset,
+            Message = description,
+            Details = new Dictionary<string, string>
+            {
+                ["typeUrl"] = message.TypeUrl!,
+                ["messageIndex"] = message.MessageIndex.ToString(CultureInfo.InvariantCulture),
+            },
+        };
+    }
+
+    private static SortedDictionary<string, long> CountBy(IReadOnlyList<GameMessage> messages, Func<GameMessage, string> keyOf)
+    {
+        var counts = new SortedDictionary<string, long>(StringComparer.Ordinal);
+
+        foreach (var message in messages)
+        {
+            var key = keyOf(message);
+            counts[key] = counts.GetValueOrDefault(key) + 1;
+        }
+
+        return counts;
+    }
+
+    private static CaptureDiagnostic InputError(string code, CaptureDiagnosticStage stage, string message)
+    {
+        return new CaptureDiagnostic
+        {
+            Code = code,
+            Severity = CaptureDiagnosticSeverity.Error,
+            Stage = stage,
+            Message = message,
         };
     }
 

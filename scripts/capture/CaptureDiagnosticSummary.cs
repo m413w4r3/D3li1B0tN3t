@@ -15,6 +15,9 @@ public sealed class CaptureDiagnosticSummary
     /// <summary>Gets read, byte, frame and close totals for each direction.</summary>
     public required CaptureDiagnosticDirections Directions { get; init; }
 
+    /// <summary>Gets counts and schema/mapping classification for complete game frames.</summary>
+    public required CaptureDiagnosticMessages Messages { get; init; }
+
     /// <summary>Gets whether the last record was cut short.</summary>
     public bool Truncated { get; init; }
 }

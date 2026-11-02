@@ -1,5 +1,6 @@
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
+using System.Security.Cryptography;
 
 namespace D3B.Scripts.Capture;
 
@@ -17,9 +18,13 @@ internal sealed class SchemaMatch
     /// <summary>Every message of the schema, nested ones included, but for the entries protobuf describes maps with.</summary>
     public IReadOnlyList<MessageDescriptor> Messages { get; }
 
-    private SchemaMatch(IReadOnlyList<MessageDescriptor> messages)
+    /// <summary>Gets the lower-case SHA-256 of the schema file.</summary>
+    public string Sha256 { get; }
+
+    private SchemaMatch(IReadOnlyList<MessageDescriptor> messages, string sha256)
     {
         Messages = messages;
+        Sha256 = sha256;
     }
 
     /// <summary>Loads a schema, linking every type name to its type.</summary>
@@ -27,10 +32,11 @@ internal sealed class SchemaMatch
     /// <exception cref="DescriptorValidationException">The descriptors do not link.</exception>
     public static SchemaMatch Load(string path)
     {
-        var set = FileDescriptorSet.Parser.ParseFrom(File.ReadAllBytes(path));
+        var bytes = File.ReadAllBytes(path);
+        var set = FileDescriptorSet.Parser.ParseFrom(bytes);
         var files = FileDescriptor.BuildFromByteStrings(set.File.Select(file => file.ToByteString()));
 
-        return new SchemaMatch([.. files.SelectMany(file => All(file.MessageTypes))]);
+        return new SchemaMatch([.. files.SelectMany(file => All(file.MessageTypes))], Convert.ToHexStringLower(SHA256.HashData(bytes)));
     }
 
     /// <summary>Tells whether a message reads bytes, by structure.</summary>
