@@ -1,0 +1,63 @@
+// The character choice: the client asks for the account's characters on the server, then chooses one, which the
+// server confirms before the game starts.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// Asks for the account's characters on the game server, right after the ticket was accepted.
+message CharacterListRequest {
+}
+
+// The account's characters on the game server.
+message CharacterListEvent {
+  option (d3b.readable.partial) = true;
+
+  repeated Character characters = 2;
+}
+
+// Chooses the character to play.
+message CharacterSelectionRequest {
+  // The id of one of the characters the list gave.
+  int64 character_id = 1;
+}
+
+// The character chosen, or why not.
+message CharacterSelectionEvent {
+  oneof result {
+    Success success = 1;
+    Error error = 2;
+  }
+
+  message Success {
+    option (d3b.readable.partial) = true;
+
+    Character character = 1;
+  }
+
+  message Error {
+  }
+}
+
+// A character of the account, as the list and the selection give it.
+message Character {
+  option (d3b.readable.partial) = true;
+
+  // The character's id, which the selection names.
+  int64 id = 3;
+
+  oneof details {
+    CharacterBasics basics = 4;
+  }
+}
+
+// What the list says of a character: its name and level.
+message CharacterBasics {
+  option (d3b.readable.partial) = true;
+
+  optional int32 level = 3;
+  string name = 6;
+}

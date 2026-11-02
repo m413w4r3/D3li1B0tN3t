@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/D3B.Data/D3B.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../../scripts/unity/ClientInstall.cs" Link="Scripts/Unity/ClientInstall.cs" />
+    <Compile Include="../../scripts/unity/ClientPlatform.cs" Link="Scripts/Unity/ClientPlatform.cs" />
+    <Compile Include="../../scripts/schema/CallRegisters.cs" Link="Scripts/Schema/CallRegisters.cs" />
+  </ItemGroup>
+
+</Project>

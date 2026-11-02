@@ -1,0 +1,68 @@
+// How a character travels by zaap: it uses a zaap, of its map or of its haven bag, the server lists the zaaps the
+// character knows with what each costs, and the character asks for one. The server lists the zaaps the character knows on
+// entering the game, and again each time it learns one.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// The zaaps the character knows, by map: sent on entering the game, and again, whole, when the character enters the map
+// of a zaap it did not know.
+message ZaapKnownListEvent {
+  repeated int64 map_ids = 1;
+}
+
+// What a zaap the character used offers: the server sends it as the use starts, with no duration, and the dialog it
+// opens ends with a DialogLeaveEvent, once the character leaves it or travels.
+message TeleportDestinationsEvent {
+  option (d3b.readable.partial) = true;
+
+  // The zaap used: a map's, or the haven bag's.
+  TeleporterType type = 2;
+
+  // The zaaps the character knows, the one it stands at among them, and others of another type.
+  repeated TeleportDestination destinations = 4;
+}
+
+// A place the zaap leads to.
+message TeleportDestination {
+  option (d3b.readable.partial) = true;
+
+  // A zaap for every zaap the character knows; another type for the others, which carry more.
+  TeleporterType type = 1;
+
+  // What it costs, in kamas: unset for the zaap the character stands at, or, in a haven bag, the one of the map it was
+  // entered from.
+  int32 cost = 2;
+
+  int64 map_id = 4;
+  int32 sub_area_id = 6;
+}
+
+// Travels to a zaap, which the server answers with the new map, the kamas paid and the dialog over.
+message TeleportRequest {
+  int64 map_id = 1;
+
+  // How the character travels: the zaap whose destinations it was shown, or the map.
+  TeleporterType source = 2;
+
+  // No capture sets it.
+  int32 number_3 = 3;
+
+  // No capture sets it.
+  TeleporterType destination = 4;
+}
+
+// What the character travels by. Six values in this build: 0 is a map's zaap, 3 the haven bag's, and 5 travelling from
+// the map, which the client sends when the player chooses a zaap on its map; the others are not measured.
+enum TeleporterType {
+  TELEPORTER_TYPE_ZAAP = 0;
+  TELEPORTER_TYPE_VALUE_1 = 1;
+  TELEPORTER_TYPE_VALUE_2 = 2;
+  TELEPORTER_TYPE_HAVEN_BAG = 3;
+  TELEPORTER_TYPE_VALUE_4 = 4;
+  TELEPORTER_TYPE_MAP = 5;
+}

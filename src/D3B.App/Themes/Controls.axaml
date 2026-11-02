@@ -1,0 +1,141 @@
+<ResourceDictionary
+    xmlns="https://github.com/avaloniaui"
+    xmlns:c="clr-namespace:D3B.App.Controls"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ControlTheme TargetType="c:AppPage" x:Key="{x:Type c:AppPage}">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled" Name="PART_Scroll">
+                    <Grid Margin="32,24,32,32" RowDefinitions="Auto,*">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition MaxWidth="1200" Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid
+                            ColumnDefinitions="*,Auto"
+                            Margin="0,0,0,16"
+                            MinHeight="36">
+                            <Panel VerticalAlignment="Center">
+                                <StackPanel
+                                    IsVisible="{TemplateBinding Header, Converter={x:Static ObjectConverters.IsNull}}"
+                                    Orientation="Horizontal"
+                                    Spacing="8">
+                                    <TextBlock
+                                        Classes="PageTitle"
+                                        Text="{TemplateBinding Title}"
+                                        VerticalAlignment="Center" />
+                                    <c:Icon
+                                        Classes="Help"
+                                        Data="{DynamicResource IconInfo}"
+                                        IsVisible="{TemplateBinding Help, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                        ToolTip.Tip="{TemplateBinding Help}" />
+                                </StackPanel>
+                                <ContentPresenter Content="{TemplateBinding Header}" IsVisible="{TemplateBinding Header, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                            </Panel>
+                            <ContentPresenter
+                                Content="{TemplateBinding Actions}"
+                                Grid.Column="1"
+                                Margin="16,0,0,0"
+                                VerticalAlignment="Center" />
+                        </Grid>
+                        <ContentPresenter
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Grid.Row="1"
+                            Name="PART_ContentPresenter" />
+                    </Grid>
+                </ScrollViewer>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^[Scrolls=False] /template/ ScrollViewer#PART_Scroll">
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+        </Style>
+    </ControlTheme>
+    <ControlTheme TargetType="c:EmptyState" x:Key="{x:Type c:EmptyState}">
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Margin" Value="0,64,0,0" />
+        <Setter Property="MaxWidth" Value="400" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <StackPanel Spacing="8">
+                    <c:Icon
+                        Classes="Large Muted"
+                        Data="{TemplateBinding Icon}"
+                        HorizontalAlignment="Center" />
+                    <TextBlock
+                        Classes="Title"
+                        HorizontalAlignment="Center"
+                        Text="{TemplateBinding Title}"
+                        TextAlignment="Center" />
+                    <TextBlock
+                        Classes="Muted"
+                        HorizontalAlignment="Center"
+                        Text="{TemplateBinding Text}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+    <ControlTheme TargetType="c:StatusPill" x:Key="{x:Type c:StatusPill}">
+        <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+        <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border
+                    Background="{TemplateBinding Background}"
+                    CornerRadius="999"
+                    Name="PART_Border"
+                    Padding="8,2">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Ellipse
+                            Fill="{TemplateBinding Foreground}"
+                            Height="6"
+                            Name="PART_Dot"
+                            VerticalAlignment="Center"
+                            Width="6" />
+                        <TextBlock
+                            FontWeight="Medium"
+                            Foreground="{TemplateBinding Foreground}"
+                            Name="PART_Text"
+                            Text="{TemplateBinding Text}"
+                            VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^.Plain /template/ Ellipse#PART_Dot">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="^.Dot /template/ Border#PART_Border">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="^.Dot /template/ Ellipse#PART_Dot">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="8" />
+        </Style>
+        <Style Selector="^.Dot /template/ TextBlock#PART_Text">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="^[Tone=Success]">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessColor}" />
+            <Setter Property="Background" Value="{DynamicResource SuccessColor10}" />
+        </Style>
+        <Style Selector="^[Tone=Warning]">
+            <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+            <Setter Property="Background" Value="{DynamicResource WarningColor10}" />
+        </Style>
+        <Style Selector="^[Tone=Info]">
+            <Setter Property="Foreground" Value="{DynamicResource InfoColor}" />
+            <Setter Property="Background" Value="{DynamicResource InfoColor10}" />
+        </Style>
+        <Style Selector="^[Tone=Danger]">
+            <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+            <Setter Property="Background" Value="{DynamicResource ErrorColor10}" />
+        </Style>
+    </ControlTheme>
+</ResourceDictionary>

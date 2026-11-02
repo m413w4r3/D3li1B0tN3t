@@ -1,0 +1,22 @@
+# Build output
+artifacts/
+bin/
+obj/
+
+# Test results
+TestResults/
+BenchmarkDotNet.Artifacts/
+
+# IDEs and editors
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Third-party references, never committed (D3)
+vendor/

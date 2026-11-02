@@ -1,0 +1,150 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/D3B.Engine.Benchmarks/D3B.Engine.Benchmarks.csproj" />
+    <Project Path="benchmarks/D3B.Network.Benchmarks/D3B.Network.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/scripts/">
+    <File Path="scripts/capture.cs" />
+    <File Path="scripts/client.cs" />
+    <File Path="scripts/embed.cs" />
+    <File Path="scripts/extract.cs" />
+    <File Path="scripts/fights.cs" />
+    <File Path="scripts/inspect.cs" />
+    <File Path="scripts/mapping.cs" />
+    <File Path="scripts/release.cs" />
+    <File Path="scripts/schema.cs" />
+  </Folder>
+  <Folder Name="/scripts/capture/">
+    <File Path="scripts/capture/CaptureCommand.cs" />
+    <File Path="scripts/capture/GameMessages.cs" />
+    <File Path="scripts/capture/ProtobufShape.cs" />
+    <File Path="scripts/capture/SchemaMatch.cs" />
+  </Folder>
+  <Folder Name="/scripts/client/">
+    <File Path="scripts/client/ClientCommand.cs" />
+  </Folder>
+  <Folder Name="/scripts/embed/">
+    <File Path="scripts/embed/EmbedCommand.cs" />
+  </Folder>
+  <Folder Name="/scripts/extract/">
+    <File Path="scripts/extract/BanksExtractor.cs" />
+    <File Path="scripts/extract/BreedsExtractor.cs" />
+    <File Path="scripts/extract/CharacteristicsExtractor.cs" />
+    <File Path="scripts/extract/ClientMapLayout.cs" />
+    <File Path="scripts/extract/EffectsExtractor.cs" />
+    <File Path="scripts/extract/ExtractCommand.cs" />
+    <File Path="scripts/extract/FightTables.cs" />
+    <File Path="scripts/extract/IconsExtractor.cs" />
+    <File Path="scripts/extract/InputFingerprint.cs" />
+    <File Path="scripts/extract/InteractivesExtractor.cs" />
+    <File Path="scripts/extract/ItemsExtractor.cs" />
+    <File Path="scripts/extract/JobsExtractor.cs" />
+    <File Path="scripts/extract/MapReader.cs" />
+    <File Path="scripts/extract/MapsExtractor.cs" />
+    <File Path="scripts/extract/MonstersExtractor.cs" />
+    <File Path="scripts/extract/SpellsExtractor.cs" />
+    <File Path="scripts/extract/StatesExtractor.cs" />
+    <File Path="scripts/extract/TextsExtractor.cs" />
+    <File Path="scripts/extract/WorldExtractor.cs" />
+    <File Path="scripts/extract/WorldGraphReader.cs" />
+  </Folder>
+  <Folder Name="/scripts/fights/">
+    <File Path="scripts/fights/CapturedFights.cs" />
+    <File Path="scripts/fights/CastBench.cs" />
+    <File Path="scripts/fights/FightsCommand.cs" />
+    <File Path="scripts/fights/HuntBench.cs" />
+    <File Path="scripts/fights/LiveBench.cs" />
+    <File Path="scripts/fights/Tally.cs" />
+    <File Path="scripts/fights/TurnBench.cs" />
+  </Folder>
+  <Folder Name="/scripts/inspect/">
+    <File Path="scripts/inspect/BundleBlock.cs" />
+    <File Path="scripts/inspect/BundleCompression.cs" />
+    <File Path="scripts/inspect/BundleEntry.cs" />
+    <File Path="scripts/inspect/BundleHeader.cs" />
+    <File Path="scripts/inspect/BundlePath.cs" />
+    <File Path="scripts/inspect/BundleScan.cs" />
+    <File Path="scripts/inspect/BundlesCommand.cs" />
+    <File Path="scripts/inspect/Client.cs" />
+    <File Path="scripts/inspect/CommonOptions.cs" />
+    <File Path="scripts/inspect/DumpCommand.cs" />
+    <File Path="scripts/inspect/LayoutCommand.cs" />
+    <File Path="scripts/inspect/LayoutWriter.cs" />
+    <File Path="scripts/inspect/ObjectLookup.cs" />
+    <File Path="scripts/inspect/ObjectNames.cs" />
+    <File Path="scripts/inspect/ObjectsCommand.cs" />
+    <File Path="scripts/inspect/OpenedBundle.cs" />
+    <File Path="scripts/inspect/Platforms.cs" />
+    <File Path="scripts/inspect/ScriptResolver.cs" />
+    <File Path="scripts/inspect/Sizes.cs" />
+    <File Path="scripts/inspect/SummaryCommand.cs" />
+    <File Path="scripts/inspect/TextTable.cs" />
+    <File Path="scripts/inspect/TextsCommand.cs" />
+    <File Path="scripts/inspect/TypeNames.cs" />
+    <File Path="scripts/inspect/TypesCommand.cs" />
+    <File Path="scripts/inspect/ValueWriter.cs" />
+  </Folder>
+  <Folder Name="/scripts/mapping/">
+    <File Path="scripts/mapping/CaptureFrames.cs" />
+    <File Path="scripts/mapping/MappingCommand.cs" />
+    <File Path="scripts/mapping/PinProposals.cs" />
+  </Folder>
+  <Folder Name="/scripts/release/">
+    <File Path="scripts/release/ReleaseAsset.cs" />
+    <File Path="scripts/release/ReleaseCommand.cs" />
+  </Folder>
+  <Folder Name="/scripts/schema/">
+    <File Path="scripts/schema/ClientCode.cs" />
+    <File Path="scripts/schema/FieldEncoding.cs" />
+    <File Path="scripts/schema/FieldKind.cs" />
+    <File Path="scripts/schema/IsilCall.cs" />
+    <File Path="scripts/schema/IsilCalls.cs" />
+    <File Path="scripts/schema/LayoutField.cs" />
+    <File Path="scripts/schema/LayoutOneof.cs" />
+    <File Path="scripts/schema/MessageLayout.cs" />
+    <File Path="scripts/schema/ProtocolReader.cs" />
+    <File Path="scripts/schema/ProtocolTypes.cs" />
+    <File Path="scripts/schema/ProtoText.cs" />
+    <File Path="scripts/schema/SchemaCommand.cs" />
+    <File Path="scripts/schema/SchemaSummary.cs" />
+    <File Path="scripts/schema/SilentLogWriter.cs" />
+    <File Path="scripts/schema/WireEncodings.cs" />
+  </Folder>
+  <Folder Name="/scripts/unity/">
+    <File Path="scripts/unity/ClientInstall.cs" />
+    <File Path="scripts/unity/ClientPlatform.cs" />
+    <File Path="scripts/unity/GitHubCli.cs" />
+    <File Path="scripts/unity/I18nFile.cs" />
+    <File Path="scripts/unity/LauncherManifest.cs" />
+    <File Path="scripts/unity/UnityBundle.cs" />
+    <File Path="scripts/unity/UnityDataTable.cs" />
+    <File Path="scripts/unity/UnityFields.cs" />
+    <File Path="scripts/unity/UnityReader.cs" />
+    <File Path="scripts/unity/UnityReferences.cs" />
+    <File Path="scripts/unity/UnityReferenceVisitor.cs" />
+    <File Path="scripts/unity/UnityTypeNode.cs" />
+    <File Path="scripts/unity/UnityTypeTree.cs" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/D3B.App/D3B.App.csproj" />
+    <Project Path="src/D3B.Bot/D3B.Bot.csproj" />
+    <Project Path="src/D3B.Core/D3B.Core.csproj" />
+    <Project Path="src/D3B.Data/D3B.Data.csproj" />
+    <Project Path="src/D3B.Engine/D3B.Engine.csproj" />
+    <Project Path="src/D3B.Host/D3B.Host.csproj" />
+    <Project Path="src/D3B.Network/D3B.Network.csproj" />
+    <Project Path="src/D3B.Protocol/D3B.Protocol.csproj" />
+    <Project Path="src/D3B.Storage/D3B.Storage.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/D3B.App.Tests/D3B.App.Tests.csproj" />
+    <Project Path="tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj" />
+    <Project Path="tests/D3B.Core.Tests/D3B.Core.Tests.csproj" />
+    <Project Path="tests/D3B.Data.Tests/D3B.Data.Tests.csproj" />
+    <Project Path="tests/D3B.Engine.Tests/D3B.Engine.Tests.csproj" />
+    <Project Path="tests/D3B.Network.Tests/D3B.Network.Tests.csproj" />
+    <Project Path="tests/D3B.Protocol.Tests/D3B.Protocol.Tests.csproj" />
+    <Project Path="tests/D3B.Scripts.Tests/D3B.Scripts.Tests.csproj" />
+    <Project Path="tests/D3B.Storage.Tests/D3B.Storage.Tests.csproj" />
+  </Folder>
+</Solution>

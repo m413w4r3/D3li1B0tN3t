@@ -1,0 +1,107 @@
+// The map a character is on: which map, what stands on it, and its interactive elements. The server names the map on
+// entering the game, the client asks for what is on it, and the server answers.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Game/actors.proto";
+import "Game/havenbags.proto";
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// The map the character is now on: the server sends it on entering the game, before the client asks what is on it.
+message MapCurrentEvent {
+  int64 map_id = 1;
+}
+
+// Asks what is on a map: the client sends it for the map the server named.
+message MapInformationRequest {
+  int64 map_id = 1;
+}
+
+// What is on a map, the answer to the request: who stands where, and the map's elements.
+message MapInformationEvent {
+  option (d3b.readable.partial) = true;
+
+  repeated StatedElement stated_elements = 2;
+
+  // Everyone on the map: the character, other players, NPCs and groups of monsters.
+  repeated Actor actors = 3;
+
+  repeated InteractiveElement interactive_elements = 7;
+  int64 map_id = 10;
+  int32 sub_area_id = 12;
+
+  // What kind of place the map is, when it is one: a haven bag.
+  oneof place {
+    HavenBagInformation haven_bag = 6;
+  }
+}
+
+// An actor comes onto the map, or is shown again: one actor each time, in the 1,701 the 80 game connections captured
+// hold, 1,354 other players, 199 the character itself, 147 groups of monsters and 1 NPC. A group attacked is shown again
+// as it was, then removed (MapActorRemovedEvent), 27 to 75 ms after the player's attack, as the server starts the fight:
+// 116 times, 97 of them the player's attacks. 31 groups came onto a map so.
+message MapActorShownEvent {
+  option (d3b.readable.partial) = true;
+
+  repeated Actor actors = 1;
+}
+
+// An actor leaves the map: another player, or a group of monsters attacked, by the player or by another. Measured: 1,198
+// in the 80 game connections captured, 116 of them groups, none in a fight.
+message MapActorRemovedEvent {
+  int64 actor_id = 1;
+}
+
+// An interactive element of the map, and the skills it offers: which interactive it is, the server says, not the
+// client's data (D29).
+message InteractiveElement {
+  option (d3b.readable.partial) = true;
+
+  // Whether the element is on this map. The map's information also lists elements of the neighbouring maps, whose cells
+  // are those of their own map: the server answers nothing to a use of one (D75).
+  bool on_current_map = 2;
+
+  // The skills not offered now: a resource's, from the start of its harvest until it grows back.
+  repeated InteractiveSkill disabled_skills = 3;
+
+  // The interactive's id in the client's table, or -1, which the table lacks.
+  int32 interactive_id = 4;
+
+  // The skills offered now.
+  repeated InteractiveSkill enabled_skills = 5;
+
+  // The element's id on its map, as the map's data holds it (D27).
+  int32 element_id = 6;
+}
+
+// A skill an interactive element offers.
+message InteractiveSkill {
+  option (d3b.readable.partial) = true;
+
+  // The id the client uses to ask for the skill on this element.
+  int32 instance_id = 1;
+
+  // The skill's id in the client's table (D29).
+  int32 skill_id = 3;
+}
+
+// An element of the map with a state, such as a resource harvested or not.
+message StatedElement {
+  option (d3b.readable.partial) = true;
+
+  // Whether the element is on this map, as InteractiveElement's, in the map's information; the server leaves it unset in
+  // the update of an element's state.
+  bool on_current_map = 2;
+
+  // The element's id on its map, as the map's data holds it (D27).
+  int32 element_id = 3;
+
+  // The element's cell: the one the map's data gives it for every element on the map, its own map's for the others.
+  int32 cell_id = 4;
+
+  // In the captures: 0 in the map's information, 2 while a resource is being harvested, 1 once it is harvested.
+  int32 state = 5;
+}

@@ -1,0 +1,63 @@
+// Finding other accounts' servers from the server choice: the friend list, and an acquaintance by name.
+syntax = "proto3";
+
+package d3b.connection;
+
+option csharp_namespace = "D3B.Protocol.Connection";
+
+// Asks for the account's friends and their servers.
+message FriendListRequest {
+}
+
+// The account's friends, or why not.
+message FriendListResponse {
+  oneof result {
+    FriendList friends = 1;
+    Error error = 2;
+  }
+
+  message FriendList {
+    repeated Friend friends = 1;
+
+    // A friend's account, and the servers it plays on.
+    message Friend {
+      string account_name = 1;
+      string account_tag = 2;
+      repeated int32 servers = 3;
+    }
+  }
+
+  enum Error {
+    ERROR_UNKNOWN = 0;
+    ERROR_FLOOD = 1;
+  }
+}
+
+// Asks on which servers an account, named by its name and tag, plays.
+message AcquaintanceServersRequest {
+  string name = 1;
+  string tag = 2;
+}
+
+// The servers an acquaintance plays on, or why not.
+message AcquaintanceServersResponse {
+  oneof result {
+    Servers servers = 1;
+    Error error = 2;
+  }
+
+  message Servers {
+    repeated int32 servers = 1;
+  }
+
+  message Error {
+    Reason reason = 1;
+
+    enum Reason {
+      REASON_UNKNOWN = 0;
+      REASON_NO_RESULT = 1;
+      REASON_FLOOD = 2;
+      REASON_INVALID_ACCOUNT = 3;
+    }
+  }
+}

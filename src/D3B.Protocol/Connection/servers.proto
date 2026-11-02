@@ -1,0 +1,127 @@
+// The game servers an account may play on, and the connection's second exchange, which chooses one: the server then
+// sends the client where to connect to play.
+syntax = "proto3";
+
+package d3b.connection;
+
+option csharp_namespace = "D3B.Protocol.Connection";
+
+// The servers an account sees on the server choice.
+message ServerList {
+  repeated ServerInformation servers = 1;
+  repeated SlotLimit slot_limits = 2;
+  bool flag_3 = 3;
+
+  // A number per server type, where the references have a single slot limit: what it counts is not measured.
+  message SlotLimit {
+    ServerType server_type = 1;
+    int32 slots = 2;
+  }
+}
+
+// A server as an account sees it: whether it may play there, and its characters there.
+message ServerInformation {
+  GameServer server = 1;
+  Accessibility accessibility = 2;
+  repeated CharacterInformation characters = 3;
+
+  enum Accessibility {
+    ACCESSIBILITY_OPEN = 0;
+    ACCESSIBILITY_SUBSCRIBERS_ONLY = 1;
+    ACCESSIBILITY_SINGLE_ACCOUNT_ONLY = 2;
+    ACCESSIBILITY_UNKNOWN = 3;
+  }
+}
+
+// A game server.
+message GameServer {
+  int32 id = 1;
+  Status status = 2;
+  ServerType type = 3;
+
+  enum Status {
+    STATUS_ONLINE = 0;
+    STATUS_MAINTENANCE = 1;
+  }
+}
+
+// The type of a game server, which slot limits are given by. Seven values in this build: which is which is not measured.
+enum ServerType {
+  SERVER_TYPE_VALUE_0 = 0;
+  SERVER_TYPE_VALUE_1 = 1;
+  SERVER_TYPE_VALUE_2 = 2;
+  SERVER_TYPE_VALUE_3 = 3;
+  SERVER_TYPE_VALUE_4 = 4;
+  SERVER_TYPE_VALUE_5 = 5;
+  SERVER_TYPE_VALUE_6 = 6;
+}
+
+// A character of the account on a server.
+message CharacterInformation {
+  string name = 1;
+  Breed breed = 2;
+  Gender gender = 3;
+  int32 level = 4;
+  string last_connection = 5;
+
+  enum Gender {
+    GENDER_MALE = 0;
+    GENDER_FEMALE = 1;
+  }
+
+  enum Breed {
+    BREED_FECA = 0;
+    BREED_OSAMODAS = 1;
+    BREED_ENUTROF = 2;
+    BREED_SRAM = 3;
+    BREED_XELOR = 4;
+    BREED_ECAFLIP = 5;
+    BREED_ENIRIPSA = 6;
+    BREED_IOP = 7;
+    BREED_CRA = 8;
+    BREED_SADIDA = 9;
+    BREED_SACRIER = 10;
+    BREED_PANDAWA = 11;
+    BREED_ROGUE = 12;
+    BREED_MASQUERAIDER = 13;
+    BREED_FOGGERNAUT = 14;
+    BREED_ELIOTROPE = 15;
+    BREED_HUPPERMAGE = 16;
+    BREED_OUGINAK = 17;
+    BREED_FORGELANCE = 18;
+  }
+}
+
+// A server changed while the client chooses one.
+message ServerUpdate {
+  ServerInformation server = 1;
+}
+
+// Chooses the server to play on.
+message ServerSelectionRequest {
+  int32 server_id = 1;
+}
+
+// Where to connect to play on the server chosen, or why not.
+message ServerSelectionResponse {
+  oneof result {
+    Success success = 1;
+    Error error = 2;
+  }
+
+  // The game server to connect to, and the ticket the client presents there (D34).
+  message Success {
+    string ticket = 1;
+    string host = 2;
+    repeated int32 ports = 3;
+  }
+
+  // Five values in this build, where the references have four: which is which is not measured.
+  enum Error {
+    ERROR_VALUE_0 = 0;
+    ERROR_VALUE_1 = 1;
+    ERROR_VALUE_2 = 2;
+    ERROR_VALUE_3 = 3;
+    ERROR_VALUE_4 = 4;
+  }
+}

@@ -1,0 +1,38 @@
+// Playing another account's characters: forcing an account, and releasing it.
+syntax = "proto3";
+
+package d3b.connection;
+
+import "Connection/servers.proto";
+
+option csharp_namespace = "D3B.Protocol.Connection";
+
+// Asks to play an account other than the one identified.
+message ForceAccountRequest {
+  int64 account_id = 1;
+}
+
+// The server's answer to forcing an account.
+message ForceAccountResponse {
+  oneof content {
+    ForceAccountStatus status = 2;
+    ForceAccountError error = 3;
+  }
+}
+
+// Which account is played, and its servers.
+message ForceAccountStatus {
+  bool forced = 1;
+  int64 account_id = 2;
+  string account_nickname = 3;
+  string account_tag = 4;
+  ServerList servers = 5;
+}
+
+// Forcing the account failed.
+message ForceAccountError {
+}
+
+// Goes back to the account identified.
+message ReleaseAccountRequest {
+}

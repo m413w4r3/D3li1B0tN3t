@@ -1,0 +1,33 @@
+// Pinned pairs: what the maintainer states for one client build where the structure and the captures do not decide
+// (D11, D43). They are committed, one file per build, in protobuf's JSON form.
+syntax = "proto3";
+
+package d3b.mapping;
+
+import "Mapping/mapping.proto";
+
+option csharp_namespace = "D3B.Protocol.Mapping";
+
+message PinnedPairs {
+  // The client build they hold for, as its version file names it (D24).
+  string client_version = 1;
+
+  repeated MessagePin messages = 2;
+  repeated EnumPin enums = 3;
+}
+
+message MessagePin {
+  // The readable message's full name.
+  string readable = 1;
+
+  // The obfuscated message's full name in the build's schema.
+  string obfuscated = 2;
+
+  // Fields whose obfuscated number differs from the readable one, or whose pairing the structure leaves open.
+  repeated NumberPair fields = 3;
+}
+
+message EnumPin {
+  string readable = 1;
+  string obfuscated = 2;
+}

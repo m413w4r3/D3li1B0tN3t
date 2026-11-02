@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/AerafalDev/D3B/security/policy
+    about: Report security issues privately, as the security policy says, never in a public issue.
+  - name: Read the documentation
+    url: https://github.com/AerafalDev/D3B#readme
+    about: Installing, getting started, building from source, and the docs on decisions, architecture and the roadmap.

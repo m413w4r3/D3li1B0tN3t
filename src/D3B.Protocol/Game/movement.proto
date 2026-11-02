@@ -1,0 +1,91 @@
+// How a character moves: on its map along a path, then to the next map. The client asks, the server shows every actor's
+// movement, and the client confirms once its character arrived.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// Asks to walk a path on the character's map. The server refuses a path that does not start where the character
+// stands, with a MapMovementRefusedEvent (D60).
+message MapMovementRequest {
+  // The path's turning points: its first and last cells, and every cell where it turns, each with the direction the
+  // character leaves it in, the last with the one it arrives in: the direction times 4096, plus the cell. Directions run
+  // from 0, east, clockwise to 7 (D27). Measured on paths D3B sent, which the server walked (D60).
+  repeated int32 key_movements = 1;
+
+  int64 map_id = 2;
+
+  // No capture sets it.
+  bool flag_3 = 3;
+}
+
+// The server does not walk the path asked for: measured on three paths D3B sent that did not start where the character
+// stood. It sends nothing else, the character stays where it is, and a walk of the client's in progress stops there.
+// After a walk the server showed but the client never confirmed, it answered so both the next path and a map change,
+// naming the walk's last cell (D73).
+message MapMovementRefusedEvent {
+  option (d3b.readable.partial) = true;
+
+  // The cell the character stands on, as map coordinates, the first cell of a walk in progress: measured as the cell
+  // the character stood on, each time.
+  int32 x = 2;
+  int32 y = 3;
+}
+
+// The character stops walking before its path's end: the client sends it when the player gives a new path during a
+// walk, then the new path, which starts on that cell, in the same read. The server does not answer it.
+message MapMovementCancelRequest {
+  // The cell where the character stopped, on its path.
+  int32 cell_id = 1;
+}
+
+// An actor walks a path on the map: the character itself after its request, or anyone else.
+message MapMovementEvent {
+  option (d3b.readable.partial) = true;
+
+  // Every cell of the path, from the first, without directions: measured on paths D3B sent, whose turning points the
+  // server filled in (D60). A group of monsters' path is only its first cell, where the group stood, and its last, 1 to 4
+  // apart: measured on the 585 walks of groups the 80 game connections captured hold.
+  repeated int32 cells = 1;
+
+  int64 actor_id = 4;
+}
+
+// The character arrived where its path led: the client sends it once the walk is over, before anything else it asks.
+message MapMovementConfirmRequest {
+  // Nine values in this build; no capture sets this field, nor the next.
+  Value value_1 = 1;
+
+  int32 number_2 = 2;
+
+  enum Value {
+    VALUE_VALUE_0 = 0;
+    VALUE_VALUE_1 = 1;
+    VALUE_VALUE_2 = 2;
+    VALUE_VALUE_3 = 3;
+    VALUE_VALUE_4 = 4;
+    VALUE_VALUE_5 = 5;
+    VALUE_VALUE_6 = 6;
+    VALUE_VALUE_7 = 7;
+    VALUE_VALUE_8 = 8;
+  }
+}
+
+// The server's answer to the confirmation: a response, where almost everything the server sends is an event.
+message MapMovementConfirmResponse {
+}
+
+// Asks to go to a neighbouring map, from a cell of the edge it lies beyond, once the walk there is over. The server
+// names the new map 27 to 29 ms later. It answers nothing to one it refuses: from a cell off that edge, for another map,
+// or once the character is on another map; once, after a walk the client never confirmed, a MapMovementRefusedEvent
+// (D73).
+message MapChangeRequest {
+  // No capture sets it.
+  bool flag_1 = 1;
+
+  // The map to go to.
+  int32 map_id = 2;
+}

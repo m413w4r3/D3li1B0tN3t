@@ -1,0 +1,466 @@
+// What fighters do in a fight: the requests that act, the sequences the server frames each action in, and the actions it
+// announces. Measured on 3.7.12.12's captures of 11 fights, by structure, timing, and values compared on the machine,
+// never written down (D178). The references name several of these fields otherwise, in this build: the names here are
+// what the captures measured.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Game/actors.proto";
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// Casts a spell on a cell, during the character's turn.
+message GameActionFightCastRequest {
+  int32 spell_id = 1;
+  int32 cell_id = 2;
+}
+
+// The server frames what follows a request, or what a turn or a fight's start triggers, in a sequence: its start, the
+// actions, then its end. Sequences nest.
+message SequenceStartEvent {
+  SequenceType type = 1;
+  int64 author_id = 2;
+}
+
+// A sequence ends. Measured, the client acknowledged 120 of the 124 sequences of the character's that nest in none, and no
+// nested one, with their action ids, once it showed them; and 17 of other fighters' spells.
+message SequenceEndEvent {
+  option (d3b.readable.partial) = true;
+
+  // A number the client's acknowledgement repeats.
+  int32 action_id = 2;
+
+  SequenceType type = 3;
+  int64 author_id = 4;
+}
+
+// What a sequence frames, measured by what each held.
+enum SequenceType {
+  SEQUENCE_TYPE_SPELL = 0;
+
+  // The one weapon's blow captured.
+  SEQUENCE_TYPE_WEAPON = 1;
+
+  SEQUENCE_TYPE_VALUE_2 = 2;
+
+  // What an action triggers, such as the AP or MP it spends.
+  SEQUENCE_TYPE_TRIGGERED = 3;
+
+  SEQUENCE_TYPE_MOVE = 4;
+  SEQUENCE_TYPE_VALUE_5 = 5;
+  SEQUENCE_TYPE_TURN_START = 6;
+  SEQUENCE_TYPE_TURN_END = 7;
+
+  // The spells cast as the fight starts, by every fighter.
+  SEQUENCE_TYPE_FIGHT_START = 8;
+
+  SEQUENCE_TYPE_VALUE_9 = 9;
+  SEQUENCE_TYPE_VALUE_10 = 10;
+}
+
+// The client has shown a sequence: it sends it by itself, as it confirms a walk out of fights.
+message GameActionAcknowledgementRequest {
+  // No capture sets it.
+  int64 number_1 = 1;
+
+  // The sequence's, as its end gave it.
+  int32 action_id = 2;
+
+  bool valid = 3;
+}
+
+// An action in a fight: who did it, its kind by the effect's id, and what it did.
+message GameActionFightEvent {
+  option (d3b.readable.partial) = true;
+
+  // The action, by the id of the effect it is in the client's table when it is one: 300 a spell cast, 303 a weapon's
+  // blow, 102 AP spent, 129 MP spent, 101 AP and 127 MP lost, 120 AP won, 4 a teleport, 5 a slide, 8 a swap, 50 a carry,
+  // 51 a throw, 91 to 100, 2822 and 2828 damage, 80 a push's, 103 a death, 104 a tackle, 108 and 2998 to 3001 life
+  // healed, 181, 1008 and 1011 a summon, 308 and 309 AP and MP dodged, 406 a spell's buffs removed, 132 all, 514 one;
+  // 400 a trap set, 401 a glyph or a bombs' wall, 306 a mark struck as a fighter came into it, 307 one struck as a
+  // fighter's turn began in it, 310 a mark gone (9f4).
+  int32 action_id = 22;
+
+  // Who did it: the caster, or the fighter whose step or turn it is.
+  int64 source_id = 36;
+
+  oneof action {
+    FightCast cast = 2;
+    FightDeath death = 3;
+    FightSwap swap = 4;
+    FightSlide slide = 5;
+    FightBuffsRemoval buffs_removal = 7;
+    FightCarry carry = 10;
+    FightSummons summons = 12;
+    FightPointsVariation points = 13;
+    FightTackle tackle = 18;
+    FightTeleport teleport = 20;
+    FightPointsDodged points_dodged = 23;
+    FightThrow throw = 27;
+    FightBuffRemoval buff_removal = 31;
+    FightLifeLost life_lost = 37;
+    FightLifeGained life_gained = 39;
+    FightMarkSet mark_set = 9;
+    FightMarkStruck mark_struck = 21;
+    FightMarkRemoved mark_removed = 30;
+  }
+}
+
+// A mark set on the ground: a glyph, a trap or a bombs' wall.
+message FightMarkSet {
+  FightMark mark = 1;
+}
+
+// A mark on cells, which casts its spell on a fighter there as its turn begins or ends, or as it comes into it, as the
+// effect that set it says. Measured on 43 marks of the 101 game connections of 3.7.12.12 (9f4).
+message FightMark {
+  option (d3b.readable.partial) = true;
+
+  FightTeam team = 1;
+
+  // The cell the mark was cast on, its zone's middle: -1 for a trap its enemies do not see.
+  int32 impact_cell = 3;
+
+  FightMarkType type = 4;
+  int64 author_id = 6;
+  repeated FightMarkedCell cells = 7;
+
+  // The spell that set the mark.
+  int32 spell_id = 11;
+
+  // The grade of the spell the mark casts; unset for a bombs' wall, which casts the wall's spell.
+  int32 grade = 13;
+
+  // When it goes: the round, and its author's turn, as which the server takes it back.
+  FightMoment end = 14;
+
+  // The spell the mark casts, as the effect's dice name it; unset for a bombs' wall.
+  int32 cast_spell_id = 15;
+
+  // The mark's id in the fight, which the server names it by as it strikes and goes.
+  int32 mark_id = 17;
+}
+
+// A cell of a mark, those of its zone the map lets fighters stand on.
+message FightMarkedCell {
+  option (d3b.readable.partial) = true;
+
+  int32 cell_id = 4;
+}
+
+// A mark struck a fighter: as it came into it, or as its turn began in it, as the action's id says.
+message FightMarkStruck {
+  option (d3b.readable.partial) = true;
+
+  // The mark's cell its impact names, its zone's middle.
+  int32 impact_cell = 1;
+
+  int32 mark_id = 2;
+  int64 fighter_id = 4;
+}
+
+// A mark went: its time was out, or a spell took it back.
+message FightMarkRemoved {
+  int32 mark_id = 1;
+}
+
+// What a mark is. Measured: the monsters' glyphs 0, the monsters' traps 1, a Roublard's bombs' walls 2, an Eliotrope's
+// portals 3, set by effect 1181.
+enum FightMarkType {
+  FIGHT_MARK_TYPE_GLYPH = 0;
+  FIGHT_MARK_TYPE_TRAP = 1;
+  FIGHT_MARK_TYPE_WALL = 2;
+  FIGHT_MARK_TYPE_PORTAL = 3;
+  FIGHT_MARK_TYPE_VALUE_4 = 4;
+  FIGHT_MARK_TYPE_VALUE_5 = 5;
+  FIGHT_MARK_TYPE_VALUE_6 = 6;
+}
+
+// A fighter slid from a cell to another, pushed, pulled or moved by an effect, with no MP spent: a push of several cells
+// is one slide, from the first cell to the last, in the captures.
+message FightSlide {
+  int64 target_id = 1;
+  int32 from_cell = 2;
+  int32 to_cell = 3;
+}
+
+// A fighter carried another: the carried leaves its cell, which the event names.
+message FightCarry {
+  int64 target_id = 1;
+  int32 cell_id = 2;
+}
+
+// A carrier threw the fighter it carried onto a free cell.
+message FightThrow {
+  option (d3b.readable.partial) = true;
+
+  int64 target_id = 1;
+  int32 cell_id = 2;
+}
+
+// A walker was tackled: the server names the enemies beside it, then each AP and MP it lost.
+message FightTackle {
+  repeated int64 tackler_ids = 1;
+}
+
+// AP or MP a fighter dodged as an effect would have taken them, as the action's id says.
+message FightPointsDodged {
+  int64 target_id = 1;
+  int32 amount = 2;
+}
+
+// Buffs a fighter lost together: those a spell gave it, or all of them.
+message FightBuffsRemoval {
+  option (d3b.readable.partial) = true;
+
+  // The spell whose buffs go, for action 406.
+  int32 spell_id = 1;
+
+  // Set when all the fighter's buffs go, for action 132.
+  bool all = 2;
+
+  int64 target_id = 4;
+}
+
+// One buff a fighter lost, by the uid the server gave it: when a shield breaks, or an effect ends it before its time.
+message FightBuffRemoval {
+  option (d3b.readable.partial) = true;
+
+  oneof kind {
+    int32 uid = 1;
+  }
+
+  int64 target_id = 2;
+}
+
+// A spell cast: the first action of its sequence.
+message FightCast {
+  option (d3b.readable.partial) = true;
+
+  oneof kind {
+    FightCastSpell spell = 2;
+  }
+
+  int32 cell_id = 5;
+
+  // The fighter on the cell, when one stands there.
+  int64 target_id = 6;
+
+  // Whether the cast is a critical hit: set on 50 of the 398 casts the fighters chose, whose damage the level's critical
+  // effects explain, 47 within their range (D194).
+  FightCastCritical critical = 8;
+}
+
+// Whether a cast is a critical hit.
+enum FightCastCritical {
+  FIGHT_CAST_CRITICAL_NORMAL = 0;
+  FIGHT_CAST_CRITICAL_CRITICAL = 1;
+  FIGHT_CAST_CRITICAL_VALUE_2 = 2;
+}
+
+// The spell cast.
+message FightCastSpell {
+  option (d3b.readable.partial) = true;
+
+  // The spell's level, by its id in the client's table: on each of the 344 casts captured, a level of the spell (D184).
+  int32 level_id = 1;
+
+  int32 spell_id = 2;
+}
+
+// A fighter died.
+message FightDeath {
+  option (d3b.readable.partial) = true;
+
+  int64 target_id = 2;
+}
+
+// The source and its target swapped their cells.
+message FightSwap {
+  option (d3b.readable.partial) = true;
+
+  int64 target_id = 1;
+}
+
+// AP or MP spent or lost, as the action's id says.
+message FightPointsVariation {
+  option (d3b.readable.partial) = true;
+
+  // Negative for points spent.
+  int32 delta = 2;
+
+  int64 target_id = 3;
+}
+
+// A fighter teleported: the cell is where its next walk starts.
+message FightTeleport {
+  int32 cell_id = 1;
+  int64 target_id = 2;
+}
+
+// A fighter lost life.
+message FightLifeLost {
+  option (d3b.readable.partial) = true;
+
+  // Life lost for the rest of the fight, a part of the loss.
+  int32 permanent_loss = 1;
+
+  // What a shield took of the damage, beside the loss of life.
+  optional int32 shield_loss = 2;
+
+  // The damage's element, as the action's id: 0 neutral, 1 earth, 2 fire, 3 water, 4 air, -1 a push's.
+  int32 element = 4;
+
+  int64 target_id = 5;
+
+  // The life lost: a monster's whole life when one blow killed it, in the captures.
+  int32 loss = 6;
+}
+
+// A fighter healed.
+message FightLifeGained {
+  option (d3b.readable.partial) = true;
+
+  int64 target_id = 2;
+  int32 amount = 4;
+}
+
+// Fighters summoned: a Steamer's turrets, in the captures.
+message FightSummons {
+  option (d3b.readable.partial) = true;
+
+  oneof kind {
+    SummonedFighters fighters = 2;
+  }
+}
+
+// The fighters summoned.
+message SummonedFighters {
+  option (d3b.readable.partial) = true;
+
+  repeated SummonedFighter summons = 1;
+}
+
+// A fighter summoned: what it is, its characteristics, and where it stands.
+message SummonedFighter {
+  option (d3b.readable.partial) = true;
+
+  SummonedEntity entity = 1;
+  FightCharacteristics stats = 2;
+
+  // The summon's id and cell: one in the captures.
+  repeated FighterSpawn positions = 5;
+}
+
+// What was summoned.
+message SummonedEntity {
+  option (d3b.readable.partial) = true;
+
+  oneof kind {
+    SummonedMonster monster = 3;
+  }
+}
+
+// A monster summoned.
+message SummonedMonster {
+  option (d3b.readable.partial) = true;
+
+  oneof grade_or_level {
+    int32 grade = 1;
+  }
+
+  // The monster's id in the client's table.
+  int32 monster_id = 5;
+}
+
+// A buff a fighter got: a characteristic changed, a state, a change to one of its spells, or an effect waiting for its
+// trigger. Measured on the 49 fights captured, 843 buffs: each names the spell's effect it comes from, which the pack
+// holds, the spell and its grade. The buff says when it ends, and the fight's state lets it go then (D193); its end
+// before is announced (FightBuffEndEvent).
+message FightEffectsEvent {
+  FightBuffGiven given = 1;
+}
+
+// A buff ended, by the uid the server gave it on its fighter, with no action of its own: a state an effect removes, such
+// as a Zobal's mask as another is put on, a spell's buffs dispelled or replaced, or its time over as a turn starts.
+// Measured on the 80 game connections of 3.7.12.12 (D225): 1,171, of which 334 as a turn started, on buffs the fight's
+// state had let go at their end, and the others in a spell's sequence or what it triggered.
+message FightBuffEndEvent {
+  int32 uid = 1;
+  int64 target_id = 2;
+}
+
+// The buff, its action and who gave it.
+message FightBuffGiven {
+  FightBuff buff = 1;
+
+  // The buff's action, by the effect's id: 950 a state, 280 to 299 and others a spell changed, 792 and 1160 a spell cast
+  // when triggered, an effect changing a characteristic otherwise.
+  int32 action_id = 2;
+
+  int64 source_id = 3;
+}
+
+// A buff on a fighter.
+message FightBuff {
+  option (d3b.readable.partial) = true;
+
+  // A state's id, or a spell modifier's value: the effect's value, measured on the 357 states and 32 modifiers whose
+  // action is their effect's.
+  int32 parameter = 1;
+
+  // When the buff starts, for an effect with a delay: unset on all but one buff captured.
+  FightMoment start = 2;
+
+  // When the buff ends: the round its effect's duration after the round it was given in, at the turn of the fighter
+  // playing as it was given, by its place in the turns' order; a round of -1 for a buff of the whole fight.
+  FightMoment end = 4;
+
+  // The buff's id on its fighter: what a single removal names.
+  int32 uid = 5;
+
+  // The spell's effect the buff comes from, by its uid in the client's table.
+  int32 effect_uid = 6;
+
+  int64 target_id = 8;
+
+  // The characteristic's change of a boost, or the spell a spell modifier changes or a triggered buff casts.
+  int32 value = 10;
+
+  FightBuffKind kind = 11;
+
+  // The effect's triggers, as the client's table writes them: I at once, the events otherwise.
+  string triggers = 14;
+
+  // The grade of the spell that gave the buff.
+  int32 grade = 15;
+
+  // The spell that gave the buff.
+  int32 spell_id = 16;
+}
+
+// A moment of the fight: a round, and the turn in it by the fighter's place in the turns' order.
+message FightMoment {
+  int32 turn = 1;
+  int32 round = 2;
+}
+
+// What a buff is, measured by the effects that gave each kind.
+enum FightBuffKind {
+  // A characteristic changed, or a look, a shield, a control.
+  FIGHT_BUFF_KIND_BOOST = 0;
+
+  FIGHT_BUFF_KIND_VALUE_1 = 1;
+  FIGHT_BUFF_KIND_STATE = 2;
+  FIGHT_BUFF_KIND_VALUE_3 = 3;
+  FIGHT_BUFF_KIND_SPELL_MODIFIER = 4;
+  FIGHT_BUFF_KIND_VALUE_5 = 5;
+  FIGHT_BUFF_KIND_VALUE_6 = 6;
+
+  // An effect that waits for its trigger.
+  FIGHT_BUFF_KIND_TRIGGERED = 7;
+
+  FIGHT_BUFF_KIND_VALUE_8 = 8;
+}

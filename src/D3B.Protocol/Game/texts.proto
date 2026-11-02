@@ -1,0 +1,40 @@
+// What the server tells the player in a text of the client's: an information, such as the kamas a teleport cost, or an
+// error, such as a teleport refused.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// A text the client shows, by its id in the client's tables. The server refuses a teleport with one of the error kind,
+// 28 ms after the request, and nothing else (D84).
+message TextInformationEvent {
+  option (d3b.readable.partial) = true;
+
+  // The text's id: 46 told the kamas a teleport cost, 24 a zaap learnt; 474 refused a teleport during a dialog or a walk,
+  // 1759 one to a map the character knows no zaap on, 416 one from a map the server lets no one teleport from, and 471
+  // the haven bag on a map it does not open on.
+  int32 text_id = 2;
+
+  TextInformationType type = 3;
+}
+
+// What kind of text. Thirteen values in this build, 0 to 13 but 9: 0 informed, and 1 refused, in the captures; the others
+// are not measured.
+enum TextInformationType {
+  TEXT_INFORMATION_TYPE_MESSAGE = 0;
+  TEXT_INFORMATION_TYPE_ERROR = 1;
+  TEXT_INFORMATION_TYPE_VALUE_2 = 2;
+  TEXT_INFORMATION_TYPE_VALUE_3 = 3;
+  TEXT_INFORMATION_TYPE_VALUE_4 = 4;
+  TEXT_INFORMATION_TYPE_VALUE_5 = 5;
+  TEXT_INFORMATION_TYPE_VALUE_6 = 6;
+  TEXT_INFORMATION_TYPE_VALUE_7 = 7;
+  TEXT_INFORMATION_TYPE_VALUE_8 = 8;
+  TEXT_INFORMATION_TYPE_VALUE_10 = 10;
+  TEXT_INFORMATION_TYPE_VALUE_11 = 11;
+  TEXT_INFORMATION_TYPE_VALUE_12 = 12;
+  TEXT_INFORMATION_TYPE_VALUE_13 = 13;
+}

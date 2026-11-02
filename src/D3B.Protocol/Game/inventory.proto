@@ -1,0 +1,136 @@
+// The character's inventory: its objects and kamas, which the server sends on entering the game, then each change, and
+// its weight.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// Every object the character carries, and its kamas, sent on entering the game.
+message InventoryContentEvent {
+  option (d3b.readable.partial) = true;
+
+  repeated InventoryObject objects = 2;
+  int64 kamas = 4;
+}
+
+// A stack of objects, where it is.
+message InventoryObject {
+  option (d3b.readable.partial) = true;
+
+  ObjectItem item = 1;
+
+  // Where the stack is: 63 for every object not worn in the captures; the inventory lists the worn ones first, at other
+  // positions, one of each.
+  int32 position = 4;
+}
+
+// A stack of objects, as the inventory, the bank and the guild's chest hold it.
+message ObjectItem {
+  option (d3b.readable.partial) = true;
+
+  int32 quantity = 3;
+
+  // The item's id in the client's tables (D29).
+  int32 item_id = 4;
+
+  // The stack's own id, which the requests moving it name.
+  int32 uid = 5;
+}
+
+// A new stack in the inventory, as a harvest gives one.
+message ObjectAddedEvent {
+  option (d3b.readable.partial) = true;
+
+  InventoryObject object = 2;
+}
+
+// A stack of the inventory has a new quantity, as a harvest adding to it gives.
+message ObjectQuantityEvent {
+  option (d3b.readable.partial) = true;
+
+  ObjectQuantity object = 3;
+}
+
+// A stack's new quantity.
+message ObjectQuantity {
+  option (d3b.readable.partial) = true;
+
+  int32 quantity = 1;
+  int32 uid = 3;
+}
+
+// Stacks gone from the inventory, as when they are put in the bank.
+message ObjectsDeletedEvent {
+  repeated int32 uids = 1;
+}
+
+// A stack gone from the inventory, alone: the last object of a stack used, or a stack moved whole into the guild's chest.
+message ObjectDeletedEvent {
+  int32 uid = 1;
+}
+
+// A stack worn, or taken off, at a new position: what the player's equipping moved, measured on the 2 the captures hold,
+// a pet worn at 8 and taken off to 63 (D221). A weapon is worn at position 1.
+message ObjectMovementEvent {
+  int32 uid = 1;
+  int32 position = 3;
+}
+
+// Uses one object of a stack, as eating or opening a resource bag does. Food heals: the server ends the life's
+// regeneration, starts it again, then sends the stack's new quantity, a text, the characteristics holding the new life and
+// the weight; at full life, a text alone, and nothing is used. A bag gives what it holds, a stack added to or a new one,
+// then the bag's quantity, or its stack deleted once empty, a text and the weight.
+message ObjectUseRequest {
+  int32 uid = 1;
+}
+
+// Uses up to a quantity of a stack's objects at once. Food heals as ObjectUseRequest's does, in one answer 28 ms later: asked
+// for the whole stack below full life, the server used only as many as the life lacked, the last in part; at full life, a
+// text alone, and nothing is used.
+message ObjectUseMultipleRequest {
+  int32 uid = 1;
+
+  // No capture sets it.
+  Unmeasured message_2 = 2;
+
+  int32 quantity = 3;
+
+  message Unmeasured {
+    map<bool, string> map_1 = 1;
+    repeated int64 numbers_2 = 2;
+  }
+}
+
+// What the character obtained, as a harvest's resources: sent with the inventory's change.
+message ObjectObtainedEvent {
+  // Four values in this build; no capture sets it.
+  Origin origin = 1;
+
+  int32 quantity = 2;
+
+  // The item's id in the client's tables (D29).
+  int32 item_id = 3;
+
+  enum Origin {
+    ORIGIN_VALUE_0 = 0;
+    ORIGIN_VALUE_1 = 1;
+    ORIGIN_VALUE_2 = 2;
+    ORIGIN_VALUE_3 = 3;
+  }
+}
+
+// The kamas the character carries now.
+message KamasUpdateEvent {
+  option (d3b.readable.partial) = true;
+
+  int64 kamas = 2;
+}
+
+// The weight the character carries, in pods, and the most it can.
+message InventoryWeightEvent {
+  int32 weight = 1;
+  int32 max_weight = 2;
+}

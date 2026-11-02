@@ -1,0 +1,107 @@
+name: Bug report
+description: Something D3B does wrong, or does not do as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report it. Before you do:
+
+        - Check that you run the [latest release](https://github.com/AerafalDev/D3B/releases/latest), or a recent `main`.
+        - Search the [existing issues](https://github.com/AerafalDev/D3B/issues?q=is%3Aissue): yours may be there.
+        - A vulnerability goes through the [security policy](https://github.com/AerafalDev/D3B/security/policy), never an issue.
+
+        **Never paste a capture, a database or a login ticket.** A capture holds the account's ticket. To show what the protocol did, describe the capture with `scripts/capture.cs`, which prints its structure, never its content.
+
+  - type: input
+    id: version
+    attributes:
+      label: D3B version
+      description: On the app's settings page. Run from source, the commit instead.
+      placeholder: 0.2.0
+    validations:
+      required: true
+
+  - type: input
+    id: client
+    attributes:
+      label: Client build
+      description: The Dofus 3 client build, on the app's settings page.
+      placeholder: 3.7.12.12
+    validations:
+      required: true
+
+  - type: dropdown
+    id: run
+    attributes:
+      label: How D3B runs
+      options:
+        - The installed app
+        - From source, the app (src/D3B.App)
+        - From source, the host alone (src/D3B.Host)
+        - A tool in scripts/
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Harvesting and banking
+        - Fights
+        - Moving, maps and travel
+        - The desktop app
+        - Connection, relay and protocol
+        - Game data and the tools in scripts/
+        - Installer and updates
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: What the bot or the app did. Screenshots of the app help.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The profile and its settings, where the character was, and what you did, in order.
+      placeholder: |
+        1. Started the "Auto lumberjack" profile on a level 40 character in Amakna.
+        2. The bot banked once, then...
+    validations:
+      required: true
+
+  - type: textarea
+    id: journal
+    attributes:
+      label: The bot's journal
+      description: The relevant lines of the bot's journal, from the app's logs page. Remove anything that names your account if you prefer.
+      render: text
+
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Windows version, how often it happens, what you already tried.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before submitting
+      options:
+        - label: This report holds no capture, database or login ticket.
+          required: true

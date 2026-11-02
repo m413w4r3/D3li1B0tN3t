@@ -1,0 +1,70 @@
+// The mapping of a client build: which obfuscated message, field and enum value each readable one is (D11, D45). It is
+// derived from the client, so it is never committed: it ships as an asset of the build's release, beside its schema.
+syntax = "proto3";
+
+package d3b.mapping;
+
+option csharp_namespace = "D3B.Protocol.Mapping";
+
+message ProtocolMapping {
+  // The format this mapping is written in, also in its file's name.
+  int32 format_version = 1;
+
+  // The client build it maps, as its version file names it (D24).
+  string client_version = 2;
+
+  // The SHA-256 of the build's schema it was matched against (D39).
+  bytes schema_sha256 = 3;
+
+  // The digest of the readable protocol it maps, which a reader checks against its own.
+  bytes readable_digest = 4;
+
+  // The version of the tool that matched it.
+  string tool_version = 5;
+
+  // Every readable message, by full name.
+  repeated MessagePair messages = 6;
+
+  // Every readable enum, by full name.
+  repeated EnumPair enums = 7;
+}
+
+message MessagePair {
+  string readable = 1;
+  string obfuscated = 2;
+  MatchEvidence evidence = 3;
+
+  // Every field of the readable message, by number.
+  repeated NumberPair fields = 4;
+}
+
+message EnumPair {
+  string readable = 1;
+  string obfuscated = 2;
+  MatchEvidence evidence = 3;
+
+  // Every value of the readable enum, by number.
+  repeated NumberPair values = 4;
+}
+
+message NumberPair {
+  int32 readable = 1;
+  int32 obfuscated = 2;
+}
+
+// What paired a readable type with its obfuscated one, strongest first.
+enum MatchEvidence {
+  MATCH_EVIDENCE_UNSPECIFIED = 0;
+
+  // A pinned pair, committed for its build.
+  MATCH_EVIDENCE_PIN = 1;
+
+  // An anchor, measured in captures of the build.
+  MATCH_EVIDENCE_CAPTURE = 2;
+
+  // A field of a pair whose types are paired, which gives its type's pair.
+  MATCH_EVIDENCE_FIELD = 3;
+
+  // The structural score, clear of every other candidate.
+  MATCH_EVIDENCE_SCORE = 4;
+}

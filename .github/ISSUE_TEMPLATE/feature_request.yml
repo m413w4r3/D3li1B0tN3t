@@ -1,0 +1,69 @@
+name: Feature request
+description: Something D3B should do, or do better.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. The [roadmap](https://github.com/AerafalDev/D3B/blob/main/docs/roadmap.md) says what is planned and in which order, and [docs/decisions.md](https://github.com/AerafalDev/D3B/blob/main/docs/decisions.md) why things are as they are: a quick look there may answer part of it.
+
+        D3B never adds [what D2 rules out](https://github.com/AerafalDev/D3B/blob/main/docs/decisions.md#d2-what-d3b-never-contains): evading Ankama's detection, creating accounts in bulk, automating subscriptions or payments, bypassing Ankama Shield, or a proxy per account to hide multi-accounting. Requests for these are closed.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you want to do
+      description: The need, as a player or a developer, before any solution. What do you do today instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What D3B could do
+      description: How you see it working, in the bot, the app or the code.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways you thought of, and why they fall short.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Harvesting and banking
+        - Fights
+        - Moving, maps and travel
+        - The desktop app
+        - Connection, relay and protocol
+        - Game data and the tools in scripts/
+        - Installer and updates
+        - Several accounts and groups
+        - Something else
+    validations:
+      required: true
+
+  - type: dropdown
+    id: help
+    attributes:
+      label: Would you build it?
+      options:
+        - Yes, with a pull request
+        - Yes, with some guidance
+        - No, but I can test it
+        - No
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Before submitting
+      options:
+        - label: This is not one of the things D3B never does.
+          required: true

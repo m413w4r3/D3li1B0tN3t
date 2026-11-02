@@ -1,0 +1,464 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Name" xml:space="preserve">
+    <value>Harvesting</value>
+  </data>
+  <data name="SectionWhat" xml:space="preserve">
+    <value>Harvest</value>
+  </data>
+  <data name="SectionWhere" xml:space="preserve">
+    <value>Place</value>
+  </data>
+  <data name="SectionBank" xml:space="preserve">
+    <value>Bank</value>
+  </data>
+  <data name="Resources" xml:space="preserve">
+    <value>List</value>
+  </data>
+  <data name="ResourcesHelp" xml:space="preserve">
+    <value>In order, the first first, of any profession or none.</value>
+  </data>
+  <data name="Area" xml:space="preserve">
+    <value>Area</value>
+  </data>
+  <data name="AreaHelp" xml:space="preserve">
+    <value>Alone, it stands for its sub-areas where the resources grow.</value>
+  </data>
+  <data name="SubAreas" xml:space="preserve">
+    <value>Sub-areas</value>
+  </data>
+  <data name="SubAreasHelp" xml:space="preserve">
+    <value>Those where the resources grow come first.</value>
+  </data>
+  <data name="FullAt" xml:space="preserve">
+    <value>Pods full at</value>
+  </data>
+  <data name="Deposit" xml:space="preserve">
+    <value>What goes</value>
+  </data>
+  <data name="DepositHarvest" xml:space="preserve">
+    <value>What harvesting brings</value>
+  </data>
+  <data name="DepositAll" xml:space="preserve">
+    <value>Everything but what is worn</value>
+  </data>
+  <data name="RuleWhat" xml:space="preserve">
+    <value>Choose resources.</value>
+  </data>
+  <data name="RuleWhere" xml:space="preserve">
+    <value>Choose an area or sub-areas.</value>
+  </data>
+  <data name="FigureNumber" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="FigureOutOf" xml:space="preserve">
+    <value>{0} of {1}</value>
+  </data>
+  <data name="FigureNone" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="FigureMapsOne" xml:space="preserve">
+    <value>map to go through</value>
+  </data>
+  <data name="FigureMapsMany" xml:space="preserve">
+    <value>maps to go through</value>
+  </data>
+  <data name="FigureProbableOne" xml:space="preserve">
+    <value>probable map</value>
+  </data>
+  <data name="FigureProbableMany" xml:space="preserve">
+    <value>probable maps</value>
+  </data>
+  <data name="FigureResourcesPresent" xml:space="preserve">
+    <value>resources present</value>
+  </data>
+  <data name="FigureResourcesOne" xml:space="preserve">
+    <value>resource in the zone</value>
+  </data>
+  <data name="FigureResourcesMany" xml:space="preserve">
+    <value>resources in the zone</value>
+  </data>
+  <data name="FigureBankOne" xml:space="preserve">
+    <value>{0} map</value>
+  </data>
+  <data name="FigureBankMany" xml:space="preserve">
+    <value>{0} maps</value>
+  </data>
+  <data name="FigureBank" xml:space="preserve">
+    <value>to the nearest bank</value>
+  </data>
+  <data name="FigureNoBank" xml:space="preserve">
+    <value>bank within reach on foot</value>
+  </data>
+  <data name="DoingStart" xml:space="preserve">
+    <value>Getting ready</value>
+  </data>
+  <data name="DoingHarvestOne" xml:space="preserve">
+    <value>Harvesting {1}, {0} more on the map</value>
+  </data>
+  <data name="DoingHarvestMany" xml:space="preserve">
+    <value>Harvesting {1}, {0} more on the map</value>
+  </data>
+  <data name="DoingHarvestLast" xml:space="preserve">
+    <value>Harvesting {0}</value>
+  </data>
+  <data name="DoingTravel" xml:space="preserve">
+    <value>Heading to the next map</value>
+  </data>
+  <data name="DoingReturn" xml:space="preserve">
+    <value>Heading back to the zone</value>
+  </data>
+  <data name="DoingBank" xml:space="preserve">
+    <value>Going to the bank</value>
+  </data>
+  <data name="DoingWaitGrow" xml:space="preserve">
+    <value>Waiting for the resources to grow back</value>
+  </data>
+  <data name="DoingPlayer" xml:space="preserve">
+    <value>Paused, in your hands</value>
+  </data>
+  <data name="DoingDisconnected" xml:space="preserve">
+    <value>Waiting for the client to reconnect</value>
+  </data>
+  <data name="Progress" xml:space="preserve">
+    <value>Tour {0}, map {1} of {2}</value>
+  </data>
+  <data name="CountItem" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="CountBanksOne" xml:space="preserve">
+    <value>{0} bank</value>
+  </data>
+  <data name="CountBanksMany" xml:space="preserve">
+    <value>{0} banks</value>
+  </data>
+  <data name="WarningLevel" xml:space="preserve">
+    <value>{0} needs {1} {2}, the character is {3}</value>
+  </data>
+  <data name="FailNoZone" xml:space="preserve">
+    <value>The zone holds no map to harvest.</value>
+  </data>
+  <data name="FailNothing" xml:space="preserve">
+    <value>No map of the zone holds a resource to harvest.</value>
+  </data>
+  <data name="FailUnreachable" xml:space="preserve">
+    <value>No map of the zone can be reached.</value>
+  </data>
+  <data name="FailLost" xml:space="preserve">
+    <value>The way through the zone failed three times in a row.</value>
+  </data>
+  <data name="FailStillFullHarvest" xml:space="preserve">
+    <value>Still full once banked, {0} of {1} pods: what is left is not harvest. Bank everything but what is worn, or raise the {2}% share.</value>
+  </data>
+  <data name="FailStillFullAll" xml:space="preserve">
+    <value>Still full once banked, {0} of {1} pods: what is worn weighs more than the {2}% share. Raise it.</value>
+  </data>
+  <data name="IsolatedMaps" xml:space="preserve">
+    <value>Isolated maps</value>
+  </data>
+  <data name="IsolatedMapsHelp" xml:space="preserve">
+    <value>Reached only far round, gone through last.</value>
+  </data>
+  <data name="FigureIsolatedOne" xml:space="preserve">
+    <value>isolated map, left out</value>
+  </data>
+  <data name="FigureIsolatedMany" xml:space="preserve">
+    <value>isolated maps, left out</value>
+  </data>
+  <data name="FigureIsolatedLastOne" xml:space="preserve">
+    <value>isolated map, gone through last</value>
+  </data>
+  <data name="FigureIsolatedLastMany" xml:space="preserve">
+    <value>isolated maps, gone through last</value>
+  </data>
+  <data name="SectionFight" xml:space="preserve">
+    <value>Fights</value>
+  </data>
+  <data name="AfterFight" xml:space="preserve">
+    <value>After a fight</value>
+  </data>
+  <data name="AfterFightHelp" xml:space="preserve">
+    <value>Once the fight is over, harvesting resumes, pauses or stops.</value>
+  </data>
+  <data name="AfterFightResume" xml:space="preserve">
+    <value>Resume</value>
+  </data>
+  <data name="AfterFightPause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="AfterFightStop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="DoingFightProtector" xml:space="preserve">
+    <value>A protector attacked: waiting for the fight's end</value>
+  </data>
+  <data name="DoingFightAggression" xml:space="preserve">
+    <value>Attacked: waiting for the fight's end</value>
+  </data>
+  <data name="NoteProtectorOf" xml:space="preserve">
+    <value>a protector, as harvesting {0} ended</value>
+  </data>
+  <data name="NoteProtector" xml:space="preserve">
+    <value>a protector, as a harvest ended</value>
+  </data>
+  <data name="NoteAggression" xml:space="preserve">
+    <value>an aggression</value>
+  </data>
+  <data name="CountFightsOne" xml:space="preserve">
+    <value>{0} fight, protectors {1}</value>
+  </data>
+  <data name="CountFightsMany" xml:space="preserve">
+    <value>{0} fights, protectors {1}</value>
+  </data>
+  <data name="DoingWaitGrowFor" xml:space="preserve">
+    <value>Waiting for the resources to grow back, the next in {0} s</value>
+  </data>
+  <data name="ProgressGrowing" xml:space="preserve">
+    <value>Tour {0}, map {1} of {2}, {3} growing back</value>
+  </data>
+  <data name="CountItemRate" xml:space="preserve">
+    <value>{0} {1}, {2}/h</value>
+  </data>
+  <data name="CountExperience" xml:space="preserve">
+    <value>{0} +{1} XP</value>
+  </data>
+  <data name="DepositTo" xml:space="preserve">
+    <value>Chest</value>
+  </data>
+  <data name="DepositToOwnChest" xml:space="preserve">
+    <value>Its own chest in the bank</value>
+  </data>
+  <data name="DepositToGuildChest" xml:space="preserve">
+    <value>The guild's chest</value>
+  </data>
+  <data name="DepositToHelp" xml:space="preserve">
+    <value>What the guild's chest refuses goes to its own.</value>
+  </data>
+  <data name="SectionUpkeep" xml:space="preserve">
+    <value>Upkeep</value>
+  </data>
+  <data name="OpenBags" xml:space="preserve">
+    <value>Open the resource bags</value>
+  </data>
+  <data name="OpenBagsHelp" xml:space="preserve">
+    <value>As soon as a harvest gives one.</value>
+  </data>
+  <data name="Heal" xml:space="preserve">
+    <value>Heal</value>
+  </data>
+  <data name="HealBelow" xml:space="preserve">
+    <value>Heal under</value>
+  </data>
+  <data name="Food" xml:space="preserve">
+    <value>Food</value>
+  </data>
+  <data name="FoodHelp" xml:space="preserve">
+    <value>In order, until life is full; none chosen, what the inventory holds that only heals, the smallest heal first; else the life regenerates up to the share.</value>
+  </data>
+  <data name="DoingOpenBag" xml:space="preserve">
+    <value>Opening {0}</value>
+  </data>
+  <data name="AfterLostFight" xml:space="preserve">
+    <value>After a lost fight</value>
+  </data>
+  <data name="AfterLostFightHelp" xml:space="preserve">
+    <value>The character comes back to its save point with little life: on resuming, it first regains the share of life under which it heals, eating its food or waiting. Three fights lost in a row stop harvesting.</value>
+  </data>
+  <data name="AfterLostFightResume" xml:space="preserve">
+    <value>Resume once healed</value>
+  </data>
+  <data name="AfterLostFightPause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="AfterLostFightStop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="DoingRegain" xml:space="preserve">
+    <value>Regaining life after a lost fight: {0} of {1}</value>
+  </data>
+  <data name="DoingEat" xml:space="preserve">
+    <value>Healing: eating {0}</value>
+  </data>
+  <data name="DoingRegenerate" xml:space="preserve">
+    <value>Waiting for its life to regenerate, {0} s</value>
+  </data>
+  <data name="CountBagsOne" xml:space="preserve">
+    <value>{0} bag opened</value>
+  </data>
+  <data name="CountBagsMany" xml:space="preserve">
+    <value>{0} bags opened</value>
+  </data>
+  <data name="CountEatenOne" xml:space="preserve">
+    <value>{0} food eaten</value>
+  </data>
+  <data name="CountEatenMany" xml:space="preserve">
+    <value>{0} food eaten</value>
+  </data>
+  <data name="WarningChestRefused" xml:space="preserve">
+    <value>The guild's chest refused some stacks: they went to the character's own chest</value>
+  </data>
+  <data name="WarningChestNone" xml:space="preserve">
+    <value>No guild's chest reached: the harvest went to the character's own chest</value>
+  </data>
+  <data name="RuleJobs" xml:space="preserve">
+    <value>Choose at least one profession.</value>
+  </data>
+  <data name="Mode" xml:space="preserve">
+    <value>Resources</value>
+  </data>
+  <data name="ModeHelp" xml:space="preserve">
+    <value>By profession, each character's levels decide; as a list, in its order.</value>
+  </data>
+  <data name="ModeByProfession" xml:space="preserve">
+    <value>By profession</value>
+  </data>
+  <data name="ModeList" xml:space="preserve">
+    <value>List</value>
+  </data>
+  <data name="Jobs" xml:space="preserve">
+    <value>Professions</value>
+  </data>
+  <data name="JobsHelp" xml:space="preserve">
+    <value>All ticks the five professions; without a profession, the water of wells and the rest.</value>
+  </data>
+  <data name="Excluded" xml:space="preserve">
+    <value>Left out</value>
+  </data>
+  <data name="ExcludedHelp" xml:space="preserve">
+    <value>Never harvested, even of a profession chosen.</value>
+  </data>
+  <data name="Order" xml:space="preserve">
+    <value>Order</value>
+  </data>
+  <data name="OrderHelp" xml:space="preserve">
+    <value>On each map; the map's other resources follow.</value>
+  </data>
+  <data name="OrderNearest" xml:space="preserve">
+    <value>Nearest first</value>
+  </data>
+  <data name="OrderHighestLevel" xml:space="preserve">
+    <value>Highest level first</value>
+  </data>
+  <data name="Place" xml:space="preserve">
+    <value>Place</value>
+  </data>
+  <data name="PlaceHelp" xml:space="preserve">
+    <value>Automatic: the sub-area richest in what each character can harvest at its levels, chosen again each tour.</value>
+  </data>
+  <data name="PlaceAutomatic" xml:space="preserve">
+    <value>Automatic</value>
+  </data>
+  <data name="PlaceChosen" xml:space="preserve">
+    <value>Chosen</value>
+  </data>
+  <data name="SafeLevel" xml:space="preserve">
+    <value>Not above its level</value>
+  </data>
+  <data name="SafeLevelHelp" xml:space="preserve">
+    <value>Leaves out the sub-areas above the character's level, whose monsters would attack it.</value>
+  </data>
+  <data name="ZaapSaving" xml:space="preserve">
+    <value>Zaap if it saves at least</value>
+  </data>
+  <data name="ZaapSavingUnit" xml:space="preserve">
+    <value>maps</value>
+  </data>
+  <data name="ZaapSavingHelp" xml:space="preserve">
+    <value>On every journey, the bank's included; 1 takes a zaap as soon as it saves a map.</value>
+  </data>
+  <data name="PlaceOne" xml:space="preserve">
+    <value>{1}, {0} map</value>
+  </data>
+  <data name="PlaceMany" xml:space="preserve">
+    <value>{1}, {0} maps</value>
+  </data>
+  <data name="PlaceUnseen" xml:space="preserve">
+    <value>Levels not seen yet</value>
+  </data>
+  <data name="PlaceNone" xml:space="preserve">
+    <value>Nothing to harvest at its levels</value>
+  </data>
+  <data name="FigureAutomatic" xml:space="preserve">
+    <value>Auto</value>
+  </data>
+  <data name="FigureAutomaticLabel" xml:space="preserve">
+    <value>place chosen for each character</value>
+  </data>
+  <data name="FailNoPlace" xml:space="preserve">
+    <value>No sub-area at its level holds a resource it can harvest.</value>
+  </data>
+  <data name="ProgressAt" xml:space="preserve">
+    <value>{4}, tour {0}, map {1} of {2}</value>
+  </data>
+  <data name="ProgressAtGrowing" xml:space="preserve">
+    <value>{4}, tour {0}, map {1} of {2}, {3} growing back</value>
+  </data>
+  <data name="PresetAuto" xml:space="preserve">
+    <value>Automatic harvest</value>
+  </data>
+  <data name="PresetLumberjack" xml:space="preserve">
+    <value>Auto lumberjack</value>
+  </data>
+  <data name="PresetMiner" xml:space="preserve">
+    <value>Auto miner</value>
+  </data>
+  <data name="PresetAlchemist" xml:space="preserve">
+    <value>Auto alchemist</value>
+  </data>
+  <data name="PresetFarmer" xml:space="preserve">
+    <value>Auto farmer</value>
+  </data>
+  <data name="PresetFisherman" xml:space="preserve">
+    <value>Auto fisherman</value>
+  </data>
+  <data name="AiFights" xml:space="preserve">
+    <value>The AI fights</value>
+  </data>
+  <data name="AiFightsHelp" xml:space="preserve">
+    <value>The AI plays a protector's fight or an aggression; unchecked, you play it.</value>
+  </data>
+  <data name="MessageAutomatic" xml:space="preserve">
+    <value>The place is chosen at the levels of each character playing this profile: give it to one, on the Accounts page, to see it.</value>
+  </data>
+</root>

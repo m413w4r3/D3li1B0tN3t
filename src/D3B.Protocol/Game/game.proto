@@ -1,0 +1,47 @@
+// The game connection: what a client and a game server say once the client is there. Every frame of that connection is
+// one GameMessage (D38), whose members carry their content in an Any: its type URL names the build's obfuscated message,
+// which a build's mapping turns into a readable one of this package (D47). The numbers are the wire's, which the
+// obfuscation keeps (D42); this build's envelope numbers its members otherwise than the references do.
+syntax = "proto3";
+
+package d3b.game;
+
+import "google/protobuf/any.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// One frame of the game connection: the client sends requests, the server sends events, and answers a request rarely.
+message GameMessage {
+  // Of the event's type, outside the oneof: no capture holds it.
+  GameEvent event_2 = 2;
+
+  oneof content {
+    GameResponse response = 1;
+    GameEvent event = 3;
+    GameRequest request = 4;
+  }
+}
+
+// What the client asks or tells the server.
+message GameRequest {
+  // A number every request carries before its content; what it counts is not measured.
+  int32 id = 1;
+
+  google.protobuf.Any content = 2;
+}
+
+// What the server answers a request: one frame per connection captured.
+message GameResponse {
+  // A number every response carries before its content; what it counts is not measured.
+  int32 id = 1;
+
+  google.protobuf.Any content = 2;
+}
+
+// What the server sends: almost every frame it sends.
+message GameEvent {
+  google.protobuf.Any content = 1;
+
+  // A list no capture sets.
+  repeated int32 list_2 = 2;
+}

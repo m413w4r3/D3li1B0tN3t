@@ -1,0 +1,44 @@
+// The character's spells: which it knows, at which grade. Measured on 3.7.12.12's captures (D197).
+syntax = "proto3";
+
+package d3b.game;
+
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// The spells the character may cast, each at its grade: sent as the character enters the game, before its first map, and
+// again as an alteration transforms it (D199).
+message SpellsEvent {
+  option (d3b.readable.partial) = true;
+
+  repeated SpellItem spells = 1;
+
+  // While an alteration transforms the character, such as into a bouftou, the only spells it casts: set on the list sent
+  // as the owner's character was transformed, 2 spells (D203).
+  repeated SpellItem transformed_spells = 3;
+}
+
+// The spells the client plays a fighter with in a fight, sent as the fight starts and as a summon the client controls
+// comes: the character's whole list, a transformed character's own (D203), or the summon's.
+message FightSpellsContextEvent {
+  option (d3b.readable.partial) = true;
+
+  // The character whose client plays the fighter: the character's own id on all 182 lists captured, a summon's too.
+  optional int64 character_id = 4;
+
+  repeated SpellItem spells = 5;
+
+  // The fighter the spells are of: the character, or the summon it controls, such as a Roublabot, on 15 of the 182 (9f4).
+  int64 fighter_id = 6;
+}
+
+// A spell the character knows.
+message SpellItem {
+  option (d3b.readable.partial) = true;
+
+  int32 spell_id = 2;
+
+  // The spell's grade, from 1: the level of the spell the character's casts named, measured.
+  int32 grade = 4;
+}

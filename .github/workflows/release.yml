@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish the app (win-x64)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+
+      - name: Restore
+        run: |
+          dotnet restore
+          dotnet tool restore
+
+      - name: Read the versions
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?)$') { throw "The tag $tag is not v followed by a version." }
+          $version = $Matches[1]
+          $client = (dotnet msbuild src/D3B.App/D3B.App.csproj -getProperty:ClientVersion).Trim()
+          if ($client -notmatch '^\d+(\.\d+)+$') { throw "src/D3B.App names no client build: '$client'." }
+          "VERSION=$version" | Out-File $env:GITHUB_ENV -Append
+          "CLIENT_VERSION=$client" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release
+
+      - name: Publish the app
+        run: dotnet publish src/D3B.App -c Release -r win-x64 --self-contained -o publish
+
+      - name: Embed the client build's files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: dotnet run --file scripts/embed.cs -- --client-version $env:CLIENT_VERSION --output publish/data
+
+      - name: Download the previous release, for the delta
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: dotnet vpk download github --repoUrl "https://github.com/$env:GITHUB_REPOSITORY" --token $env:GH_TOKEN -o releases
+
+      - name: Pack
+        run: dotnet vpk pack --packId D3B.App --packVersion $env:VERSION --packDir publish --mainExe D3B.App.exe --packTitle D3B --packAuthors Aerafal --icon src/D3B.App/Assets/d3b.ico -o releases
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $prerelease = if ($env:VERSION.Contains('-')) { @('--pre') } else { @() }
+          dotnet vpk upload github --repoUrl "https://github.com/$env:GITHUB_REPOSITORY" --token $env:GH_TOKEN --tag $env:GITHUB_REF_NAME --releaseName "D3B $env:VERSION" --publish -o releases @prerelease

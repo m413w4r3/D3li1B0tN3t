@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\D3B.Data\D3B.Data.csproj" />
+  </ItemGroup>
+
+</Project>

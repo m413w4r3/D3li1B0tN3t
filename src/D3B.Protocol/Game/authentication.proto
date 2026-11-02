@@ -1,0 +1,23 @@
+// How a client is let into the game server: the first request of the game connection presents the ticket the
+// connection phase's server selection gave (D52).
+syntax = "proto3";
+
+package d3b.game;
+
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// The client's first request on the game connection, sent as soon as it is connected (D52).
+message AuthenticationRequest {
+  // The ticket of the server selection: 32 characters in every capture.
+  string ticket = 1;
+
+  // Two characters in every capture: the client's language, as the references read it.
+  string language = 2;
+}
+
+// The server's first event, right after the ticket, in every capture: the ticket was accepted.
+message AuthenticationAcceptedEvent {
+  option (d3b.readable.partial) = true;
+}

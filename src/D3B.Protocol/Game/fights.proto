@@ -1,0 +1,359 @@
+// A fight: how it starts, where its fighters are placed, its turns, and how it ends. Measured on 3.7.12.12's captures
+// of 11 fights, 9 the player's attacks and 2 resources' protectors', with a Xelor and a Steamer, by structure, timing,
+// and values compared on the machine, never written down (D178). The client sends by itself what follows the server's
+// events: it acknowledges the character's sequences, and says it is ready for each turn, as it confirms a walk out of
+// fights (D60).
+syntax = "proto3";
+
+package d3b.game;
+
+import "Game/actors.proto";
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// Attacks a group of monsters: the client sends it once its walk reached the group's cell, within 1 ms of the walk's
+// confirmation, 61 times in the same read. Measured on the player's 98 attacks the 80 game connections captured: 94 walks
+// ended on the group's cell, and twice, back on the map after a fight, the character stood on a group's cell and attacked
+// without walking. Twice the group walked as the character set off, 0.1 and 0.4 s before its walk was shown: from 1 cell
+// away the server started the fight; from 3, it answered nothing but the walk's confirmation, and the client walked onto
+// the group's new cell and attacked again. The server shows the group again and removes it, then destroys the context,
+// 28 to 75 ms after the attack, 29 ms halfway; the fight's defender is the group, and its monsters the group's.
+message AttackMonsterRequest {
+  // No capture sets it.
+  AttackOptions options_1 = 1;
+
+  // The group's actor id on the map, negative.
+  int64 monster_group_id = 2;
+}
+
+// No capture sets it, nor any of its fields.
+message AttackOptions {
+  optional bool flag_1 = 1;
+  string text_2 = 2;
+  optional int64 number_3 = 3;
+  optional string text_4 = 4;
+  optional string text_5 = 5;
+  bool flag_6 = 6;
+}
+
+// A fight begins: who attacked whom. The server sends it once the fight's map is asked for, after the context of a fight
+// is created (D88).
+message FightStartingEvent {
+  option (d3b.readable.partial) = true;
+
+  // The character: even when a resource's protector attacked it, in both such fights captured.
+  int64 attacker_id = 1;
+
+  // The group attacked, as the request named it.
+  int64 defender_id = 4;
+
+  FightType type = 6;
+}
+
+// The kind of a fight: 4 for every fight captured, monsters the player attacked or a resource's protector.
+enum FightType {
+  FIGHT_TYPE_VALUE_0 = 0;
+  FIGHT_TYPE_VALUE_1 = 1;
+  FIGHT_TYPE_VALUE_2 = 2;
+  FIGHT_TYPE_VALUE_3 = 3;
+  FIGHT_TYPE_MONSTERS = 4;
+  FIGHT_TYPE_VALUE_5 = 5;
+  FIGHT_TYPE_VALUE_6 = 6;
+  FIGHT_TYPE_VALUE_7 = 7;
+  FIGHT_TYPE_VALUE_8 = 8;
+  FIGHT_TYPE_VALUE_9 = 9;
+  FIGHT_TYPE_VALUE_10 = 10;
+}
+
+// The character joins the fight's placement.
+message FightJoinEvent {
+  option (d3b.readable.partial) = true;
+
+  // How long the placement lasts at most, in tenths of a second: 440 to 444 in the captures.
+  int64 placement_time = 3;
+}
+
+// The cells each team is placed on. A fighter stands on one of its team's from the start, and moves to another by a
+// request; the client shows them in red and blue (D125).
+message FightPlacementPossiblePositionsEvent {
+  option (d3b.readable.partial) = true;
+
+  PlacementCells cells = 1;
+
+  // The character's team: unset, the challenger's, in every fight captured.
+  FightTeam team = 2;
+}
+
+// The placement cells of both teams. Measured: the attacking character's cells are the second list, every cell the
+// player chose among them, and the monsters stood on the first's; the references name them the other way.
+message PlacementCells {
+  repeated int32 defender_cells = 1;
+  repeated int32 challenger_cells = 2;
+}
+
+// Moves a fighter to a placement cell: the server answers with every fighter's disposition.
+message FightPlacementPositionRequest {
+  int32 cell_id = 1;
+  int64 fighter_id = 2;
+}
+
+// Where fighters stand: during the placement, every fighter's after each move, and as the fight starts.
+message EntitiesDispositionEvent {
+  option (d3b.readable.partial) = true;
+
+  repeated ActorDisposition dispositions = 2;
+}
+
+// Toggles an option of the character's team during the placement: the owner's clicks on the placement's buttons (D203).
+message FightOptionToggleRequest {
+  FightOption option = 1;
+}
+
+// An option of a team's fight, during the placement. Measured (D203, corrected by D216): the owner saw the AI's first
+// toggle, 0, refuse spectators, the server answering with text 40, and its second, 2, close the fight, with text 95; the
+// server keeps 0 from one fight to the next. The group's, which the owner, in no group, could not set, and the other are
+// not measured.
+enum FightOption {
+  FIGHT_OPTION_NO_SPECTATORS = 0;
+  FIGHT_OPTION_VALUE_1 = 1;
+  FIGHT_OPTION_CLOSED = 2;
+  FIGHT_OPTION_VALUE_3 = 3;
+}
+
+// A team's option is set, or no longer: the server's answer to each toggle, to every fighter of the fight.
+message FightOptionUpdateEvent {
+  option (d3b.readable.partial) = true;
+
+  bool enabled = 2;
+  FightOption option = 3;
+}
+
+// The character is ready to fight, or no longer: the fight starts once every character is.
+message FightReadyRequest {
+  bool ready = 1;
+
+  // No capture sets it.
+  bool flag_2 = 2;
+}
+
+// A character in the fight said it is ready, or no longer.
+message FightHumanReadyStateEvent {
+  option (d3b.readable.partial) = true;
+
+  int64 character_id = 2;
+  bool ready = 3;
+}
+
+// The placement is over and the fight starts.
+message FightStartEvent {
+}
+
+// A fighter comes into the fight: each fighter as the placement starts.
+message FightFighterShowEvent {
+  option (d3b.readable.partial) = true;
+
+  Actor fighter = 1;
+}
+
+// Every fighter, as the fight starts.
+message FightSynchronizeEvent {
+  repeated Actor fighters = 1;
+}
+
+// The order the fighters play in, each with whether it died: sent as the placement starts, then after each death.
+message FightTurnListEvent {
+  repeated FightTurnEntry entries = 1;
+}
+
+// A fighter in the turns' order.
+message FightTurnEntry {
+  option (d3b.readable.partial) = true;
+
+  oneof kind {
+    FightTurnFighter fighter = 2;
+  }
+}
+
+// A fighter in the turns' order, by id.
+message FightTurnFighter {
+  option (d3b.readable.partial) = true;
+
+  int64 fighter_id = 1;
+
+  // Set once the fighter died, which stays in the order.
+  bool dead = 2;
+}
+
+// A new round of turns begins, the first as the fight starts.
+message FightNewRoundEvent {
+  option (d3b.readable.partial) = true;
+
+  int32 round = 1;
+}
+
+// A fighter's turn begins.
+message FightTurnEvent {
+  option (d3b.readable.partial) = true;
+
+  // How long the turn lasts, in tenths of a second: 300 and 340 for the two characters captured, 290 for a monster, 150
+  // for a summon, 10 for a dead fighter, whose turn passes at once.
+  int32 duration = 2;
+
+  int64 fighter_id = 3;
+  int32 round = 7;
+}
+
+// The character's turn begins and it may act: sent to its client alone, after FightTurnEvent.
+message FightTurnStartPlayingEvent {
+}
+
+// The server waits for the client to show a fighter's turn ending: the client answers FightTurnReadyRequest once the
+// sequences before are acknowledged.
+message FightIsTurnReadyEvent {
+  option (d3b.readable.partial) = true;
+
+  int64 fighter_id = 2;
+}
+
+// The client is ready for the next turn: always ready in the 49 the captures hold, 3 ms to 3.5 s after the server asked,
+// 0.6 s halfway, once it showed what came before.
+message FightTurnReadyRequest {
+  bool ready = 1;
+
+  // No capture sets it.
+  Value value_2 = 2;
+
+  enum Value {
+    VALUE_VALUE_0 = 0;
+    VALUE_VALUE_1 = 1;
+  }
+}
+
+// A fighter's turn is over.
+message FightTurnEndEvent {
+  option (d3b.readable.partial) = true;
+
+  int64 fighter_id = 2;
+}
+
+// Ends the character's turn before its time: the player's click, D3B's, or the client's own (D252).
+message FightTurnFinishRequest {
+  // Set when the client ends the turn by itself, as it did along its inactivity popup, measured on a friend's capture:
+  // 5 in the captures, none of the player's 170 clicks nor D3B's 146.
+  bool automatic = 1;
+}
+
+// A fighter's characteristics changed: after a cast or a step, the AP or MP left; as a turn begins, those it starts with.
+message FightRefreshCharacterStatsEvent {
+  FightCharacteristics stats = 1;
+  int64 fighter_id = 2;
+}
+
+// The fight is over: each fighter's outcome, and what the character gained.
+message FightEndEvent {
+  option (d3b.readable.partial) = true;
+
+  repeated FightResult results = 4;
+}
+
+// A fighter's outcome.
+message FightResult {
+  option (d3b.readable.partial) = true;
+
+  FightOutcome outcome = 1;
+  FightResultFighter fighter = 2;
+  FightLoot loot = 3;
+}
+
+// How a fight ended for a fighter: of the 11 fights captured, the character won 8, the monsters losing, and lost 3, the
+// monsters winning.
+enum FightOutcome {
+  FIGHT_OUTCOME_LOST = 0;
+  FIGHT_OUTCOME_VALUE_1 = 1;
+  FIGHT_OUTCOME_WON = 2;
+  FIGHT_OUTCOME_VALUE_3 = 3;
+  FIGHT_OUTCOME_VALUE_4 = 4;
+}
+
+// Whose outcome it is.
+message FightResultFighter {
+  option (d3b.readable.partial) = true;
+
+  bool alive = 2;
+  int64 fighter_id = 5;
+
+  oneof kind {
+    FightResultCharacter character = 3;
+  }
+}
+
+// A character's outcome: its level and experience.
+message FightResultCharacter {
+  repeated FightResultData data = 1;
+  int32 level = 2;
+}
+
+// Something a character's outcome holds.
+message FightResultData {
+  option (d3b.readable.partial) = true;
+
+  oneof kind {
+    FightExperience experience = 1;
+  }
+}
+
+// The character's experience after the fight. Measured: the experience now lies between the level's floor and the next
+// level's, which are the client's table's for its level; what the fight gave is apart. The references name them otherwise.
+message FightExperience {
+  option (d3b.readable.partial) = true;
+
+  int64 experience = 3;
+  int64 level_floor = 4;
+  int64 next_level_floor = 6;
+  int64 gained = 8;
+}
+
+// What a fighter gained: objects and kamas.
+message FightLoot {
+  repeated FightLootObjects objects = 1;
+  int64 kamas = 2;
+}
+
+// Objects a fighter gained, from one monster or more.
+message FightLootObjects {
+  option (d3b.readable.partial) = true;
+
+  repeated FightLootObject objects = 3;
+
+  // The monster the objects came from, by its id in the client's table, as the fight's fighters name it.
+  int32 monster_id = 4;
+}
+
+// An object gained.
+message FightLootObject {
+  option (d3b.readable.partial) = true;
+
+  int32 quantity = 1;
+
+  // The item's id in the client's table.
+  int32 item_id = 3;
+}
+
+// A fighter's spells' cooldowns, sent to the character's client for the character and its summons. Measured (D193): a
+// spell's count goes down as each of its caster's turns ends, as 197 of the 213 counts of spells cast said; 16 were
+// one lower, sent as the turn ended.
+message RefreshCooldownEvent {
+  option (d3b.readable.partial) = true;
+
+  int64 fighter_id = 2;
+  repeated FightSpellCooldown cooldowns = 4;
+}
+
+// How many rounds a spell waits before it may be cast again: 0 once it may.
+message FightSpellCooldown {
+  option (d3b.readable.partial) = true;
+
+  int32 rounds = 2;
+  int32 spell_id = 3;
+}

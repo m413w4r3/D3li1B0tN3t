@@ -1,0 +1,290 @@
+<Styles
+    xmlns="https://github.com/avaloniaui"
+    xmlns:c="clr-namespace:D3B.App.Controls"
+    xmlns:shadui="clr-namespace:ShadUI;assembly=ShadUI"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--  Every size here and in the views is one of D159's scale, so that the pages agree: spacings 4, 8, 12, 16, 24, 32;
+         fonts 12, 14, 16, 22, 28; controls 32 and 36 high; radii 6, 8, 12, round; icons 14, 16, 20.  -->
+    <Style Selector="TextBlock.Caption">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+    <Style Selector="TextBlock.Label">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    <Style Selector="TextBlock.Title">
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.PageTitle">
+        <Setter Property="FontSize" Value="22" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.Figure">
+        <Setter Property="FontSize" Value="28" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontFeatures" Value="+tnum" />
+    </Style>
+    <Style Selector="TextBlock.Figures">
+        <Setter Property="FontFeatures" Value="+tnum" />
+    </Style>
+    <Style Selector="TextBlock.Muted">
+        <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+    </Style>
+    <Style Selector="TextBlock.Problem">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.Mono, SelectableTextBlock.Mono">
+        <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Courier New" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="SelectableTextBlock.Mono">
+        <Setter Property="LineHeight" Value="20" />
+    </Style>
+
+    <Style Selector="StackPanel.PageHeader">
+        <Setter Property="Margin" Value="32,24,32,16" />
+        <Setter Property="Spacing" Value="4" />
+    </Style>
+    <Style Selector="Border.Card, Border.Plate">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+    </Style>
+    <Style Selector="Border.Card">
+        <Setter Property="Padding" Value="16" />
+    </Style>
+    <Style Selector="Border.Card.Flush">
+        <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Border.Card.Warned, Border.Plate.Warned">
+        <Setter Property="BorderBrush" Value="{DynamicResource WarningColor60}" />
+    </Style>
+    <Style Selector="Border.PlateFooter">
+        <Setter Property="Background" Value="{DynamicResource PlateFooterColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="CornerRadius" Value="0,0,11,11" />
+        <Setter Property="Padding" Value="16,12" />
+    </Style>
+    <Style Selector="Border.PlateFooter.Warned">
+        <Setter Property="Background" Value="{DynamicResource WarningColor5}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource WarningColor60}" />
+    </Style>
+    <Style Selector="Border.Row">
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="0,12" />
+        <Setter Property="MinHeight" Value="56" />
+    </Style>
+    <Style Selector="Border.Row:nth-child(1)">
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Border.Inset">
+        <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="12,8" />
+    </Style>
+    <Style Selector="Border.Banner">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="24" />
+    </Style>
+    <Style Selector="Border.Banner.Danger">
+        <Setter Property="Background" Value="{DynamicResource ErrorColor5}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ErrorColor60}" />
+    </Style>
+    <Style Selector="Border.Banner.Info">
+        <Setter Property="Background" Value="{DynamicResource InfoColor5}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource InfoColor60}" />
+    </Style>
+    <Style Selector="Border.Banner.Strip">
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16,8" />
+    </Style>
+    <Style Selector="Border.Code">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style Selector="ItemsControl.Rows > ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="0,12" />
+    </Style>
+    <Style Selector="StackPanel.Toolbar">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="Spacing" Value="8" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!--  Every control of a toolbar or a row is 36 high, ShadUI's fields' height, so that a row lines up; only the icon
+         buttons of a list's items are 32, inside their 40.  -->
+    <Style Selector="Button.IconButton, ToggleButton.IconButton">
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+    </Style>
+    <Style Selector="Button.IconButton.Compact">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="MinHeight" Value="32" />
+    </Style>
+    <Style Selector="Button.IconButton:pointerover, ToggleButton.IconButton:pointerover, ToggleButton.IconButton:checked">
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+    </Style>
+    <Style Selector="ToggleButton.IconButton:checked">
+        <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
+    </Style>
+    <Style Selector="Border.Segmented">
+        <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="2" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.Segment, ToggleButton.Segment">
+        <Setter Property="Height" Value="30" />
+        <Setter Property="MinHeight" Value="30" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+    </Style>
+    <Style Selector="Button.Segment.Selected, ToggleButton.Segment:checked">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+    </Style>
+    <Style Selector="Button.Segment.Selected /template/ ContentPresenter, ToggleButton.Segment:checked /template/ ContentPresenter">
+        <Setter Property="BoxShadow" Value="0 1 2 0 #26000000" />
+    </Style>
+
+    <Style Selector="c|Icon.Small">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+    </Style>
+    <Style Selector="c|Icon.Large">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+    </Style>
+    <Style Selector="c|Icon.Muted">
+        <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+    </Style>
+    <Style Selector="c|Icon.Help">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Help" />
+    </Style>
+    <Style Selector="c|Icon[Tone=Success]">
+        <Setter Property="Foreground" Value="{DynamicResource SuccessColor}" />
+    </Style>
+    <Style Selector="c|Icon[Tone=Warning]">
+        <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+    </Style>
+    <Style Selector="c|Icon[Tone=Info]">
+        <Setter Property="Foreground" Value="{DynamicResource InfoColor}" />
+    </Style>
+    <Style Selector="c|Icon[Tone=Danger]">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+    </Style>
+
+    <Style Selector="Border.ItemIcon">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.ItemIcon.HasIcon">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Border.ItemIcon.Large">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="4" />
+    </Style>
+    <Style Selector="Border.ItemIcon.Large.HasIcon">
+        <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Image.DetailIcon">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="ProgressBar.Meter">
+        <Setter Property="Height" Value="6" />
+        <Setter Property="MinHeight" Value="6" />
+        <Setter Property="Maximum" Value="100" />
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundColor}" />
+        <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+    </Style>
+    <Style Selector="ProgressBar.Meter.Thin">
+        <Setter Property="Height" Value="4" />
+        <Setter Property="MinHeight" Value="4" />
+    </Style>
+    <Style Selector="ProgressBar.Meter.Success">
+        <Setter Property="Foreground" Value="{DynamicResource SuccessColor}" />
+    </Style>
+    <Style Selector="ProgressBar.Meter.Info">
+        <Setter Property="Foreground" Value="{DynamicResource InfoColor}" />
+    </Style>
+    <Style Selector="ProgressBar.Meter.Warning">
+        <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+    </Style>
+    <Style Selector="ProgressBar.Meter.Danger">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorColor}" />
+    </Style>
+
+    <Style Selector="shadui|Sidebar">
+        <Setter Property="Background" Value="{DynamicResource SidebarBackgroundColor}" />
+    </Style>
+    <Style Selector="shadui|SidebarItem[Expanded=True]">
+        <Setter Property="Padding" Value="10,12" />
+    </Style>
+    <Style Selector="shadui|SidebarItem[Expanded=False]">
+        <Setter Property="Width" Value="36" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.RailToggle">
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="shadui|Sidebar[Expanded=False] Button.RailToggle">
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Panel.PageHost[IsVisible=True]">
+        <Style.Animations>
+            <Animation Duration="0:0:0.15" Easing="CubicEaseOut">
+                <KeyFrame Cue="0%">
+                    <Setter Property="Opacity" Value="0" />
+                </KeyFrame>
+                <KeyFrame Cue="100%">
+                    <Setter Property="Opacity" Value="1" />
+                </KeyFrame>
+            </Animation>
+        </Style.Animations>
+    </Style>
+</Styles>

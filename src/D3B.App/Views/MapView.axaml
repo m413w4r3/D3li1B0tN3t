@@ -1,0 +1,305 @@
+<UserControl
+    x:Class="D3B.App.Views.MapView"
+    x:ClassModifier="internal"
+    x:DataType="vm:MapViewModel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:c="clr-namespace:D3B.App.Controls"
+    xmlns:l="clr-namespace:D3B.App.Localization"
+    xmlns:logs="clr-namespace:D3B.App.ViewModels.Logs"
+    xmlns:vm="clr-namespace:D3B.App.ViewModels.Maps"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Styles>
+        <Style Selector="WrapPanel.Marks">
+            <Setter Property="Margin" Value="28,4,0,0" />
+        </Style>
+        <Style Selector="WrapPanel.Marks > StackPanel, WrapPanel.TourLegend > StackPanel">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Spacing" Value="4" />
+            <Setter Property="Margin" Value="0,0,12,4" />
+        </Style>
+        <Style Selector="WrapPanel.Marks TextBlock, WrapPanel.TourLegend TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="WrapPanel.Marks c|MapMarkIcon">
+            <Setter Property="Palette" Value="{DynamicResource MapPalette}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="WrapPanel.TourLegend Border">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="8" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.HoverCard">
+            <Setter Property="Background" Value="{DynamicResource DialogBackgroundColor}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BoxShadow" Value="0 4 16 0 #40000000" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="MaxWidth" Value="300" />
+            <Setter Property="Padding" Value="12,8" />
+        </Style>
+    </UserControl.Styles>
+    <c:AppPage Scrolls="False" Title="{l:Tr Map}">
+        <c:AppPage.Actions>
+            <StackPanel Classes="Toolbar" IsVisible="{Binding !HasNoBot}">
+                <Button Classes="Outline" IsVisible="{Binding HasScene}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <c:Icon Data="{StaticResource IconLayers}" />
+                        <TextBlock Text="{l:Tr Layers}" />
+                        <c:Icon Classes="Small" Data="{StaticResource IconChevronDown}" />
+                    </StackPanel>
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <StackPanel Margin="4" Spacing="8">
+                                <CheckBox Content="{l:Tr LayerCells}" IsChecked="{Binding ShowsCells}" />
+                                <StackPanel>
+                                    <CheckBox Content="{l:Tr LayerCharacter}" IsChecked="{Binding ShowsCharacter}" />
+                                    <WrapPanel Classes="Marks">
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Character" />
+                                            <TextBlock Text="{l:Tr LegendCharacter}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </StackPanel>
+                                <StackPanel>
+                                    <CheckBox Content="{l:Tr LayerElements}" IsChecked="{Binding ShowsElements}" />
+                                    <WrapPanel Classes="Marks" MaxWidth="280">
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Resource" />
+                                            <TextBlock Text="{l:Tr LegendResource}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Harvested" />
+                                            <TextBlock Text="{l:Tr LegendHarvested}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Element" />
+                                            <TextBlock Text="{l:Tr LegendElement}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Door" />
+                                            <TextBlock Text="{l:Tr LegendDoor}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Unknown" />
+                                            <TextBlock Text="{l:Tr LegendUnknown}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </StackPanel>
+                                <StackPanel>
+                                    <CheckBox Content="{l:Tr LayerNpcs}" IsChecked="{Binding ShowsNpcs}" />
+                                    <WrapPanel Classes="Marks">
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Npc" />
+                                            <TextBlock Text="{l:Tr LegendNpc}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </StackPanel>
+                                <StackPanel>
+                                    <CheckBox Content="{l:Tr LayerExits}" IsChecked="{Binding ShowsExits}" />
+                                    <WrapPanel Classes="Marks">
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Exit" />
+                                            <TextBlock Text="{l:Tr LegendExit}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </StackPanel>
+                                <StackPanel>
+                                    <CheckBox Content="{l:Tr LayerBots}" IsChecked="{Binding ShowsBots}" />
+                                    <WrapPanel Classes="Marks">
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Bot" />
+                                            <TextBlock Text="{l:Tr LegendBot}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </StackPanel>
+                                <StackPanel>
+                                    <CheckBox Content="{l:Tr LayerFight}" IsChecked="{Binding ShowsFight}" />
+                                    <WrapPanel Classes="Marks">
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Ally" />
+                                            <TextBlock Text="{l:Tr LegendAlly}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="Enemy" />
+                                            <TextBlock Text="{l:Tr LegendEnemy}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="ChallengerCell" />
+                                            <TextBlock Text="{l:Tr LegendChallengerCell}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <c:MapMarkIcon Mark="DefenderCell" />
+                                            <TextBlock Text="{l:Tr LegendDefenderCell}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </StackPanel>
+                                <CheckBox Content="{l:Tr LayerZones}" IsChecked="{Binding ShowsZones}" />
+                                <CheckBox Content="{l:Tr LayerActivity}" IsChecked="{Binding ShowsActivity}" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+                <ComboBox
+                    AutomationProperties.Name="{l:Tr Bots}"
+                    ItemsSource="{Binding Bots}"
+                    SelectedItem="{Binding Chosen}"
+                    Width="220">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="logs:LogSourceViewModel">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <c:StatusPill Classes="Dot" Tone="{Binding Tone}" />
+                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </c:AppPage.Actions>
+        <Panel>
+            <c:EmptyState
+                Icon="{StaticResource IconMap}"
+                IsVisible="{Binding HasNoBot}"
+                Text="{l:Tr MapNoBot}"
+                Title="{l:Tr NoBotTitle}" />
+            <Grid IsVisible="{Binding HasBot}" RowDefinitions="Auto,*">
+                <StackPanel Margin="0,0,0,16" Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <TextBlock
+                            Classes="Figure"
+                            Text="{Binding Coordinates}"
+                            VerticalAlignment="Center" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock
+                                Classes="Label"
+                                Text="{Binding Place}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Classes="Caption Muted"
+                                Text="{Binding Detail}"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel
+                        IsVisible="{Binding HasActivity}"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <c:Icon
+                            Classes="Small"
+                            Data="{StaticResource IconLeaf}"
+                            Tone="Success"
+                            VerticalAlignment="Center" />
+                        <TextBlock
+                            Classes="Caption"
+                            Text="{Binding ActivityLine}"
+                            TextTrimming="CharacterEllipsis"
+                            VerticalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+                <Grid ColumnDefinitions="*,Auto" Grid.Row="1">
+                    <Border
+                        Classes="Card"
+                        Grid.Column="1"
+                        IsVisible="{Binding HasTour}"
+                        Margin="16,0,0,0"
+                        VerticalAlignment="Top"
+                        Width="216">
+                        <StackPanel Spacing="12">
+                            <TextBlock Classes="Title" Text="{l:Tr MapTour}" />
+                            <c:ZoneMapCanvas
+                                Height="160"
+                                Name="TourMap"
+                                Palette="{DynamicResource MapPalette}"
+                                Scene="{Binding Tour}" />
+                            <WrapPanel Classes="TourLegend">
+                                <StackPanel>
+                                    <Border Background="{DynamicResource SuccessColor}" />
+                                    <TextBlock Text="{l:Tr TourVisited}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <Border BorderBrush="{DynamicResource SuccessColor}" BorderThickness="1">
+                                        <Border Background="{DynamicResource SuccessColor}" Opacity="0.4" />
+                                    </Border>
+                                    <TextBlock Text="{l:Tr TourProbable}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <Border BorderBrush="{DynamicResource MutedColor}" BorderThickness="1" />
+                                    <TextBlock Text="{l:Tr TourToVisit}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <Border Background="{DynamicResource BorderColor}" />
+                                    <TextBlock Text="{l:Tr TourEmpty}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <Border BorderBrush="{DynamicResource TourGrowingColor}" BorderThickness="1" />
+                                    <TextBlock Text="{l:Tr TourGrowing}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <Rectangle
+                                        Height="8"
+                                        RadiusX="2"
+                                        RadiusY="2"
+                                        Stroke="{DynamicResource WarningColor}"
+                                        StrokeDashArray="2,1"
+                                        StrokeThickness="1"
+                                        VerticalAlignment="Center"
+                                        Width="8" />
+                                    <TextBlock Text="{l:Tr TourIsolated}" />
+                                </StackPanel>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock
+                        Classes="Muted"
+                        HorizontalAlignment="Center"
+                        IsVisible="{Binding Problem, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                        Text="{Binding Problem}"
+                        TextWrapping="Wrap"
+                        VerticalAlignment="Center" />
+                    <Border
+                        Classes="Plate"
+                        IsVisible="{Binding HasScene}"
+                        Padding="8">
+                        <Panel Name="Surface">
+                            <c:MapCanvas
+                                HoveredCell="{Binding HoveredCell}"
+                                Layers="{Binding Layers}"
+                                Name="Map"
+                                Palette="{DynamicResource MapPalette}"
+                                PointerMoved="OnCanvasPointerMoved"
+                                Scene="{Binding Scene}" />
+                            <Canvas IsHitTestVisible="False">
+                                <Border
+                                    Classes="HoverCard"
+                                    IsVisible="{Binding HasHover}"
+                                    Name="HoverCard">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Classes="Caption" FontWeight="SemiBold" Text="{Binding HoverTitle}" />
+                                        <TextBlock
+                                            Classes="Caption Muted"
+                                            Text="{Binding HoverDetail}"
+                                            TextWrapping="Wrap" />
+                                        <ItemsControl ItemsSource="{Binding HoverItems}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <TextBlock
+                                                        Classes="Caption"
+                                                        Margin="0,4,0,0"
+                                                        Text="{Binding}"
+                                                        TextWrapping="Wrap" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </Canvas>
+                        </Panel>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Panel>
+    </c:AppPage>
+</UserControl>

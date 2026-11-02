@@ -1,0 +1,55 @@
+<UserControl
+    x:Class="D3B.App.Views.NewProfileView"
+    x:ClassModifier="internal"
+    x:DataType="vm:NewProfileViewModel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:l="clr-namespace:D3B.App.Localization"
+    xmlns:vm="clr-namespace:D3B.App.ViewModels"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.KeyBindings>
+        <KeyBinding Command="{Binding CancelCommand}" Gesture="Escape" />
+    </UserControl.KeyBindings>
+    <StackPanel Margin="24" Spacing="16">
+        <TextBlock Classes="Title" Text="{Binding Title}" />
+        <StackPanel Spacing="8">
+            <TextBlock Classes="Label" Text="{l:Tr ProfileName}" />
+            <TextBox
+                AutomationProperties.Name="{l:Tr ProfileName}"
+                MaxLength="60"
+                Text="{Binding Name}" />
+            <TextBlock
+                Classes="Problem"
+                IsVisible="{Binding HasNameProblem}"
+                Text="{Binding NameProblem}" />
+        </StackPanel>
+        <StackPanel Spacing="8">
+            <TextBlock Classes="Label" Text="{l:Tr Activity}" />
+            <ComboBox
+                AutomationProperties.Name="{l:Tr Activity}"
+                HorizontalAlignment="Stretch"
+                IsEnabled="{Binding !IsCopy}"
+                ItemsSource="{Binding Activities}"
+                SelectedItem="{Binding Activity}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ActivityChoiceViewModel">
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </StackPanel>
+        <StackPanel
+            HorizontalAlignment="Right"
+            Orientation="Horizontal"
+            Spacing="8">
+            <Button
+                Classes="Outline"
+                Command="{Binding CancelCommand}"
+                Content="{l:Tr Cancel}" />
+            <Button
+                Classes="Primary"
+                Command="{Binding CreateCommand}"
+                Content="{l:Tr Create}"
+                IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

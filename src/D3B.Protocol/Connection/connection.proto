@@ -1,0 +1,68 @@
+// The connection phase: what a client and Ankama's connection server say before the client goes to a game server.
+// Every frame of that connection is one ConnectionMessage (D38). Names follow the references where this build's shape
+// is theirs; the numbers are the wire's, which the obfuscation keeps (D42).
+syntax = "proto3";
+
+package d3b.connection;
+
+import "Connection/accounts.proto";
+import "Connection/friends.proto";
+import "Connection/identification.proto";
+import "Connection/servers.proto";
+
+option csharp_namespace = "D3B.Protocol.Connection";
+
+// One frame of the connection: the client sends requests, the server answers them and sends events.
+message ConnectionMessage {
+  oneof content {
+    ConnectionRequest request = 1;
+    ConnectionResponse response = 2;
+    ConnectionEvent event = 3;
+  }
+}
+
+// What the client asks. The first request of a connection identifies the account, the second chooses a server.
+message ConnectionRequest {
+  // Tells the requests of a connection apart: one character in every request captured.
+  string id = 1;
+
+  oneof content {
+    Ping ping = 2;
+    IdentificationRequest identification = 3;
+    ServerSelectionRequest server_selection = 4;
+    ForceAccountRequest force_account = 5;
+    ReleaseAccountRequest release_account = 6;
+    FriendListRequest friend_list = 7;
+    AcquaintanceServersRequest acquaintance_servers = 8;
+  }
+}
+
+// What the server answers a request.
+message ConnectionResponse {
+  // The id of the request answered: one character in every response captured.
+  string id = 1;
+
+  oneof content {
+    Pong pong = 2;
+    IdentificationResponse identification = 3;
+    ServerSelectionResponse server_selection = 4;
+    ForceAccountResponse force_account = 5;
+    FriendListResponse friend_list = 6;
+    AcquaintanceServersResponse acquaintance_servers = 7;
+  }
+}
+
+// What the server sends unasked.
+message ConnectionEvent {
+  oneof content {
+    ServerUpdate server_update = 1;
+  }
+}
+
+// Asks the server whether it is still there.
+message Ping {
+}
+
+// Answers a ping.
+message Pong {
+}

@@ -1,0 +1,35 @@
+// The game context: once a character is chosen, the client asks for the context it plays in, and the server replaces
+// the one it was in, as on entering the game.
+syntax = "proto3";
+
+package d3b.game;
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// Asks for the context to play in, once the character is chosen.
+message ContextCreationRequest {
+  // Two values in this build; the client sent the first on entering the game. Which is which is not measured.
+  Value value = 1;
+
+  enum Value {
+    VALUE_VALUE_0 = 0;
+    VALUE_VALUE_1 = 1;
+  }
+}
+
+// The context the client was in is gone: the first answer to the request.
+message ContextDestroyEvent {
+}
+
+// The context the client now plays in: the second answer to the request.
+message ContextCreationEvent {
+  GameContext context = 1;
+
+  // Two values in this build. The first is the context on entering the game, out of a fight. The second is a fight's:
+  // measured twice as a fight began, the player having attacked monsters, then the fight's own map named, a map of the
+  // pack off the world graph, and the first again once it was over, with the map the fight began on (D88).
+  enum GameContext {
+    GAME_CONTEXT_ROLEPLAY = 0;
+    GAME_CONTEXT_FIGHT = 1;
+  }
+}

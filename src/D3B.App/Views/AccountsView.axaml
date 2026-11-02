@@ -1,0 +1,176 @@
+<UserControl
+    x:Class="D3B.App.Views.AccountsView"
+    x:ClassModifier="internal"
+    x:DataType="vm:AccountsViewModel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:c="clr-namespace:D3B.App.Controls"
+    xmlns:l="clr-namespace:D3B.App.Localization"
+    xmlns:shadui="clr-namespace:ShadUI;assembly=ShadUI"
+    xmlns:vm="clr-namespace:D3B.App.ViewModels"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Panel>
+        <Border
+            Classes="Banner Danger"
+            HorizontalAlignment="Center"
+            IsVisible="{Binding !IsAvailable}"
+            Margin="32"
+            MaxWidth="560"
+            VerticalAlignment="Center">
+            <TextBlock Text="{l:Tr StorageUnavailable}" TextWrapping="Wrap" />
+        </Border>
+        <c:AppPage
+            Help="{l:Tr AccountsHint}"
+            IsVisible="{Binding IsAvailable}"
+            Title="{l:Tr Accounts}">
+            <StackPanel Spacing="16">
+                <TextBlock
+                    Classes="Problem"
+                    IsVisible="{Binding HasError}"
+                    Text="{Binding Error}" />
+                <c:EmptyState
+                    Icon="{StaticResource IconUsers}"
+                    IsVisible="{Binding IsEmpty}"
+                    Text="{l:Tr NoAccountDetail}"
+                    Title="{l:Tr NoAccountTitle}" />
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="16" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AccountViewModel">
+                            <Border Classes="Plate">
+                                <StackPanel>
+                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="16,12,8,12">
+                                        <StackPanel
+                                            Orientation="Horizontal"
+                                            Spacing="4"
+                                            VerticalAlignment="Center">
+                                            <TextBlock Classes="Title" Text="{Binding Nickname}" />
+                                            <TextBlock
+                                                Classes="Muted"
+                                                Text="{Binding Tag}"
+                                                VerticalAlignment="Bottom" />
+                                        </StackPanel>
+                                        <c:StatusPill
+                                            Grid.Column="1"
+                                            Margin="12,0,0,0"
+                                            Text="{Binding Subscription}"
+                                            Tone="{Binding SubscriptionTone}" />
+                                        <TextBlock
+                                            Classes="Caption Muted"
+                                            Grid.Column="3"
+                                            Margin="12,0,8,0"
+                                            Text="{Binding Seen}"
+                                            VerticalAlignment="Center" />
+                                        <Button
+                                            AutomationProperties.Name="{l:Tr More}"
+                                            Classes="Ghost IconButton"
+                                            Grid.Column="4"
+                                            ToolTip.Tip="{l:Tr More}">
+                                            <c:Icon Data="{StaticResource IconMore}" />
+                                            <Button.Flyout>
+                                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                                    <MenuItem Command="{Binding AskForgetCommand}" Header="{l:Tr Forget}" />
+                                                </MenuFlyout>
+                                            </Button.Flyout>
+                                        </Button>
+                                    </Grid>
+                                    <Border
+                                        BorderBrush="{DynamicResource BorderColor}"
+                                        BorderThickness="0,1,0,0"
+                                        Padding="16,8">
+                                        <Grid ColumnDefinitions="*,16,220,16,112">
+                                            <TextBlock Classes="Caption Muted" Text="{l:Tr Character}" />
+                                            <TextBlock
+                                                Classes="Caption Muted"
+                                                Grid.Column="2"
+                                                Text="{l:Tr Profile}" />
+                                            <TextBlock
+                                                Classes="Caption Muted"
+                                                Grid.Column="4"
+                                                HorizontalAlignment="Right"
+                                                Text="{l:Tr StartsOnConnection}"
+                                                ToolTip.Tip="{l:Tr StartsOnConnectionHint}" />
+                                        </Grid>
+                                    </Border>
+                                    <ItemsControl ItemsSource="{Binding Characters}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:CharacterRowViewModel">
+                                                <Border
+                                                    BorderBrush="{DynamicResource BorderColor}"
+                                                    BorderThickness="0,1,0,0"
+                                                    Padding="16,12">
+                                                    <Grid ColumnDefinitions="*,16,220,16,112">
+                                                        <Grid ColumnDefinitions="Auto,*">
+                                                            <Panel Height="32" Width="32">
+                                                                <shadui:Avatar
+                                                                    Fallback="{Binding Initials}"
+                                                                    FontSize="12"
+                                                                    Height="32"
+                                                                    Width="32" />
+                                                                <Border
+                                                                    Background="{DynamicResource CardBackgroundColor}"
+                                                                    CornerRadius="999"
+                                                                    Height="12"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Bottom"
+                                                                    Width="12">
+                                                                    <c:StatusPill
+                                                                        Classes="Dot"
+                                                                        HorizontalAlignment="Center"
+                                                                        Tone="{Binding Tone}" />
+                                                                </Border>
+                                                            </Panel>
+                                                            <StackPanel
+                                                                Grid.Column="1"
+                                                                Margin="12,0,0,0"
+                                                                VerticalAlignment="Center">
+                                                                <TextBlock
+                                                                    Classes="Label"
+                                                                    Text="{Binding Name}"
+                                                                    TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock
+                                                                    Classes="Caption Muted"
+                                                                    Text="{Binding Detail}"
+                                                                    TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <ComboBox
+                                                            AutomationProperties.Name="{l:Tr Profile}"
+                                                            Grid.Column="2"
+                                                            HorizontalAlignment="Stretch"
+                                                            ItemsSource="{Binding Profiles}"
+                                                            SelectedItem="{Binding SelectedProfile}"
+                                                            VerticalAlignment="Center">
+                                                            <ComboBox.ItemTemplate>
+                                                                <DataTemplate x:DataType="vm:ProfileOptionViewModel">
+                                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                                </DataTemplate>
+                                                            </ComboBox.ItemTemplate>
+                                                        </ComboBox>
+                                                        <ToggleSwitch
+                                                            AutomationProperties.Name="{l:Tr StartsOnConnection}"
+                                                            Grid.Column="4"
+                                                            HorizontalAlignment="Right"
+                                                            IsChecked="{Binding StartsOnConnection}"
+                                                            IsEnabled="{Binding HasProfile}"
+                                                            OffContent=""
+                                                            OnContent=""
+                                                            ToolTip.Tip="{l:Tr StartsOnConnectionHint}"
+                                                            VerticalAlignment="Center" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </c:AppPage>
+    </Panel>
+</UserControl>

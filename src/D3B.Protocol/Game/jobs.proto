@@ -1,0 +1,45 @@
+// The character's professions: the skills each offers and how far each has gone, sent on entering the game.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// The skills of each profession the character has.
+message JobDescriptionEvent {
+  repeated JobDescription jobs = 1;
+}
+
+// A profession and the skills it lets the character use.
+message JobDescription {
+  // The profession's id in the client's tables (D29).
+  int32 job_id = 1;
+
+  repeated JobSkill skills = 2;
+}
+
+// A skill of a profession.
+message JobSkill {
+  option (d3b.readable.partial) = true;
+
+  // The skill's id in the client's tables (D29).
+  int32 skill_id = 3;
+}
+
+// The level and experience of each profession the character has.
+message JobExperiencesEvent {
+  repeated JobExperience jobs = 1;
+}
+
+// A profession's level and experience: the experience lies between the level's floor and the next level's.
+message JobExperience {
+  option (d3b.readable.partial) = true;
+
+  int32 level = 1;
+  int64 experience = 2;
+  int64 level_floor = 3;
+  int32 job_id = 5;
+  int64 next_level_floor = 6;
+}

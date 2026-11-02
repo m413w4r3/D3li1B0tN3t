@@ -1,0 +1,102 @@
+// The connection's first exchange: the client identifies the account, and the server answers with the account and its
+// servers, or why it refuses it.
+syntax = "proto3";
+
+package d3b.connection;
+
+import "Connection/accounts.proto";
+import "Connection/servers.proto";
+
+option csharp_namespace = "D3B.Protocol.Connection";
+
+// Identifies the account, with the token the launcher gives the client.
+message IdentificationRequest {
+  // 64 characters in every request captured.
+  string device_id = 1;
+
+  oneof credentials {
+    TokenCredentials token = 3;
+    LoginCredentials login = 4;
+  }
+
+  string client_version = 5;
+}
+
+// Identifies the account with a token, as every client captured did.
+message TokenCredentials {
+  string token = 1;
+  Shield shield = 2;
+
+  // The certificate Ankama Shield gave this device.
+  message Shield {
+    int64 certificate_id = 1;
+    string certificate_hash = 2;
+  }
+}
+
+// Identifies the account with its login.
+message LoginCredentials {
+  string login = 1;
+}
+
+// The server's answer to an identification.
+message IdentificationResponse {
+  oneof result {
+    Success success = 1;
+    Failure failure = 2;
+  }
+
+  // The account, and the servers it may play on.
+  message Success {
+    int64 account_id = 1;
+    string account_nickname = 2;
+    string account_tag = 3;
+    ServerList servers = 4;
+    string subscription_end = 5;
+    Rights rights = 6;
+    optional int32 fight_reconnection_server_id = 7;
+    ForceAccountStatus force_account = 8;
+    AccountEntry account_entry = 9;
+
+    // Four flags in this build, where the references have five or six: what each grants is not measured.
+    message Rights {
+      bool flag_1 = 1;
+      bool flag_2 = 2;
+      bool flag_3 = 3;
+      bool flag_4 = 4;
+    }
+  }
+
+  // Why the account was refused.
+  message Failure {
+    Reason reason = 1;
+    optional string ban_end = 2;
+    optional string required_version = 3;
+
+    // 15 values in this build, where the references have 14: which is which is not measured.
+    enum Reason {
+      REASON_VALUE_0 = 0;
+      REASON_VALUE_1 = 1;
+      REASON_VALUE_2 = 2;
+      REASON_VALUE_3 = 3;
+      REASON_VALUE_4 = 4;
+      REASON_VALUE_5 = 5;
+      REASON_VALUE_6 = 6;
+      REASON_VALUE_7 = 7;
+      REASON_VALUE_8 = 8;
+      REASON_VALUE_9 = 9;
+      REASON_VALUE_10 = 10;
+      REASON_VALUE_11 = 11;
+      REASON_VALUE_12 = 12;
+      REASON_VALUE_13 = 13;
+      REASON_VALUE_14 = 14;
+    }
+  }
+}
+
+// Shaped as an entry of the friend list, a name, a tag and servers; what it holds here is not measured.
+message AccountEntry {
+  string name = 1;
+  string tag = 2;
+  repeated int32 servers = 3;
+}

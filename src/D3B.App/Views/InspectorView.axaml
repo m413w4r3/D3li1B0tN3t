@@ -1,0 +1,239 @@
+<UserControl
+    x:Class="D3B.App.Views.InspectorView"
+    x:ClassModifier="internal"
+    x:DataType="vm:InspectorViewModel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:c="clr-namespace:D3B.App.Controls"
+    xmlns:l="clr-namespace:D3B.App.Localization"
+    xmlns:logs="clr-namespace:D3B.App.ViewModels.Logs"
+    xmlns:shadui="clr-namespace:ShadUI;assembly=ShadUI"
+    xmlns:vm="clr-namespace:D3B.App.ViewModels.Inspector"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Styles>
+        <Style Selector="Border.FrameRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Padding" Value="4,8" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="Border.FrameRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource GhostHoverColor}" />
+        </Style>
+        <Style Selector="Border.Fold">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundColor}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Margin" Value="96,4,0,8" />
+            <Setter Property="Padding" Value="12,8" />
+        </Style>
+        <Style Selector="TextBlock.Hidden">
+            <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+        </Style>
+        <Style Selector="TextBlock.Note">
+            <Setter Property="Foreground" Value="{DynamicResource MutedColor}" />
+            <Setter Property="FontStyle" Value="Italic" />
+        </Style>
+    </UserControl.Styles>
+    <c:AppPage Scrolls="False" Title="{l:Tr Inspector}">
+        <c:AppPage.Actions>
+            <StackPanel Classes="Toolbar">
+                <ComboBox
+                    AutomationProperties.Name="{l:Tr Bots}"
+                    IsVisible="{Binding !HasNoBot}"
+                    ItemsSource="{Binding Bots}"
+                    SelectedItem="{Binding Chosen}"
+                    Width="220">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="logs:LogSourceViewModel">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <c:StatusPill Classes="Dot" Tone="{Binding Tone}" />
+                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <ComboBox
+                    AutomationProperties.Name="{l:Tr ReplayCapture}"
+                    DropDownOpened="OnCapturesOpened"
+                    ItemsSource="{Binding Captures}"
+                    PlaceholderText="{l:Tr ReplayCapture}"
+                    SelectedItem="{Binding Capture}"
+                    Width="220">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CaptureChoiceViewModel">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <c:Icon
+                                    Classes="Small Muted"
+                                    Data="{StaticResource IconRecord}"
+                                    VerticalAlignment="Center" />
+                                <TextBlock
+                                    Text="{Binding Label}"
+                                    TextTrimming="CharacterEllipsis"
+                                    VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </c:AppPage.Actions>
+        <Grid RowDefinitions="Auto,Auto,*">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,16">
+                <Border Classes="Segmented">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <ToggleButton
+                            Classes="Segment"
+                            Content="{l:Tr FrameClient}"
+                            IsChecked="{Binding ShowsClient}" />
+                        <ToggleButton
+                            Classes="Segment"
+                            Content="{l:Tr FrameServer}"
+                            IsChecked="{Binding ShowsServer}" />
+                        <ToggleButton
+                            Classes="Segment"
+                            Content="{l:Tr FrameD3B}"
+                            IsChecked="{Binding ShowsD3B}" />
+                    </StackPanel>
+                </Border>
+                <TextBox
+                    AutomationProperties.Name="{l:Tr FramesSearch}"
+                    Grid.Column="1"
+                    HorizontalAlignment="Left"
+                    Margin="12,0"
+                    MaxWidth="400"
+                    MinWidth="240"
+                    PlaceholderText="{l:Tr FramesSearch}"
+                    Text="{Binding Search}"
+                    shadui:TextBoxAssist.Clearable="True" />
+                <TextBlock
+                    Classes="Caption Muted Figures"
+                    Grid.Column="2"
+                    IsVisible="{Binding !IsEmpty}"
+                    Margin="0,0,12,0"
+                    Text="{Binding Summary}"
+                    VerticalAlignment="Center" />
+                <ToggleButton
+                    AutomationProperties.Name="{l:Tr HideUnread}"
+                    Classes="Ghost IconButton"
+                    Grid.Column="3"
+                    IsChecked="{Binding HidesUnread}"
+                    ToolTip.Tip="{l:Tr HideUnreadHint}">
+                    <c:Icon Data="{StaticResource IconHidden}" />
+                </ToggleButton>
+                <ToggleButton
+                    AutomationProperties.Name="{l:Tr Follow}"
+                    Classes="Ghost IconButton"
+                    Grid.Column="4"
+                    IsChecked="{Binding Follow}"
+                    Margin="4,0,0,0"
+                    ToolTip.Tip="{l:Tr FollowHint}">
+                    <c:Icon Data="{StaticResource IconFollow}" />
+                </ToggleButton>
+                <ToggleButton
+                    AutomationProperties.Name="{l:Tr Freeze}"
+                    Classes="Ghost IconButton"
+                    Grid.Column="5"
+                    IsChecked="{Binding IsFrozen}"
+                    IsEnabled="{Binding IsLive}"
+                    Margin="4,0,0,0"
+                    ToolTip.Tip="{l:Tr FreezeHint}">
+                    <c:Icon Data="{StaticResource IconFreeze}" />
+                </ToggleButton>
+                <Button
+                    AutomationProperties.Name="{l:Tr ClearFrames}"
+                    Classes="Ghost IconButton"
+                    Command="{Binding ClearCommand}"
+                    Grid.Column="6"
+                    Margin="4,0,0,0"
+                    ToolTip.Tip="{l:Tr ClearFrames}">
+                    <c:Icon Data="{StaticResource IconTrash}" />
+                </Button>
+            </Grid>
+            <TextBlock
+                Classes="Problem"
+                Grid.Row="1"
+                IsVisible="{Binding CaptureProblem, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                Margin="0,0,0,12"
+                Text="{Binding CaptureProblem}" />
+            <Panel Grid.Row="2">
+                <c:EmptyState
+                    Icon="{StaticResource IconInspector}"
+                    IsVisible="{Binding IsEmpty}"
+                    Text="{l:Tr FramesEmpty}"
+                    Title="{l:Tr FramesEmptyTitle}" />
+                <ScrollViewer Name="Scroller">
+                    <ItemsControl ItemsSource="{Binding Frames}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:FrameRowViewModel">
+                                <StackPanel>
+                                    <Border Classes="FrameRow" Tapped="OnFrameTapped">
+                                        <Grid ColumnDefinitions="96,80,*,Auto,Auto">
+                                            <TextBlock
+                                                Classes="Mono Muted Figures"
+                                                Text="{Binding Time}"
+                                                VerticalAlignment="Center" />
+                                            <c:StatusPill
+                                                Grid.Column="1"
+                                                Text="{Binding Sender}"
+                                                Tone="{Binding SenderTone}" />
+                                            <TextBlock
+                                                Classes="Mono"
+                                                Grid.Column="2"
+                                                Margin="8,0"
+                                                Text="{Binding Name}"
+                                                TextTrimming="CharacterEllipsis"
+                                                VerticalAlignment="Center" />
+                                            <TextBlock
+                                                Classes="Caption Muted Figures"
+                                                Grid.Column="3"
+                                                Margin="0,0,12,0"
+                                                Text="{Binding Size}"
+                                                VerticalAlignment="Center" />
+                                            <c:StatusPill
+                                                Grid.Column="4"
+                                                Text="{Binding Reading}"
+                                                Tone="{Binding ReadingTone}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Classes="Fold" IsVisible="{Binding IsExpanded}">
+                                        <ItemsControl ItemsSource="{Binding Fields}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:FrameFieldViewModel">
+                                                    <Grid ColumnDefinitions="Auto,*" Margin="{Binding Indent, Converter={x:Static c:LeftMargin.Instance}}">
+                                                        <TextBlock
+                                                            Classes="Mono Muted"
+                                                            Classes.Note="{Binding IsNote}"
+                                                            Margin="0,2,8,2"
+                                                            Text="{Binding Label}" />
+                                                        <SelectableTextBlock
+                                                            Classes="Mono"
+                                                            Grid.Column="1"
+                                                            IsVisible="{Binding !IsHidden}"
+                                                            Margin="0,2"
+                                                            Text="{Binding Value}"
+                                                            TextWrapping="Wrap" />
+                                                        <TextBlock
+                                                            Classes="Mono Hidden"
+                                                            Grid.Column="1"
+                                                            IsVisible="{Binding IsHidden}"
+                                                            Margin="0,2"
+                                                            Text="{Binding Value}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Panel>
+        </Grid>
+    </c:AppPage>
+</UserControl>

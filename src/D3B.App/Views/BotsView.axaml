@@ -1,0 +1,326 @@
+<UserControl
+    x:Class="D3B.App.Views.BotsView"
+    x:ClassModifier="internal"
+    x:DataType="vm:BotsViewModel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:c="clr-namespace:D3B.App.Controls"
+    xmlns:l="clr-namespace:D3B.App.Localization"
+    xmlns:shadui="clr-namespace:ShadUI;assembly=ShadUI"
+    xmlns:vm="clr-namespace:D3B.App.ViewModels"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Styles>
+        <Style Selector="Grid.Offline">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <Style Selector="Border.Count">
+            <Setter Property="Background" Value="{DynamicResource GhostColor}" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="0,0,8,8" />
+        </Style>
+    </UserControl.Styles>
+    <c:AppPage Title="{l:Tr Bots}">
+        <Panel>
+            <c:EmptyState
+                Icon="{StaticResource IconBot}"
+                IsVisible="{Binding IsEmpty}"
+                Text="{l:Tr NoBotDetail}"
+                Title="{l:Tr NoBotTitle}" />
+            <ItemsControl IsVisible="{Binding !IsEmpty}" ItemsSource="{Binding Items}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <c:CardGrid />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:BotViewModel">
+                        <Border Classes="Plate" Classes.Warned="{Binding IsPaused}">
+                            <DockPanel>
+                                <Border
+                                    Classes="PlateFooter"
+                                    Classes.Warned="{Binding IsPaused}"
+                                    DockPanel.Dock="Bottom">
+                                    <StackPanel Spacing="12">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding IsPaused}">
+                                            <c:Icon
+                                                Data="{StaticResource IconPlayer}"
+                                                Tone="Warning"
+                                                VerticalAlignment="Center" />
+                                            <TextBlock
+                                                Classes="Label"
+                                                Grid.Column="1"
+                                                Margin="8,0,12,0"
+                                                Text="{l:Tr PausedTitle}"
+                                                TextTrimming="CharacterEllipsis"
+                                                ToolTip.Tip="{l:Tr PausedDetail}"
+                                                VerticalAlignment="Center" />
+                                            <Button
+                                                Command="{Binding ResumeCommand}"
+                                                Grid.Column="2">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <c:Icon Data="{StaticResource IconPlay}" />
+                                                    <TextBlock Text="{l:Tr Resume}" />
+                                                </StackPanel>
+                                            </Button>
+                                        </Grid>
+                                        <StackPanel IsVisible="{Binding HasRun}" Spacing="8">
+                                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                                <TextBlock
+                                                    Classes="Label"
+                                                    Text="{Binding ActivityName}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center" />
+                                                <c:StatusPill
+                                                    Grid.Column="1"
+                                                    Margin="8,0,0,0"
+                                                    Text="{Binding ActivityText}"
+                                                    Tone="{Binding ActivityTone}" />
+                                                <Button
+                                                    Classes="Outline"
+                                                    Command="{Binding StopCommand}"
+                                                    Grid.Column="2"
+                                                    IsVisible="{Binding IsActivityRunning}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <c:Icon Data="{StaticResource IconStop}" />
+                                                        <TextBlock Text="{l:Tr Stop}" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </Grid>
+                                            <TextBlock
+                                                Classes="Caption Figures"
+                                                IsVisible="{Binding HasDoing}"
+                                                Text="{Binding ActivityDoing}"
+                                                TextWrapping="Wrap" />
+                                            <TextBlock
+                                                Classes="Caption Muted Figures"
+                                                IsVisible="{Binding !HasDoing}"
+                                                Text="{Binding ActivityDetail}"
+                                                TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel IsVisible="{Binding HasProgress}" Spacing="4">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock
+                                                    Classes="Caption Muted Figures"
+                                                    Text="{Binding ProgressText}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <TextBlock
+                                                    Classes="Caption Muted Figures"
+                                                    Grid.Column="1"
+                                                    Margin="8,0,0,0"
+                                                    Text="{Binding Elapsed}" />
+                                            </Grid>
+                                            <ProgressBar Classes="Meter Thin Info" Value="{Binding ProgressPercent}" />
+                                        </StackPanel>
+                                        <ItemsControl IsVisible="{Binding HasCounts}" ItemsSource="{Binding Counts}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ActivityCountViewModel">
+                                                    <Border Classes="Count">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                                            <Border
+                                                                Classes="ItemIcon"
+                                                                Classes.HasIcon="{Binding Icon, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                                IsVisible="{Binding IsItem}">
+                                                                <Image RenderOptions.BitmapInterpolationMode="HighQuality" Source="{Binding Icon}" />
+                                                            </Border>
+                                                            <TextBlock
+                                                                Classes="Caption Figures"
+                                                                Text="{Binding Text}"
+                                                                VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <ItemsControl IsVisible="{Binding HasWarnings}" ItemsSource="{Binding Warnings}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Spacing="4" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <Grid ColumnDefinitions="Auto,*">
+                                                        <c:Icon
+                                                            Classes="Small"
+                                                            Data="{StaticResource IconAlert}"
+                                                            Margin="0,1,0,0"
+                                                            Tone="Warning"
+                                                            VerticalAlignment="Top" />
+                                                        <TextBlock
+                                                            Classes="Caption"
+                                                            Grid.Column="1"
+                                                            Margin="8,0,0,0"
+                                                            Text="{Binding}"
+                                                            TextWrapping="Wrap" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <SelectableTextBlock
+                                            Classes="Caption Figures"
+                                            Foreground="{DynamicResource ErrorColor}"
+                                            IsVisible="{Binding ActivityProblem, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                            Text="{Binding ActivityProblem}"
+                                            TextWrapping="Wrap" />
+                                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsChoosing}">
+                                            <ComboBox
+                                                AutomationProperties.Name="{l:Tr ChooseActivity}"
+                                                HorizontalAlignment="Stretch"
+                                                ItemsSource="{Binding Activities}"
+                                                PlaceholderText="{l:Tr ChooseActivity}"
+                                                SelectedItem="{Binding SelectedActivity}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:ActivityChoiceViewModel">
+                                                        <Grid ColumnDefinitions="*,Auto">
+                                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock
+                                                                Classes="Caption Muted"
+                                                                Grid.Column="1"
+                                                                IsVisible="{Binding HasDetail}"
+                                                                Margin="8,0,0,0"
+                                                                Text="{Binding Detail}"
+                                                                VerticalAlignment="Center" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                            <Button
+                                                Classes="Primary"
+                                                Command="{Binding StartCommand}"
+                                                Grid.Column="1"
+                                                Margin="8,0,0,0">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <c:Icon Data="{StaticResource IconPlay}" />
+                                                    <TextBlock Text="{l:Tr Start}" />
+                                                </StackPanel>
+                                            </Button>
+                                        </Grid>
+                                        <TextBlock
+                                            Classes="Caption Muted"
+                                            IsVisible="{Binding HasNothingToChoose}"
+                                            Text="{l:Tr NoActivityAvailable}"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock
+                                            Classes="Problem"
+                                            IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                            Text="{Binding Error}" />
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Margin="16" Spacing="16">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Panel
+                                            Height="40"
+                                            ToolTip.Tip="{Binding Connection}"
+                                            Width="40">
+                                            <shadui:Avatar Fallback="{Binding Initials}" Height="40" Width="40" />
+                                            <Border
+                                                Background="{DynamicResource CardBackgroundColor}"
+                                                CornerRadius="999"
+                                                Height="14"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Bottom"
+                                                Width="14">
+                                                <c:StatusPill
+                                                    Classes="Dot"
+                                                    HorizontalAlignment="Center"
+                                                    Tone="{Binding Tone}" />
+                                            </Border>
+                                        </Panel>
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="12,0"
+                                            VerticalAlignment="Center">
+                                            <TextBlock
+                                                Classes="Title"
+                                                Text="{Binding Name}"
+                                                TextTrimming="CharacterEllipsis"
+                                                ToolTip.Tip="{Binding Name}" />
+                                            <TextBlock Classes="Caption Muted" Text="{Binding Level}" />
+                                        </StackPanel>
+                                        <StackPanel
+                                            Grid.Column="2"
+                                            Orientation="Horizontal"
+                                            Spacing="4"
+                                            VerticalAlignment="Center">
+                                            <c:StatusPill
+                                                IsVisible="{Binding !IsConnected}"
+                                                Margin="0,0,4,0"
+                                                Text="{Binding Connection}"
+                                                Tone="{Binding ConnectionTone}" />
+                                            <Button
+                                                AutomationProperties.Name="{l:Tr ShowMap}"
+                                                Classes="Ghost IconButton"
+                                                Command="{Binding ShowMapCommand}"
+                                                IsVisible="{Binding HasMap}"
+                                                ToolTip.Tip="{l:Tr ShowMap}">
+                                                <c:Icon Data="{StaticResource IconMap}" />
+                                            </Button>
+                                            <Button
+                                                AutomationProperties.Name="{l:Tr ShowJournal}"
+                                                Classes="Ghost IconButton"
+                                                Command="{Binding ShowJournalCommand}"
+                                                IsVisible="{Binding HasJournal}"
+                                                ToolTip.Tip="{l:Tr ShowJournal}">
+                                                <c:Icon Data="{StaticResource IconJournal}" />
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                    <Grid Classes.Offline="{Binding !IsConnected}" ColumnDefinitions="*,24,*">
+                                        <StackPanel Spacing="4" ToolTip.Tip="{Binding MapDetail}">
+                                            <TextBlock Classes="Figure" Text="{Binding Coordinates}" />
+                                            <TextBlock Text="{Binding Place}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Classes="Caption Muted" Text="{Binding Doing}" />
+                                        </StackPanel>
+                                        <StackPanel
+                                            Grid.Column="2"
+                                            Spacing="4"
+                                            VerticalAlignment="Bottom">
+                                            <StackPanel IsVisible="{Binding HasLife}" Spacing="4">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Classes="Caption Muted" Text="{l:Tr Life}" />
+                                                    <TextBlock
+                                                        Classes="Caption Figures"
+                                                        Grid.Column="1"
+                                                        Text="{Binding Life}" />
+                                                </Grid>
+                                                <ProgressBar Classes="Meter Danger" Value="{Binding LifePercent}" />
+                                            </StackPanel>
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                                                <TextBlock Classes="Caption Muted" Text="{l:Tr Pods}" />
+                                                <TextBlock
+                                                    Classes="Caption Figures"
+                                                    Grid.Column="1"
+                                                    Text="{Binding Load}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    ToolTip.Tip="{Binding LoadPercentText}" />
+                                            </Grid>
+                                            <ProgressBar
+                                                Classes="Meter"
+                                                Classes.Warning="{Binding IsNearlyFull}"
+                                                Value="{Binding LoadPercent}" />
+                                            <StackPanel
+                                                Margin="0,4,0,0"
+                                                Orientation="Horizontal"
+                                                Spacing="8">
+                                                <c:Icon
+                                                    Classes="Small Muted"
+                                                    Data="{StaticResource IconCoins}"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock Classes="Caption Figures" Text="{Binding Kamas}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Panel>
+    </c:AppPage>
+</UserControl>

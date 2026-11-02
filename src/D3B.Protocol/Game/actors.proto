@@ -1,0 +1,188 @@
+// Who stands on a map, in the roleplay or in a fight: the map's actors, and a fight's fighters, with where each stands and
+// what it is. Fighters measured on 3.7.12.12's captures of fights, the player attacking monsters (D178); groups of
+// monsters on the 80 game connections captured, session 9g.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Game/characteristics.proto";
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// Someone on the map: the character itself, another player, an NPC or a group of monsters; in a fight, a fighter.
+message Actor {
+  // The character's own id, as the character choice gave it, for the character itself; negative for an NPC or a group of
+  // monsters. In a fight, the fighter's: a character's own id, or for a monster or a summon a small negative number, -1
+  // first.
+  int64 id = 1;
+
+  ActorDisposition disposition = 2;
+  ActorInformation information = 3;
+}
+
+// Where an actor stands.
+message ActorDisposition {
+  option (d3b.readable.partial) = true;
+
+  // Whose disposition this is, when it comes alone, as during a fight's placement; unset within an Actor.
+  optional int64 entity_id = 2;
+
+  optional int32 cell_id = 3;
+}
+
+// What an actor is.
+message ActorInformation {
+  option (d3b.readable.partial) = true;
+
+  oneof kind {
+    RoleplayActor roleplay = 1;
+    FightFighter fighter = 4;
+  }
+}
+
+// An actor out of a fight.
+message RoleplayActor {
+  option (d3b.readable.partial) = true;
+
+  oneof kind {
+    NamedActor named = 3;
+    NpcActor npc = 4;
+    MonsterGroupActor monster_group = 5;
+  }
+}
+
+// A player's character, or another actor with a name.
+message NamedActor {
+  option (d3b.readable.partial) = true;
+
+  string name = 5;
+}
+
+// A non-player character.
+message NpcActor {
+  option (d3b.readable.partial) = true;
+
+  // The NPC's id in the client's tables, as the references read it: the one number every NPC captured sets.
+  int32 npc_id = 7;
+}
+
+// A group of monsters on a roleplay map, which a player attacks by its actor id. Measured on the 80 game connections of
+// 3.7.12.12: 1,801 groups in 919 maps' information, 0 to 4 a map, and 147 shown later; each with a negative id and a cell,
+// and its monsters. Its two other fields set are left out: an int32, negative on every group, and an enum, the same value
+// on every group, the alignment as the references name it.
+message MonsterGroupActor {
+  option (d3b.readable.partial) = true;
+
+  MonsterGroup monsters = 6;
+}
+
+// A group's monsters: its main monster, then the others. Measured on the 97 fights the player's attacks started: the
+// fight's monsters were these, with the same ids, grades and levels, none more. The references' alternatives by the number of
+// players, set on 3 groups, are left out.
+message MonsterGroup {
+  option (d3b.readable.partial) = true;
+
+  // 0 to 7 in the captures.
+  repeated GroupMonster others = 3;
+
+  GroupMonster main = 4;
+}
+
+// A monster of a group: each of the 5,755 captured is a grade of a monster of the pack, at that grade's level.
+message GroupMonster {
+  option (d3b.readable.partial) = true;
+
+  int32 grade = 2;
+  int32 level = 4;
+
+  // The monster's id in the client's table, as a fighter's.
+  int32 monster_id = 5;
+}
+
+// A fighter: a character, a monster or a summon.
+message FightFighter {
+  option (d3b.readable.partial) = true;
+
+  FightCharacteristics stats = 7;
+  FighterSpawn spawn = 8;
+
+  oneof kind {
+    NamedFighter named = 5;
+    AiFighter ai = 6;
+  }
+}
+
+// A fighter with a name: a player's character.
+message NamedFighter {
+  option (d3b.readable.partial) = true;
+
+  oneof kind {
+    FighterCharacter character = 1;
+  }
+}
+
+// A player's character in a fight.
+message FighterCharacter {
+  option (d3b.readable.partial) = true;
+
+  // The breed's id in the client's table: 5 and 15 measured, the latter a Steamer, as the owner played it.
+  int32 breed_id = 2;
+
+  int32 level = 6;
+}
+
+// A fighter the server plays.
+message AiFighter {
+  option (d3b.readable.partial) = true;
+
+  oneof kind {
+    MonsterFighter monster = 3;
+  }
+}
+
+// A monster in a fight: the loot names the same monster ids.
+message MonsterFighter {
+  int32 grade = 1;
+  int32 level = 2;
+
+  // The monster's id in the client's table.
+  int32 monster_id = 3;
+}
+
+// Where and in which team a fighter came into the fight, and whether it lives.
+message FighterSpawn {
+  bool alive = 1;
+  FightTeam team = 2;
+
+  // The fighter itself, its id and its cell: read for a summon, which has no Actor of its own.
+  Actor position = 3;
+}
+
+// A fight's team. Measured: the character attacking is in the first, the monsters attacked in the second.
+enum FightTeam {
+  FIGHT_TEAM_CHALLENGER = 0;
+  FIGHT_TEAM_DEFENDER = 1;
+  FIGHT_TEAM_VALUE_2 = 2;
+  FIGHT_TEAM_VALUE_3 = 3;
+}
+
+// A fighter's characteristics, and whether it is seen and summoned.
+message FightCharacteristics {
+  // 2 for every fighter captured, none invisible.
+  FightVisibility visibility = 1;
+
+  bool summoned = 2;
+  int64 summoner_id = 3;
+
+  // The characteristics, each by its id, as CharacterStats holds them. Out of a fight's characteristic events, only those
+  // that changed: the AP or the MP a cast or a step spent.
+  repeated Characteristic characteristics = 4;
+}
+
+// Whether a fighter is seen: no fighter captured was invisible.
+enum FightVisibility {
+  FIGHT_VISIBILITY_VALUE_0 = 0;
+  FIGHT_VISIBILITY_VALUE_1 = 1;
+  FIGHT_VISIBILITY_VISIBLE = 2;
+}

@@ -1,0 +1,86 @@
+<Application
+    x:Class="D3B.App.App"
+    x:ClassModifier="internal"
+    Name="D3B"
+    RequestedThemeVariant="Dark"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:c="clr-namespace:D3B.App.Controls"
+    xmlns:shadui="clr-namespace:ShadUI;assembly=ShadUI"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <Color x:Key="PlateFooterColor">#121212</Color>
+                    <Color x:Key="TourGrowingColor">#A78BFA</Color>
+                    <c:MapPalette
+                        x:Key="MapPalette"
+                        Ally="#2DD4BF"
+                        Bot="#FAFAFA"
+                        ChallengerCell="#66EF4444"
+                        Character="#3B82F6"
+                        CharacterRing="#DBEAFE"
+                        DefenderCell="#663B82F6"
+                        Door="#F59E0B"
+                        Element="#A78BFA"
+                        Enemy="#F87171"
+                        Exit="#38BDF8"
+                        ExitFill="#4738BDF8"
+                        Grid="#2A2A30"
+                        Harvested="#3F6B4A"
+                        Hover="#FAFAFA"
+                        Npc="#F472B6"
+                        Obstacle="#3A3A42"
+                        Resource="#22C55E"
+                        Stairs="#5A4A2E"
+                        Unknown="#71717A"
+                        Walkable="#1C1C20"
+                        Zone1="#1D2533"
+                        Zone2="#2B1F36"
+                        Zone3="#1F3328"
+                        Zone4="#36261D" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <Color x:Key="PlateFooterColor">#FAFAFA</Color>
+                    <Color x:Key="TourGrowingColor">#7C3AED</Color>
+                    <c:MapPalette
+                        x:Key="MapPalette"
+                        Ally="#0D9488"
+                        Bot="#18181B"
+                        ChallengerCell="#55DC2626"
+                        Character="#2563EB"
+                        CharacterRing="#FFFFFF"
+                        DefenderCell="#552563EB"
+                        Door="#D97706"
+                        Element="#7C3AED"
+                        Enemy="#DC2626"
+                        Exit="#0284C7"
+                        ExitFill="#2E0EA5E9"
+                        Grid="#E4E4E7"
+                        Harvested="#A7D9B8"
+                        Hover="#18181B"
+                        Npc="#DB2777"
+                        Obstacle="#A1A1AA"
+                        Resource="#16A34A"
+                        Stairs="#F5DFB3"
+                        Unknown="#A1A1AA"
+                        Walkable="#F4F4F5"
+                        Zone1="#DBEAFE"
+                        Zone2="#EDE9FE"
+                        Zone3="#DCFCE7"
+                        Zone4="#FFEDD5" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+            <CornerRadius x:Key="LgCornerRadius">8</CornerRadius>
+            <CornerRadius x:Key="XlCornerRadius">12</CornerRadius>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://D3B.App/Themes/Icons.axaml" />
+                <ResourceInclude Source="avares://D3B.App/Themes/Controls.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+    <Application.Styles>
+        <shadui:ShadTheme />
+        <StyleInclude Source="avares://D3B.App/Themes/Styles.axaml" />
+    </Application.Styles>
+</Application>

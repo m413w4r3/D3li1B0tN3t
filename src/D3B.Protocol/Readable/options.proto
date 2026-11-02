@@ -1,0 +1,16 @@
+// What a readable .proto file says of its own messages, beyond the wire. It holds no message, so no mapping pairs
+// anything of it, and the readable protocol's contract leaves it out.
+syntax = "proto3";
+
+package d3b.readable;
+
+import "google/protobuf/descriptor.proto";
+
+option csharp_namespace = "D3B.Protocol.Readable";
+
+extend google.protobuf.MessageOptions {
+  // The message reads only some of its counterpart's fields, on purpose: those bot code uses, their meaning measured.
+  // The audit counts the others apart from what a build adds. A frame holding one of them is read, not understood
+  // whole, so D3B never rewrites it (D47). A message the client sends is never partial: the bot builds it whole.
+  bool partial = 50001;
+}

@@ -1,0 +1,26 @@
+// The haven bag: a map of the character's own, entered from where it stands and left back to there, whose zaap leads to
+// the zaaps it knows.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Game/characters.proto";
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// Enters a haven bag, or leaves the one the character is in, back to the map it was entered from.
+message HavenBagEnterRequest {
+  // The haven bag's owner: the character itself.
+  int64 owner_id = 1;
+
+  // No capture sets it.
+  int64 number_2 = 2;
+}
+
+// What the map's information says of a haven bag.
+message HavenBagInformation {
+  option (d3b.readable.partial) = true;
+
+  Character owner = 2;
+}

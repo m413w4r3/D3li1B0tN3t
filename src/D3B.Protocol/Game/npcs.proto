@@ -1,0 +1,86 @@
+// How a character talks to a non-player character, such as a banker: it acts on the NPC, the dialog opens on a question,
+// and the character answers with one of its replies (D29).
+syntax = "proto3";
+
+package d3b.game;
+
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// Acts on an NPC of the map.
+message NpcActionRequest {
+  // What to do: 3 talks, as `Banker.TalkAction` says (D29).
+  int32 action = 1;
+
+  int64 map_id = 2;
+
+  // The NPC's actor id on the map, negative, as the map's information gives it.
+  int32 npc_actor_id = 3;
+}
+
+// The server refuses an action on an NPC, 28 ms after the request, and sends nothing else: for an NPC the map does not
+// hold, or while the character is in a dialog or an exchange already. It answers nothing to a request naming another map
+// than the character's.
+message NpcActionErrorEvent {
+}
+
+// A dialog with an NPC opened.
+message NpcDialogCreationEvent {
+  option (d3b.readable.partial) = true;
+
+  int64 map_id = 3;
+  int32 npc_actor_id = 5;
+}
+
+// What the NPC says, and the replies the character may give: the server sends the question again for a reply it did not
+// offer, and a question may offer none.
+message NpcDialogQuestionEvent {
+  option (d3b.readable.partial) = true;
+
+  repeated NpcReply replies = 1;
+
+  // The question's id in the client's tables.
+  int32 message_id = 3;
+}
+
+// A reply the character may give.
+message NpcReply {
+  option (d3b.readable.partial) = true;
+
+  // The reply's id in the client's tables: the ones the bankers' replies name (D29).
+  int32 reply_id = 1;
+}
+
+// Answers the NPC with one of the replies it offered. The server answers nothing to it outside a dialog.
+message NpcDialogReplyRequest {
+  int32 reply_id = 1;
+}
+
+// A dialog is over: the NPC's, as when the banker opens the bank.
+message DialogLeaveEvent {
+  option (d3b.readable.partial) = true;
+
+  DialogType type = 1;
+}
+
+// What kind of dialog is over. Sixteen values in this build: 1 ended the banker's dialog, 10 a zaap's, and 11 the bank's
+// exchange, in the captures; the others are not measured.
+enum DialogType {
+  DIALOG_TYPE_VALUE_0 = 0;
+  DIALOG_TYPE_NPC = 1;
+  DIALOG_TYPE_VALUE_2 = 2;
+  DIALOG_TYPE_VALUE_3 = 3;
+  DIALOG_TYPE_VALUE_4 = 4;
+  DIALOG_TYPE_VALUE_5 = 5;
+  DIALOG_TYPE_VALUE_6 = 6;
+  DIALOG_TYPE_VALUE_7 = 7;
+  DIALOG_TYPE_VALUE_8 = 8;
+  DIALOG_TYPE_VALUE_9 = 9;
+  DIALOG_TYPE_TELEPORT = 10;
+  DIALOG_TYPE_STORAGE = 11;
+  DIALOG_TYPE_VALUE_12 = 12;
+  DIALOG_TYPE_VALUE_13 = 13;
+  DIALOG_TYPE_VALUE_14 = 14;
+  DIALOG_TYPE_VALUE_15 = 15;
+}

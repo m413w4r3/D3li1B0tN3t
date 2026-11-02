@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="D3B.Network.Tests" />
+    <InternalsVisibleTo Include="D3B.Bot.Tests" />
+    <InternalsVisibleTo Include="D3B.Storage.Tests" />
+    <InternalsVisibleTo Include="D3B.App.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\D3B.Bot\D3B.Bot.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\D3B.Data.Tests\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
+    <Compile Include="..\D3B.Network.Tests\Relay\FixedUpstreamLocator.cs" Link="Network\FixedUpstreamLocator.cs" />
+    <Compile Include="..\D3B.Network.Tests\Relay\TestRelay.cs" Link="Network\TestRelay.cs" />
+    <Compile Include="..\D3B.Protocol.Tests\Mapping\Obfuscation.cs" Link="Protocol\Obfuscation.cs" />
+  </ItemGroup>
+
+</Project>

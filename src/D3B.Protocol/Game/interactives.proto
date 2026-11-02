@@ -1,0 +1,67 @@
+// How a character uses an interactive element of its map, such as a resource to harvest or a door: it asks, every actor
+// on the map sees the use start, and the use ends after its duration.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Game/maps.proto";
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// Asks to use a skill of an element of the map, from close enough: the server takes a use from no further than the
+// skill's range (D29) by the sum of the coordinates' differences, or from a neighbour of the element's cell, whatever
+// lies between (D75). It refuses one from too far, of a skill the element does not offer now, or of an instance id it
+// does not know, with InteractiveUseErrorEvent, and answers nothing to one of an element that is not on the map.
+message InteractiveUseRequest {
+  // The skill's instance id, as the element's skills give it.
+  int32 skill_instance_id = 1;
+
+  // No capture sets it.
+  optional int32 number_2 = 2;
+
+  int32 element_id = 3;
+}
+
+// An actor started using an element: the character itself after its request, or anyone else.
+message InteractiveUsedEvent {
+  option (d3b.readable.partial) = true;
+
+  int32 element_id = 1;
+
+  // How long the use lasts, in tenths of a second: the end came that long after, in the captures.
+  int32 duration = 3;
+
+  int64 actor_id = 4;
+
+  // The skill's id in the client's tables (D29).
+  int32 skill_id = 5;
+}
+
+// The server refuses a use, 28 ms after the request, and sends nothing else: one of these for a skill the element does
+// not offer now or an instance id it does not know; two for a use from too far, the first naming the skill's id in place
+// of the instance's (D75).
+message InteractiveUseErrorEvent {
+  option (d3b.readable.partial) = true;
+
+  int32 element_id = 2;
+
+  // The skill instance asked for.
+  int32 skill_instance_id = 3;
+}
+
+// An actor's use of an element is over.
+message InteractiveUseEndedEvent {
+  int32 element_id = 1;
+  int32 skill_id = 2;
+}
+
+// An element's skills changed, as when a use starts and when a resource is harvested.
+message InteractiveElementUpdatedEvent {
+  InteractiveElement element = 1;
+}
+
+// An element's state changed, as when a resource is being harvested and when it is harvested.
+message StatedElementUpdatedEvent {
+  StatedElement element = 1;
+}

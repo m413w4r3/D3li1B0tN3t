@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Name" xml:space="preserve">
+    <value>Combat</value>
+  </data>
+  <data name="SectionWhat" xml:space="preserve">
+    <value>Quoi</value>
+  </data>
+  <data name="Mode" xml:space="preserve">
+    <value>Monstres</value>
+  </data>
+  <data name="ModeHelp" xml:space="preserve">
+    <value>Automatique : les groupes au niveau du perso. Choisis : un groupe qui contient l'un des monstres, ou un monstre de l'une des familles.</value>
+  </data>
+  <data name="ModeAutomatic" xml:space="preserve">
+    <value>Automatique</value>
+  </data>
+  <data name="ModeChosen" xml:space="preserve">
+    <value>Choisis</value>
+  </data>
+  <data name="Monsters" xml:space="preserve">
+    <value>Monstres à combattre</value>
+  </data>
+  <data name="MonstersHelp" xml:space="preserve">
+    <value>Un groupe est attaqué s'il contient l'un d'eux.</value>
+  </data>
+  <data name="Excluded" xml:space="preserve">
+    <value>Monstres exclus</value>
+  </data>
+  <data name="ExcludedHelp" xml:space="preserve">
+    <value>Un groupe qui en contient un n'est jamais attaqué.</value>
+  </data>
+  <data name="LeastMonsters" xml:space="preserve">
+    <value>Monstres par groupe, au moins</value>
+  </data>
+  <data name="MostMonsters" xml:space="preserve">
+    <value>Monstres par groupe, au plus</value>
+  </data>
+  <data name="MonstersUnit" xml:space="preserve">
+    <value>monstres</value>
+  </data>
+  <data name="OnlyWinnable" xml:space="preserve">
+    <value>Seulement les groupes gagnables</value>
+  </data>
+  <data name="OnlyWinnableHelp" xml:space="preserve">
+    <value>L'IA juge chaque groupe avant de l'attaquer, comme elle juge le risque d'un combat ; avant le premier combat du perso, par le niveau des monstres.</value>
+  </data>
+  <data name="SectionWhere" xml:space="preserve">
+    <value>Où</value>
+  </data>
+  <data name="Place" xml:space="preserve">
+    <value>Lieu</value>
+  </data>
+  <data name="PlaceHelp" xml:space="preserve">
+    <value>Automatique : la sous-zone qui a le plus de monstres au niveau du perso, revue à chaque tournée.</value>
+  </data>
+  <data name="PlaceAutomatic" xml:space="preserve">
+    <value>Automatique</value>
+  </data>
+  <data name="PlaceChosen" xml:space="preserve">
+    <value>Choisi</value>
+  </data>
+  <data name="Area" xml:space="preserve">
+    <value>Zone</value>
+  </data>
+  <data name="AreaHelp" xml:space="preserve">
+    <value>Seule, elle vaut ses sous-zones où vivent des monstres.</value>
+  </data>
+  <data name="SubAreas" xml:space="preserve">
+    <value>Sous-zones</value>
+  </data>
+  <data name="SubAreasHelp" xml:space="preserve">
+    <value>Celles où vivent les monstres choisis d'abord.</value>
+  </data>
+  <data name="IsolatedMaps" xml:space="preserve">
+    <value>Cartes isolées</value>
+  </data>
+  <data name="IsolatedMapsHelp" xml:space="preserve">
+    <value>Joignables seulement par un long détour, parcourues en dernier.</value>
+  </data>
+  <data name="ZaapSaving" xml:space="preserve">
+    <value>Zaap s'il évite au moins</value>
+  </data>
+  <data name="ZaapSavingUnit" xml:space="preserve">
+    <value>cartes</value>
+  </data>
+  <data name="SectionUpkeep" xml:space="preserve">
+    <value>Entretien</value>
+  </data>
+  <data name="Heal" xml:space="preserve">
+    <value>Se soigner</value>
+  </data>
+  <data name="HealBelow" xml:space="preserve">
+    <value>Se soigner sous</value>
+  </data>
+  <data name="Food" xml:space="preserve">
+    <value>Nourriture</value>
+  </data>
+  <data name="FoodHelp" xml:space="preserve">
+    <value>Dans l'ordre, jusqu'à la vie pleine ; sans choix, ce que l'inventaire contient qui ne fait que soigner, le plus petit soin d'abord ; sinon la vie se régénère jusqu'au seuil.</value>
+  </data>
+  <data name="SectionBank" xml:space="preserve">
+    <value>Banque</value>
+  </data>
+  <data name="FullAt" xml:space="preserve">
+    <value>Pods pleins à</value>
+  </data>
+  <data name="Deposit" xml:space="preserve">
+    <value>Déposer</value>
+  </data>
+  <data name="DepositLoot" xml:space="preserve">
+    <value>Le butin</value>
+  </data>
+  <data name="DepositAllButWorn" xml:space="preserve">
+    <value>Tout sauf l'équipement</value>
+  </data>
+  <data name="SectionAfter" xml:space="preserve">
+    <value>Après un combat</value>
+  </data>
+  <data name="AfterLostFight" xml:space="preserve">
+    <value>Après un combat perdu</value>
+  </data>
+  <data name="AfterLostFightHelp" xml:space="preserve">
+    <value>Le perso revient à son point de sauvegarde avec peu de vie : en reprenant, il regagne d'abord la part sous laquelle il se soigne. Trois combats perdus d'affilée arrêtent l'activité.</value>
+  </data>
+  <data name="AfterLostFightResume" xml:space="preserve">
+    <value>Reprendre une fois soigné</value>
+  </data>
+  <data name="AfterLostFightPause" xml:space="preserve">
+    <value>Mettre en pause</value>
+  </data>
+  <data name="AfterLostFightStop" xml:space="preserve">
+    <value>Arrêter</value>
+  </data>
+  <data name="RuleMonsters" xml:space="preserve">
+    <value>Choisis au moins un monstre ou une famille.</value>
+  </data>
+  <data name="RuleWhere" xml:space="preserve">
+    <value>Choisis une zone ou des sous-zones.</value>
+  </data>
+  <data name="RuleSize" xml:space="preserve">
+    <value>Le minimum de monstres ne dépasse pas le maximum.</value>
+  </data>
+  <data name="PresetAuto" xml:space="preserve">
+    <value>Combat automatique</value>
+  </data>
+  <data name="DoingStart" xml:space="preserve">
+    <value>Se prépare</value>
+  </data>
+  <data name="DoingPlace" xml:space="preserve">
+    <value>Chasse dans {0}</value>
+  </data>
+  <data name="DoingTravel" xml:space="preserve">
+    <value>Vers la carte suivante</value>
+  </data>
+  <data name="DoingReturn" xml:space="preserve">
+    <value>Retourne dans sa zone</value>
+  </data>
+  <data name="DoingAttack" xml:space="preserve">
+    <value>Attaque un groupe de {0} monstres</value>
+  </data>
+  <data name="DoingFight" xml:space="preserve">
+    <value>Combat</value>
+  </data>
+  <data name="DoingBank" xml:space="preserve">
+    <value>Va à la banque</value>
+  </data>
+  <data name="DoingEat" xml:space="preserve">
+    <value>Se soigne : mange {0}</value>
+  </data>
+  <data name="DoingRegenerate" xml:space="preserve">
+    <value>Attend que sa vie se régénère, {0} s</value>
+  </data>
+  <data name="DoingRegain" xml:space="preserve">
+    <value>Regagne sa vie après un combat perdu : {0} sur {1}</value>
+  </data>
+  <data name="CountWonOne" xml:space="preserve">
+    <value>{0} combat gagné</value>
+  </data>
+  <data name="CountWonMany" xml:space="preserve">
+    <value>{0} combats gagnés</value>
+  </data>
+  <data name="CountLostOne" xml:space="preserve">
+    <value>{0} combat perdu</value>
+  </data>
+  <data name="CountLostMany" xml:space="preserve">
+    <value>{0} combats perdus</value>
+  </data>
+  <data name="FailNowhere" xml:space="preserve">
+    <value>Aucune sous-zone n'a de monstres à combattre au niveau du perso.</value>
+  </data>
+  <data name="FailUnreachable" xml:space="preserve">
+    <value>Aucune carte de la zone n'est joignable.</value>
+  </data>
+  <data name="FailStillFull" xml:space="preserve">
+    <value>Toujours plein après la banque : {0} sur {1} pods, plein à {2} %.</value>
+  </data>
+  <data name="CountLoot" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="PlaceUnseen" xml:space="preserve">
+    <value>Niveau pas encore vu</value>
+  </data>
+  <data name="PlaceNone" xml:space="preserve">
+    <value>Aucun monstre à combattre à son niveau</value>
+  </data>
+  <data name="PlaceOne" xml:space="preserve">
+    <value>{1}, {0} carte</value>
+  </data>
+  <data name="PlaceMany" xml:space="preserve">
+    <value>{1}, {0} cartes</value>
+  </data>
+  <data name="FigureAutomatic" xml:space="preserve">
+    <value>Auto</value>
+  </data>
+  <data name="FigureAutomaticLabel" xml:space="preserve">
+    <value>lieu choisi pour chaque perso</value>
+  </data>
+  <data name="FigureNumber" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="FigureOutOf" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="FigureMapsOne" xml:space="preserve">
+    <value>carte à parcourir</value>
+  </data>
+  <data name="FigureMapsMany" xml:space="preserve">
+    <value>cartes à parcourir</value>
+  </data>
+  <data name="FigureChosenLiving" xml:space="preserve">
+    <value>monstres choisis qui y vivent</value>
+  </data>
+  <data name="FigureMonstersOne" xml:space="preserve">
+    <value>monstre qui y vit</value>
+  </data>
+  <data name="FigureMonstersMany" xml:space="preserve">
+    <value>monstres qui y vivent</value>
+  </data>
+  <data name="FigureLevels" xml:space="preserve">
+    <value>{0} à {1}</value>
+  </data>
+  <data name="FigureLevelsLabel" xml:space="preserve">
+    <value>niveaux des monstres</value>
+  </data>
+  <data name="FigureNoLevel" xml:space="preserve">
+    <value>—</value>
+  </data>
+  <data name="FigureNone" xml:space="preserve">
+    <value>Aucune</value>
+  </data>
+  <data name="FigureNoBank" xml:space="preserve">
+    <value>banque à portée à pied</value>
+  </data>
+  <data name="FigureBankOne" xml:space="preserve">
+    <value>{0} carte</value>
+  </data>
+  <data name="FigureBankMany" xml:space="preserve">
+    <value>{0} cartes</value>
+  </data>
+  <data name="FigureBank" xml:space="preserve">
+    <value>jusqu'à la banque la plus proche</value>
+  </data>
+  <data name="FigureIsolatedOne" xml:space="preserve">
+    <value>carte isolée, laissée</value>
+  </data>
+  <data name="FigureIsolatedMany" xml:space="preserve">
+    <value>cartes isolées, laissées</value>
+  </data>
+  <data name="FigureIsolatedLastOne" xml:space="preserve">
+    <value>carte isolée, parcourue en dernier</value>
+  </data>
+  <data name="FigureIsolatedLastMany" xml:space="preserve">
+    <value>cartes isolées, parcourues en dernier</value>
+  </data>
+  <data name="MessageAutomatic" xml:space="preserve">
+    <value>Le lieu se choisit au niveau de chaque perso qui joue ce profil : donne-le à un perso, page Comptes, pour le voir.</value>
+  </data>
+  <data name="FigureForLevel" xml:space="preserve">
+    <value>Niv. {0}</value>
+  </data>
+  <data name="FigureForLevelLabel" xml:space="preserve">
+    <value>le lieu pour un perso du niveau des monstres</value>
+  </data>
+  <data name="Families" xml:space="preserve">
+    <value>Familles à combattre</value>
+  </data>
+  <data name="FamiliesHelp" xml:space="preserve">
+    <value>Comme les bouftous : un groupe est attaqué s'il contient un monstre de l'une d'elles, comme s'il contient un monstre choisi.</value>
+  </data>
+</root>

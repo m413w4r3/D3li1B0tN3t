@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\D3B.Protocol\D3B.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Fixtures/*.proto" ProtoRoot="." GrpcServices="None" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\src\D3B.Protocol\Pins\*.json" LinkBase="Pins" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\D3B.Data.Tests\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
+    <Compile Include="..\D3B.Network.Tests\TestSequences.cs" Link="TestSequences.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,16 @@
+# Text files use LF in the repository and in every working tree, matching .editorconfig (end_of_line = lf),
+# so diffs never churn on line endings.
+* text=auto eol=lf
+
+*.cs     diff=csharp
+
+# Windows command interpreters need CRLF.
+*.cmd    text eol=crlf
+*.bat    text eol=crlf
+
+# Binary assets.
+*.png    binary
+*.jpg    binary
+*.gif    binary
+*.ico    binary
+*.dll    binary

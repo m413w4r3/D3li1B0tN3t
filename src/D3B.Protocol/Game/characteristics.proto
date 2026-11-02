@@ -1,0 +1,93 @@
+// The character's characteristics and life: the server sends the characteristics on entering the game and after every
+// change, such as a fight's end or food eaten; between them, the life regenerates out of fights at a rate the server gives.
+syntax = "proto3";
+
+package d3b.game;
+
+import "Readable/options.proto";
+
+option csharp_namespace = "D3B.Protocol.Game";
+
+// The character's characteristics. On entering the game the server sends them once after the character is chosen,
+// without what its objects give, then again once the context is created: the second holds its life.
+message CharacterStatsEvent {
+  option (d3b.readable.partial) = true;
+
+  CharacterStats stats = 1;
+}
+
+// The characteristics, each by its id.
+message CharacterStats {
+  option (d3b.readable.partial) = true;
+
+  repeated Characteristic characteristics = 1;
+}
+
+// A characteristic. Its value is the sum of its numbers. The character's most life is the value of characteristic 0 plus
+// that of 11, the vitality; its life, the most plus the value of 97, the life it lacks, negative, or 0 at full life. In a
+// fight, a monster's or a summon's carried 0 alone, and 1 and 23 hold every fighter's AP and MP left (D178).
+message Characteristic {
+  option (d3b.readable.partial) = true;
+
+  // The characteristic's id: 0, 11 and 97 hold the life, 1 and 23 the AP and MP, as above; the others are not measured.
+  int32 id = 2;
+
+  oneof kind {
+    UsableCharacteristic usable = 1;
+    CharacteristicValue value = 3;
+    DetailedCharacteristic detailed = 5;
+  }
+}
+
+// A characteristic spent in a fight, the character's AP and MP: what is left is the sum of numbers 1 to 6, the base in 4,
+// what was spent this turn taken off in 6, and also counted in 7.
+message UsableCharacteristic {
+  int32 number_1 = 1;
+  int32 number_2 = 2;
+  int32 number_3 = 3;
+  int32 number_4 = 4;
+  int32 number_5 = 5;
+  int32 number_6 = 6;
+  int32 spent = 7;
+}
+
+// A characteristic given whole, as a monster's or a summon's are in a fight.
+message CharacteristicValue {
+  option (d3b.readable.partial) = true;
+
+  int64 total = 2;
+}
+
+// A characteristic's numbers, from several sources: which number is which source is not measured. The life's were set in
+// numbers 5 and 7 alone, in the captures.
+message DetailedCharacteristic {
+  option (d3b.readable.partial) = true;
+
+  int32 number_1 = 1;
+  int32 number_2 = 2;
+  int32 number_3 = 3;
+  int32 number_4 = 4;
+  int32 number_5 = 5;
+  int32 number_7 = 7;
+}
+
+// The life's regeneration stops, as a fight starts and before food heals: the life now, the regeneration's points included,
+// and the most.
+message LifeRegenEndEvent {
+  option (d3b.readable.partial) = true;
+
+  int32 max_life = 1;
+  int32 life = 3;
+
+  // The points regenerated since the regeneration started, counted beyond the most: a point each interval
+  // LifeRegenStartEvent gave.
+  optional int32 regenerated = 4;
+}
+
+// The life's regeneration starts again, as food was eaten: a point each interval, in tenths of a second, out of fights. The
+// interval was 5 in the captures; sitting changed nothing, the owner saw.
+message LifeRegenStartEvent {
+  option (d3b.readable.partial) = true;
+
+  int32 interval = 1;
+}
