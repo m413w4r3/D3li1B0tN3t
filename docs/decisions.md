@@ -6711,3 +6711,28 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Boundary**: Four non-movement callers (`Recovery`, `ElementUse`, `Banking`, `GuildChest`) still ignore the explicit
   held-release outcome. The next permissible live action is one supervised automatic move to a single neighboring map;
   it was not executed.
+
+## D294: Bind movement refusals to guarded requests
+
+*2026-11-03, P2H audit follow-up.*
+
+- **Raw sends**: `BotContext.SendAsync` rejects raw `MapMovementRequest`, `MapChangeRequest`, `TeleportRequest`,
+  `HavenBagEnterRequest`, and `InteractiveUseRequest` outside a fight. It checks before the display wait and immediately
+  before sending. Fight movement remains allowed only while the state is in a fight; production roleplay movement uses
+  `SendGuardedAsync`.
+- **Refusal evidence**: `CharacterState.PendingMovementMapId` records the map whose movement answer is pending, without
+  granting position trust. Guarded answerable requests post an actor input before sending; client movement requests on
+  the current map set the same marker. Map changes, accepted movement, confirmations, refusals, cancels, context changes,
+  and walk settlement clear it. A refusal changes cell and provenance only when the current map and pending map agree.
+- **Element use**: Generic element use checks `MovementGuard` after held-walk release and rechecks it through
+  `SendGuardedAsync` at send time, covering zero-step doors and harvest uses.
+- **Step validation**: MapChange validates a held character's current map, cell, pack map, vertex, step source, and
+  transition range before attempting the recovery walk, then rereads and validates them again before planning.
+- **Evidence**: The audit regression run was RED at 9/9 failures. The targeted P2H, position, movement, runtime, and
+  element-use filter passed 176/176,
+  `D3B.Bot.Tests` passed 507/507, and the full solution passed 1,333/1,333, up 12 tests from the prior 1,321 baseline.
+  Build and format checks passed offline with SDK 10.0.403. No live client, host, relay, or game action was performed.
+- **Residual**: This assumes one ordered game connection. The refusal protocol carries no request correlation, so a
+  refusal crossing a newer request on the same map remains indistinguishable; the marker makes cross-map stale refusals
+  harmless. A mapless movement announcement can still match a newly placed cell.
+- **Boundary**: The next live action still requires a NEW OWNER GO and publication and review of the build for that action.

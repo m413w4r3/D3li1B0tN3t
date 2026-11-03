@@ -35,12 +35,21 @@ public static class ElementUse
     /// <param name="elementId">The element's id on the map.</param>
     /// <param name="skillId">The skill's id in the client's tables.</param>
     /// <param name="cancellationToken">Stops the use.</param>
-    /// <returns>How the use ended.</returns>
-    /// <exception cref="InvalidOperationException">The bot cannot act now: see <see cref="BotActor.RunAsync"/>.</exception>
+    /// <returns>How the use ended; <see cref="UseOutcome.Busy"/> with no request when the game session is closed.</returns>
+    /// <exception cref="InvalidOperationException">The bot cannot act now for another reason: see <see cref="BotActor.RunAsync"/>.</exception>
     /// <exception cref="BotInterruptedException">The player acted, the game connection closed, or the host is stopping.</exception>
     public static Task<UseOutcome> UseAsync(this BotActor bot, int elementId, int skillId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(bot);
+
+        var refusal = MovementGuard.Refuse(bot.State, bot.IsConnected);
+
+        if (refusal is MovementRefusal.Disconnected)
+        {
+            MovementGuard.LogRefusal(bot.Log, bot.State, refusal);
+
+            return Task.FromResult(UseOutcome.Busy);
+        }
 
         return bot.RunAsync((context, token) => context.UseAsync(elementId, skillId, token), cancellationToken);
     }
@@ -93,6 +102,9 @@ public static class ElementUse
         // The use may be asked from where the character stands, which the server refuses while it holds a walk (D89).
         await context.ReleaseHeldWalkAsync(cancellationToken).ConfigureAwait(false);
 
+        if (!MovementGuard.IsAllowed(context))
+            return UseOutcome.Busy;
+
         var state = context.State;
 
         if (state.MapId is not { } mapId || state.Cell is not { } cell || state.IsBusy)
@@ -136,7 +148,13 @@ public static class ElementUse
         var end = context.Expect((side, message, _) => side is RelayDirection.FromServer
             && message is InteractiveUseEndedEvent ended && ended.ElementId == elementId && ended.SkillId == skillId);
 
-        await context.SendAsync(Request(elementId, skill), cancellationToken).ConfigureAwait(false);
+        if (!await context.SendGuardedAsync(Request(elementId, skill), () => MovementGuard.IsAllowed(context), cancellationToken).ConfigureAwait(false))
+        {
+            answer.Cancel();
+            end.Cancel();
+
+            return UseOutcome.Busy;
+        }
 
         var answered = await answer.WaitAsync(context.Delays.Answer, cancellationToken).ConfigureAwait(false);
 

@@ -4,6 +4,7 @@ using D3B.Bot.Journal;
 using D3B.Data.Maps;
 using D3B.Engine.World;
 using D3B.Network.Relay;
+using D3B.Protocol.Game;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 
@@ -131,17 +132,24 @@ public sealed class BotContext
     /// <param name="request">The readable request, whole.</param>
     /// <param name="cancellationToken">Stops waiting; a request not gone yet then never goes.</param>
     /// <returns>A task that completes once the request went.</returns>
+    /// <exception cref="InvalidOperationException">The request starts automated movement or a map transition outside a fight; use a guarded movement action.</exception>
     /// <remarks>
     /// The client follows what the server shows it only once it has drawn the map, its display time after the server
     /// placed the character on it, half a second measured (<see cref="BotDelays.Display"/>): a walk shown 1 or 50 ms after
     /// was never confirmed, and a door used before the client asked what is on the new map left it no longer confirming
-    /// walks (D73, D77). A request sent sooner waits until then.
+    /// walks (D73, D77). A request sent sooner waits until then. Outside fights, raw <see cref="MapMovementRequest"/>,
+    /// <see cref="MapChangeRequest"/>, <see cref="TeleportRequest"/>, <see cref="HavenBagEnterRequest"/>, and
+    /// <see cref="InteractiveUseRequest"/> requests are prohibited; use the guarded movement actions instead. Fight
+    /// movement requests are allowed only while <see cref="CharacterState.IsFighting"/> is true.
     /// </remarks>
     public async Task SendAsync(IMessage request, CancellationToken cancellationToken)
     {
+        EnsureRawMovementSendAllowed(request);
+
         // Again once waited: the display time raised meanwhile, or a new map placed, holds the request longer.
         await WaitUntilDrawnAsync(cancellationToken).ConfigureAwait(false);
 
+        EnsureRawMovementSendAllowed(request);
         await _behavior.Session.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
@@ -149,15 +157,30 @@ public sealed class BotContext
     {
         ArgumentNullException.ThrowIfNull(canSend);
 
+        // Keep the request's source map while the client's display wait is in progress.
+        var requestedMapId = State.MapId;
+
         await WaitUntilDrawnAsync(cancellationToken).ConfigureAwait(false);
 
         if (!canSend())
+        {
+            MarkMovementRequested(null);
             return false;
+        }
 
         beforeSend?.Invoke();
+
+        if (AwaitsMovementAnswer(request))
+            MarkMovementRequested(RequestedMovementMap(request, requestedMapId));
+
         await _behavior.Session.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
         return true;
+    }
+
+    internal void MarkMovementRequested(long? mapId)
+    {
+        _bot.MarkMovementRequested(mapId);
     }
 
     /// <summary>Begins an action the journal writes once over, within the actions begun before it and not over (D112).</summary>
@@ -170,6 +193,25 @@ public sealed class BotContext
     {
         for (var wait = _bot.DrawnAt - _bot.Time.GetUtcNow(); wait > TimeSpan.Zero; wait = _bot.DrawnAt - _bot.Time.GetUtcNow())
             await Task.Delay(wait, _bot.Time, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void EnsureRawMovementSendAllowed(IMessage request)
+    {
+        if (request is MapMovementRequest or MapChangeRequest or TeleportRequest or HavenBagEnterRequest or InteractiveUseRequest)
+        {
+            if (!_bot.State.IsFighting)
+                throw new InvalidOperationException("Automated movement requests must use the guarded movement actions.");
+        }
+    }
+
+    private static bool AwaitsMovementAnswer(IMessage request)
+    {
+        return request is MapMovementRequest or MapChangeRequest or TeleportRequest or HavenBagEnterRequest;
+    }
+
+    private static long? RequestedMovementMap(IMessage request, long? currentMapId)
+    {
+        return request is MapMovementRequest movement ? movement.MapId : currentMapId;
     }
 
     internal void EndAction()

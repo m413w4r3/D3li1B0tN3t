@@ -44,4 +44,19 @@ public sealed class MovementGuardTests
         Assert.Equal(MovementRefusal.None, MovementGuard.Refuse(Trusted() with { Provenance = CellProvenance.ServerConfirmed }, connected: true));
         Assert.Equal(MovementRefusal.None, MovementGuard.Refuse(Trusted() with { Provenance = CellProvenance.ServerRefused }, connected: true));
     }
+
+    [Fact]
+    public async Task AnExpectedMapMismatchIsLogged()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(300);
+
+        var allowed = await bot.RunAsync(
+            (context, _) => Task.FromResult(MovementGuard.IsAllowed(context, TestPlay.NorthMapId)),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(allowed);
+        Assert.Contains(play.Log.GetSnapshot(), record => record.Message.Contains("reason MapChanged", StringComparison.Ordinal));
+        Assert.Empty(connection.Sent);
+    }
 }

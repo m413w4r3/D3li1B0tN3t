@@ -39,8 +39,8 @@ public static class MapWalk
     /// <param name="bot">The bot.</param>
     /// <param name="cell">The cell to walk to.</param>
     /// <param name="cancellationToken">Stops the walk.</param>
-    /// <returns>How the walk ended.</returns>
-    /// <exception cref="InvalidOperationException">The bot cannot act now: see <see cref="BotActor.RunAsync"/>.</exception>
+    /// <returns>How the walk ended; <see cref="WalkOutcome.Busy"/> with no request when the game session is closed.</returns>
+    /// <exception cref="InvalidOperationException">The bot cannot act now for another reason: see <see cref="BotActor.RunAsync"/>.</exception>
     /// <exception cref="BotInterruptedException">The player acted, the game connection closed, or the host is stopping.</exception>
     public static Task<WalkOutcome> WalkAsync(this BotActor bot, int cell, CancellationToken cancellationToken = default)
     {

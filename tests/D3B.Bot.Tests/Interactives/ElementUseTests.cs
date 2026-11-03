@@ -184,4 +184,16 @@ public sealed class ElementUseTests
         Assert.Equal(WalkOutcome.Busy, await bot.WalkAsync(300, TestContext.Current.CancellationToken));
         Assert.Empty(connection.Sent);
     }
+
+    [Fact]
+    public async Task AClosedGameSessionMakesElementUseBusyWithoutSending()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        connection.Close();
+        await bot.ProcessedAsync();
+
+        Assert.Equal(UseOutcome.Busy, await bot.UseAsync(TestPlay.TreeElementId, TestPlay.TreeSkillId, TestContext.Current.CancellationToken));
+        Assert.Empty(connection.Sent);
+    }
 }

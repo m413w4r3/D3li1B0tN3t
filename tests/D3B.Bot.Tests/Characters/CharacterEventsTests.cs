@@ -90,6 +90,7 @@ public sealed class CharacterEventsTests
               "SubAreaId": 440,
               "Cell": 300,
               "Provenance": 3,
+              "PendingMovementMapId": null,
               "IsPositionTrusted": true,
               "Path": [],
               "IsWalking": false,
@@ -262,7 +263,8 @@ public sealed class CharacterEventsTests
     {
         var standing = Apply(_chosen, EnteringTheGame());
         var point = MapGeometry.PointOf(388);
-        var refused = Apply(standing, Server(new MapMovementRefusedEvent { X = point.X, Y = point.Y }));
+        var requested = Apply(standing, Client(new MapMovementRequest { MapId = (int)TestPlay.MapId }));
+        var refused = Apply(requested, Server(new MapMovementRefusedEvent { X = point.X, Y = point.Y }));
 
         Assert.Equal(388, refused.Cell);
         Assert.False(refused.IsWalking);
@@ -612,10 +614,31 @@ public sealed class CharacterEventsTests
         Assert.True(held.IsWalkHeld);
         Assert.False(held.IsBusy);
         Assert.False(Apply(held, Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 302, 303 } })).IsWalkHeld);
-        Assert.False(Apply(held, Server(new MapMovementRefusedEvent { X = 18, Y = -3 })).IsWalkHeld);
+        Assert.True(Apply(held, Server(new MapMovementRefusedEvent { X = 18, Y = -3 })).IsWalkHeld);
+        var requested = held with { PendingMovementMapId = TestPlay.MapId };
+        Assert.False(Apply(requested, Server(new MapMovementRefusedEvent { X = 18, Y = -3 })).IsWalkHeld);
         Assert.False(Apply(held, Server(new MapCurrentEvent { MapId = TestPlay.NorthMapId })).IsWalkHeld);
         Assert.False(Apply(held, Server(new MapMovementConfirmResponse())).IsWalkHeld);
         Assert.True(Apply(held, Server(new MapMovementEvent { ActorId = 9, Cells = { 100, 101 } })).IsWalkHeld);
+    }
+
+    [Fact]
+    public void PendingMovementMapClearsWhenMovementOrContextChanges()
+    {
+        var standing = Apply(_chosen, EnteringTheGame()) with { PendingMovementMapId = TestPlay.MapId };
+        var walking = standing with { Path = [300, 301] };
+        var held = standing with { IsWalkHeld = true, Provenance = CellProvenance.Estimated };
+
+        Assert.Null(Apply(standing, Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } })).PendingMovementMapId);
+        Assert.Null(Apply(walking, Client(new MapMovementCancelRequest { CellId = 300 })).PendingMovementMapId);
+        Assert.Null(Apply(standing, Client(new MapMovementCancelRequest { CellId = 300 })).PendingMovementMapId);
+        Assert.Null(Apply(standing, Server(new MapCurrentEvent { MapId = TestPlay.NorthMapId })).PendingMovementMapId);
+        Assert.Null(Apply(walking, Server(new MapMovementConfirmResponse())).PendingMovementMapId);
+        Assert.Null(Apply(held, Server(new MapMovementConfirmResponse())).PendingMovementMapId);
+        Assert.Null(Apply(standing, Server(new MapMovementConfirmResponse())).PendingMovementMapId);
+        Assert.Null(Apply(standing, Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight })).PendingMovementMapId);
+        Assert.Null(Apply(standing, Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Roleplay })).PendingMovementMapId);
+        Assert.Null(CharacterEvents.NotConfirmed(standing).PendingMovementMapId);
     }
 
     [Fact]

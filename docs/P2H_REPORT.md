@@ -118,3 +118,58 @@ allowed the SDK's local named-pipe communication. No live or visual validation i
 
 The next permissible action is **one supervised automatic move to a single neighboring map**, after the current build is
 published and reviewed for that test. It was **not executed** in P2H.
+
+## Audit follow-up
+
+The independent P2H audit found four gaps in the integrated implementation. This follow-up fixes each:
+
+1. **Raw movement sends bypassed the guard.** `BotContext.SendAsync` now rejects raw movement and map-transition
+   requests outside a fight before the display wait and again just before sending. Fight movement is allowed only while
+   the state remains in a fight. Production movement and transition sends use `SendGuardedAsync`.
+2. **A delayed refusal could be applied to a newly placed map.** `CharacterState.PendingMovementMapId` records the map
+   awaiting a movement answer. Client requests and guarded sends set it; map changes, accepted movement, confirmations,
+   refusals, cancels, context changes, and walk settlement clear it. A refusal changes position only when the current map,
+   current cell, and pending map agree. An ignored refusal leaves position, provenance, and the held flag unchanged.
+3. **Element use could transition maps from an untrusted cell.** Generic element use checks `MovementGuard` after held-walk
+   release and checks it again through `SendGuardedAsync`, including zero-step uses such as doors. Refusal returns `Busy`
+   without sending and cancels both answer expectations.
+4. **A stale map-change step could release a held walk first.** Held state now validates the map, cell, pack map, current
+   world vertex, step source, and transition range before the recovery release. The state and step are checked again after
+   release before planning continues.
+
+The required RED run was **9/9 failed** before behavior changes:
+
+- `ARefusalWithoutAPendingMovementRequestDoesNotChangeThePosition`: expected the placed state to be unchanged; actual
+  cell became 311 with `ServerRefused`.
+- `AnInvalidRefusalClearsTheCellAndItsTrust`: expected `PendingMovementMapId` null; actual 191104002.
+- `AClientMovementRequestMarksTheMapAwaitingItsAnswer`: expected 191104002; actual null.
+- `AValidRefusalTrustsTheServerNamedCell`: expected `PendingMovementMapId` null; actual 191104002.
+- `ContradictoryEventsAfterAMapChangeCannotRestoreTrustOrACell`: expected newly placed cell 350; actual 311.
+- `ABehaviorCannotSendRawMovementFromATrustedPosition` and
+  `ABehaviorCannotSendRawMovementFromAClientReportedPosition`: expected `InvalidOperationException`; actual no
+  exception, and the request was sent.
+- `ACharacterReportedCellCannotUseAnElementWithoutMovementTrust`: expected `Busy`; actual `Refused` after sending.
+- `AHeldCharacterWithAStaleStepSourceDoesNotSendAReleaseWalk`: expected one sent request; actual two, including the
+  release walk.
+
+GREEN evidence with SDK 10.0.403:
+
+The targeted P2H, position, movement, runtime, and element-use filter passed **176/176**:
+
+```sh
+/home/nill/.dotnet/dotnet test tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj --no-build --filter 'FullyQualifiedName~P2HPositionTrustTests|FullyQualifiedName~MovementGuardTests|FullyQualifiedName~MapWalkTests|FullyQualifiedName~MapChangeTests|FullyQualifiedName~WorldTravelTests|FullyQualifiedName~WorldTravelSimulationTests|FullyQualifiedName~CharacterEventsTests|FullyQualifiedName~CharacterPositionReliabilityTests|FullyQualifiedName~PositionLoggingTests|FullyQualifiedName~ElementUseTests|FullyQualifiedName~BotActorTests' --max-parallel-test-modules 1
+```
+
+- `/home/nill/.dotnet/dotnet test tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj --no-build --max-parallel-test-modules 1` passed **507/507**, up from 495 (**+12**).
+- `/home/nill/.dotnet/dotnet test --solution D3B.slnx --max-parallel-test-modules 1 --no-build` passed **1,333/1,333**, up from 1,321 (**+12**).
+- `/home/nill/.dotnet/dotnet build D3B.slnx` passed with 0 warnings and 0 errors.
+- `/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore` and `git diff --check` passed.
+
+The remaining protocol assumption is one ordered game connection. A refusal has no map id or request correlation, so a
+refusal that crosses a newer request on the same map cannot be distinguished; the pending map only makes cross-map stale
+refusals harmless. The prior caveat about a mapless movement announcement matching a newly placed cell also remains.
+`Recovery`, `Banking`, and `GuildChest` still ignore explicit held-release outcomes; `ElementUse` now checks movement
+trust after release.
+
+No live client or game was run. The next live action still requires a **NEW OWNER GO**, plus publication and review of the
+build for that action. The earlier P2H live-action note is not authorization for this follow-up.

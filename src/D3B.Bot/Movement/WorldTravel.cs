@@ -32,8 +32,8 @@ public static class WorldTravel
     /// <param name="bot">The bot.</param>
     /// <param name="mapId">The map to go to, any of its zones.</param>
     /// <param name="cancellationToken">Stops the journey.</param>
-    /// <returns>How the journey ended.</returns>
-    /// <exception cref="InvalidOperationException">The bot cannot act now: see <see cref="BotActor.RunAsync"/>.</exception>
+    /// <returns>How the journey ended; <see cref="TravelOutcome.Busy"/> with no request when the game session is closed.</returns>
+    /// <exception cref="InvalidOperationException">The bot cannot act now for another reason: see <see cref="BotActor.RunAsync"/>.</exception>
     /// <exception cref="BotInterruptedException">The player acted, the game connection closed, or the host is stopping.</exception>
     public static Task<TravelOutcome> TravelAsync(this BotActor bot, long mapId, CancellationToken cancellationToken = default)
     {

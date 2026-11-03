@@ -109,9 +109,13 @@ public sealed class PositionLoggingTests
         var (connection, bot) = await play.EnterAsync(433);
         var point = MapGeometry.PointOf(388);
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
+        await bot.ProcessedAsync();
         connection.Server(new MapMovementRefusedEvent { X = point.X, Y = point.Y });
         await bot.ProcessedAsync();
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
+        await bot.ProcessedAsync();
         connection.Server(new MapMovementRefusedEvent { X = int.MaxValue, Y = int.MinValue });
         await bot.ProcessedAsync();
 

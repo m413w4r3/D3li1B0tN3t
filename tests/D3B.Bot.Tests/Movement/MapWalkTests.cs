@@ -134,11 +134,14 @@ public sealed class MapWalkTests
         var stood = MapGeometry.PointOf(388);
 
         await connection.SentAsync(1);
+        await bot.ProcessedAsync();
+        Assert.Equal(TestPlay.MapId, bot.State.PendingMovementMapId);
         connection.Server(new MapMovementRefusedEvent { X = stood.X, Y = stood.Y });
 
         Assert.Equal(WalkOutcome.Refused, await walk);
         await bot.ProcessedAsync();
         Assert.Equal(388, bot.State.Cell);
+        Assert.Null(bot.State.PendingMovementMapId);
     }
 
     [Fact]

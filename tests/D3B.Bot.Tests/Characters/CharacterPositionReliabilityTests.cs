@@ -89,7 +89,7 @@ public sealed class CharacterPositionReliabilityTests
     [Fact]
     public void AnUnmappableRefusalClearsThePreviousCell()
     {
-        var standing = OnMap(300);
+        var standing = OnMap(300) with { PendingMovementMapId = TestPlay.MapId };
 
         var refused = CharacterEvents.Apply(standing, RelayDirection.FromServer, new MapMovementRefusedEvent { X = int.MaxValue, Y = int.MinValue });
 

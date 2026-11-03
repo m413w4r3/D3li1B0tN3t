@@ -9,6 +9,9 @@ internal enum MovementRefusal
     /// <summary>No game connection is active.</summary>
     Disconnected,
 
+    /// <summary>The planned action's map differs from the current map.</summary>
+    MapChanged,
+
     /// <summary>The current map is unknown.</summary>
     MapUnknown,
 

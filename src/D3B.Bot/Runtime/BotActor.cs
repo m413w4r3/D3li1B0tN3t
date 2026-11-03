@@ -326,6 +326,11 @@ public sealed class BotActor : IAsyncDisposable
         return settled.Task;
     }
 
+    internal void MarkMovementRequested(long? mapId)
+    {
+        Post(new MovementRequested(mapId));
+    }
+
     internal GameExpectation Expect(RunningBehavior owner, Func<RelayDirection, IMessage, CharacterState, bool> match)
     {
         var expectation = new GameExpectation(match, owner, Time);
@@ -439,6 +444,10 @@ public sealed class BotActor : IAsyncDisposable
             case Processing processing:
                 processing.Processed.TrySetResult();
                 break;
+            case MovementRequested movement:
+                if (movement.MapId is null || movement.MapId == _state.MapId)
+                    _state = _state with { PendingMovementMapId = movement.MapId };
+                break;
         }
     }
 
@@ -535,7 +544,7 @@ public sealed class BotActor : IAsyncDisposable
                     BotLog.WalkConfirmed(_log, Key.CharacterId, confirmedMap, confirmedCell);
                     return;
 
-                case MapMovementRefusedEvent when before.Cell is not null && before.MapId is { } refusedMap:
+                case MapMovementRefusedEvent when before.Cell is not null && before.MapId is { } refusedMap && before.PendingMovementMapId == refusedMap:
                     if (state.Cell is { } refusedCell)
                         BotLog.WalkRefused(_log, Key.CharacterId, refusedMap, refusedCell);
                     else
@@ -827,6 +836,8 @@ public sealed class BotActor : IAsyncDisposable
     private sealed record Settling(TaskCompletionSource Settled) : Input;
 
     private sealed record Processing(TaskCompletionSource Processed) : Input;
+
+    private sealed record MovementRequested(long? MapId) : Input;
 
     /// <summary>When a behavior may start.</summary>
     private enum Readiness

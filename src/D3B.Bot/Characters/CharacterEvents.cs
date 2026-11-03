@@ -78,14 +78,19 @@ public static class CharacterEvents
     {
         ArgumentNullException.ThrowIfNull(state);
 
-        return state.IsWalking ? state with { Cell = state.Path[^1], Path = [], IsWalkHeld = true, Provenance = CellProvenance.Estimated } : state;
+        if (state.IsWalking)
+            return state with { Cell = state.Path[^1], Path = [], IsWalkHeld = true, Provenance = CellProvenance.Estimated, PendingMovementMapId = null };
+
+        return state.PendingMovementMapId is null ? state : state with { PendingMovementMapId = null };
     }
 
     private static CharacterState FromClient(CharacterState state, IMessage message)
     {
         return message switch
         {
-            MapMovementCancelRequest cancel when state.MapId is not null && state.Cell is not null && state.IsWalking && IsCell(cancel.CellId) => state with { Cell = cancel.CellId, Path = [], Provenance = CellProvenance.ClientReported },
+            MapMovementRequest movement when state.MapId == movement.MapId => state with { PendingMovementMapId = state.MapId },
+            MapMovementCancelRequest cancel when state.MapId is not null && state.Cell is not null && state.IsWalking && IsCell(cancel.CellId) => state with { Cell = cancel.CellId, Path = [], Provenance = CellProvenance.ClientReported, PendingMovementMapId = null },
+            MapMovementCancelRequest when state.PendingMovementMapId is not null => state with { PendingMovementMapId = null },
             _ => state,
         };
     }
@@ -116,6 +121,7 @@ public static class CharacterEvents
                 HavenBagOwnerId = null,
                 IsWalkHeld = false,
                 Provenance = CellProvenance.Unknown,
+                PendingMovementMapId = null,
             },
             ContextCreationEvent created => Context(state, created),
             MapInformationEvent information when information.MapId == state.MapId => Placed(state, information),
@@ -129,7 +135,7 @@ public static class CharacterEvents
             },
             InteractiveUsedEvent used when used.ActorId == self && used.Duration > 0 => state with { Use = new CurrentUse(used.ElementId, used.SkillId) },
             InteractiveUseEndedEvent ended when state.Use == new CurrentUse(ended.ElementId, ended.SkillId) => state with { Use = null },
-            MapMovementEvent movement when movement.ActorId == self && state.MapId is not null && state.Cell is { } cell && movement.Cells.Count > 0 && movement.Cells.All(IsCell) && movement.Cells[0] == cell => state with { Path = [.. movement.Cells], IsWalkHeld = false, LastWalkEnd = movement.Cells[^1] },
+            MapMovementEvent movement when movement.ActorId == self && state.MapId is not null && state.Cell is { } cell && movement.Cells.Count > 0 && movement.Cells.All(IsCell) && movement.Cells[0] == cell => state with { Path = [.. movement.Cells], IsWalkHeld = false, LastWalkEnd = movement.Cells[^1], PendingMovementMapId = null },
             // A group's walk names only its first and last cells, and the client attacks it where it stops.
             MapMovementEvent movement when movement.Cells.Count > 0 && IsCell(movement.Cells[^1]) && state.MonsterGroups.TryGetValue(movement.ActorId, out var walker) => state with
             {
@@ -140,16 +146,10 @@ public static class CharacterEvents
                 MonsterGroups = state.MonsterGroups.SetItems(shown.Actors.Where(IsMonsterGroup).Select(actor => KeyValuePair.Create(actor.Id, Group(actor)))),
             },
             MapActorRemovedEvent removed when state.MonsterGroups.ContainsKey(removed.ActorId) => state with { MonsterGroups = state.MonsterGroups.Remove(removed.ActorId) },
-            MapMovementConfirmResponse when state.MapId is not null && state.Cell is not null && state.IsWalking => state with { Cell = state.Path[^1], Path = [], IsWalkHeld = false, Provenance = CellProvenance.ServerConfirmed },
-            MapMovementConfirmResponse when state.MapId is not null && state.Cell is not null && state.IsWalkHeld && state.Provenance is CellProvenance.Estimated => state with { IsWalkHeld = false, Provenance = CellProvenance.ServerConfirmed },
-            MapMovementConfirmResponse => state with { IsWalkHeld = false },
-            MapMovementRefusedEvent refused when state.MapId is not null && state.Cell is not null => state with
-            {
-                Cell = MapGeometry.TryGetCell(new MapPoint(refused.X, refused.Y), out var cell) ? cell : null,
-                Path = [],
-                IsWalkHeld = false,
-                Provenance = MapGeometry.TryGetCell(new MapPoint(refused.X, refused.Y), out _) ? CellProvenance.ServerRefused : CellProvenance.Unknown,
-            },
+            MapMovementConfirmResponse when state.MapId is not null && state.Cell is not null && state.IsWalking => state with { Cell = state.Path[^1], Path = [], IsWalkHeld = false, Provenance = CellProvenance.ServerConfirmed, PendingMovementMapId = null },
+            MapMovementConfirmResponse when state.MapId is not null && state.Cell is not null && state.IsWalkHeld && state.Provenance is CellProvenance.Estimated => state with { IsWalkHeld = false, Provenance = CellProvenance.ServerConfirmed, PendingMovementMapId = null },
+            MapMovementConfirmResponse => state with { IsWalkHeld = false, PendingMovementMapId = null },
+            MapMovementRefusedEvent refused when state.MapId is { } map && state.Cell is not null && state.PendingMovementMapId == map => Refused(state, refused),
             NpcDialogCreationEvent creation when creation.MapId == state.MapId => state with { Dialog = new NpcDialog(creation.NpcActorId) },
             NpcDialogQuestionEvent question when state.Dialog is { } dialog => state with
             {
@@ -194,9 +194,23 @@ public static class CharacterEvents
     private static CharacterState Context(CharacterState state, ContextCreationEvent created)
     {
         if (created.Context is ContextCreationEvent.Types.GameContext.Fight)
-            return state with { Fight = new FightState(), Path = [], IsWalkHeld = false, Provenance = CellProvenance.Unknown };
+            return state with { Fight = new FightState(), Path = [], IsWalkHeld = false, Provenance = CellProvenance.Unknown, PendingMovementMapId = null };
 
-        return state with { Fight = null };
+        return state with { Fight = null, PendingMovementMapId = null };
+    }
+
+    private static CharacterState Refused(CharacterState state, MapMovementRefusedEvent refused)
+    {
+        var mapped = MapGeometry.TryGetCell(new MapPoint(refused.X, refused.Y), out var cell);
+
+        return state with
+        {
+            Cell = mapped ? cell : null,
+            Path = [],
+            IsWalkHeld = false,
+            Provenance = mapped ? CellProvenance.ServerRefused : CellProvenance.Unknown,
+            PendingMovementMapId = null,
+        };
     }
 
     private static CharacterState Placed(CharacterState state, MapInformationEvent information)

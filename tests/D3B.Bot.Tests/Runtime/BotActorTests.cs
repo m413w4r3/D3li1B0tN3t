@@ -35,7 +35,7 @@ public sealed class BotActorTests : IAsyncDisposable
             {
                 var update = context.Expect((side, message, state) => message is KamasUpdateEvent && state.Kamas == 42);
 
-                await context.SendAsync(new MapChangeRequest { MapId = 1 }, token);
+                await context.SendAsync(new DialogLeaveRequest(), token);
 
                 return (await update.WaitAsync(TimeSpan.FromSeconds(30), token) as KamasUpdateEvent)?.Kamas;
             },
@@ -86,6 +86,88 @@ public sealed class BotActorTests : IAsyncDisposable
 
         var error = Assert.IsType<InvalidOperationException>(exception);
         Assert.Contains("guarded movement actions", error.Message, StringComparison.Ordinal);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task RawMapTransitionRequestsAreProhibitedOutsideFight()
+    {
+        var (connection, bot) = await _play.EnterAsync(300);
+        IMessage[] requests =
+        [
+            new MapChangeRequest { MapId = 1 },
+            new TeleportRequest { MapId = TestPlay.EastMapId, Source = TeleporterType.Map },
+            new HavenBagEnterRequest { OwnerId = TestPlay.CharacterId },
+            new InteractiveUseRequest { ElementId = TestPlay.TreeElementId, SkillInstanceId = TestPlay.TreeInstanceId },
+        ];
+
+        foreach (var request in requests)
+        {
+            var exception = await Record.ExceptionAsync(() => bot.RunAsync(
+                async (context, token) =>
+                {
+                    await context.SendAsync(request, token);
+
+                    return true;
+                },
+                TestContext.Current.CancellationToken));
+
+            Assert.IsType<InvalidOperationException>(exception);
+        }
+
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AFailedGuardedSendClearsThePendingMovementMap()
+    {
+        var (connection, bot) = await _play.EnterAsync(300);
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
+        await bot.ProcessedAsync();
+        Assert.Equal(TestPlay.MapId, bot.State.PendingMovementMapId);
+
+        bot.MarkMovementRequested(TestPlay.NorthMapId);
+        await bot.ProcessedAsync();
+        Assert.Equal(TestPlay.MapId, bot.State.PendingMovementMapId);
+
+        var sent = await bot.RunAsync(
+            async (context, token) => await context.SendGuardedAsync(
+                new MapMovementRequest { MapId = (int)TestPlay.MapId },
+                () => false,
+                token),
+            TestContext.Current.CancellationToken);
+        await bot.ProcessedAsync();
+
+        Assert.False(sent);
+        Assert.Null(bot.State.PendingMovementMapId);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task ARawFightMovementCannotEscapeAfterTheFightEndsDuringTheDisplayWait()
+    {
+        var (connection, bot) = await _play.EnterAsync(300);
+        connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight });
+        await bot.ProcessedAsync();
+        _play.Bots.Delays = _play.Bots.Delays with { Display = TimeSpan.FromSeconds(1) };
+
+        var behavior = bot.RunInFightAsync(
+            async (context, token) =>
+            {
+                await context.SendAsync(new MapMovementRequest { MapId = (int)TestPlay.MapId }, token);
+
+                return true;
+            },
+            TestContext.Current.CancellationToken);
+
+        await Task.Delay(20, TestContext.Current.CancellationToken);
+        connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Roleplay });
+        await bot.ProcessedAsync();
+        _play.Time.Advance(TimeSpan.FromSeconds(1));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => behavior);
+
+        Assert.Contains("guarded movement actions", exception.Message, StringComparison.Ordinal);
         Assert.Empty(connection.Sent);
     }
 

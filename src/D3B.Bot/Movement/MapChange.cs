@@ -1,4 +1,5 @@
 using System.Globalization;
+using D3B.Bot.Characters;
 using D3B.Bot.Interactives;
 using D3B.Bot.Journal;
 using D3B.Bot.Runtime;
@@ -59,8 +60,8 @@ public static class MapChange
     /// <param name="bot">The bot.</param>
     /// <param name="step">The step, leaving the vertex the character stands in.</param>
     /// <param name="cancellationToken">Stops the change.</param>
-    /// <returns>How the change ended.</returns>
-    /// <exception cref="InvalidOperationException">The bot cannot act now: see <see cref="BotActor.RunAsync"/>.</exception>
+    /// <returns>How the change ended; <see cref="MapChangeOutcome.Busy"/> with no request when the game session is closed.</returns>
+    /// <exception cref="InvalidOperationException">The bot cannot act now for another reason: see <see cref="BotActor.RunAsync"/>.</exception>
     /// <exception cref="BotInterruptedException">The player acted, the game connection closed, or the host is stopping.</exception>
     public static Task<MapChangeOutcome> ChangeMapAsync(this BotActor bot, WorldStep step, CancellationToken cancellationToken = default)
     {
@@ -128,20 +129,17 @@ public static class MapChange
 
     private static async Task<MapChangeOutcome> ChangeAsync(BotContext context, WorldStep step, WorldPathRules rules, long destination, CancellationToken cancellationToken)
     {
+        if (context.State.IsWalkHeld && !TryGetCurrentStep(context, step, out _, out _, out _))
+            return MapChangeOutcome.NoPath;
+
         if (!await PositionAllowsChangeAsync(context, cancellationToken).ConfigureAwait(false))
             return MapChangeOutcome.Busy;
 
-        var state = context.State;
-        var world = context.World;
-
-        if (state.MapId is not { } mapId || state.Cell is not { } cell)
-            return MapChangeOutcome.Busy;
-
-        if (!context.Maps.TryGet(mapId, out var map) || !world.TryGetVertex(map, cell, out var vertex) || vertex != step.From
-            || step.Transition.MapId is < int.MinValue or > int.MaxValue)
-        {
+        if (!TryGetCurrentStep(context, step, out var state, out var map, out var cell))
             return MapChangeOutcome.NoPath;
-        }
+
+        var world = context.World;
+        var mapId = state.MapId!.Value;
 
         MapChangeOutcome outcome;
 
@@ -185,6 +183,25 @@ public static class MapChange
         BotLog.ChangedMap(context.Log, state.Key.CharacterId, context.State.MapId ?? mapId, outcome);
 
         return outcome;
+    }
+
+    private static bool TryGetCurrentStep(BotContext context, WorldStep step, out CharacterState state, out MapData map, out int cell)
+    {
+        state = context.State;
+        map = null!;
+        cell = default;
+
+        if (state.MapId is not { } mapId || state.Cell is not { } currentCell || !context.Maps.TryGet(mapId, out var currentMap) || currentMap is null)
+            return false;
+
+        if (!context.World.TryGetVertex(currentMap, currentCell, out var vertex) || vertex != step.From
+            || step.Transition.MapId is < int.MinValue or > int.MaxValue)
+            return false;
+
+        map = currentMap;
+        cell = currentCell;
+
+        return true;
     }
 
     private static async Task<MapChangeOutcome> LeaveAsync(BotContext context, CancellationToken cancellationToken)

@@ -195,9 +195,16 @@ ReleaseHeldWalkAsync but ignores its outcome before continuing. Before allowing 
 from a position that is not server-confirmed, the project needs a trusted-position and recovery
 policy or an explicit decision accepting this constraint.
 
-Two lower risks remain: a delayed mapless event can pass the guards if it arrives after a new
-placement and happens to match that cell; and an absent MapCurrentEvent.map_id has no presence guard
-and can decode as 0.
+P2F recorded two lower risks: a delayed mapless movement event could pass the guards if it arrived
+after a new placement and happened to match that cell; and an absent MapCurrentEvent.map_id had no
+presence guard and could decode as 0. The mapless movement-announcement risk remains.
+
+P2H's audit follow-up mitigates the stale-refusal case from this warning. MapMovementRefusedEvent
+also has no map id, so the character now records the map on which a movement answer is pending and
+applies a refusal only when that map still matches the current map. This makes a delayed refusal
+after a map change and new placement harmless. The protocol does not correlate refusals with
+requests, so one ordered game connection is assumed; a refusal that crosses a newer request on the
+same map still cannot be distinguished. The absent MapCurrentEvent.map_id presence warning remains.
 
 ## F. Supervised visual test and reproducible procedure
 

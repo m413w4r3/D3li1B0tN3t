@@ -54,7 +54,14 @@ internal static class MovementGuard
         var refusal = Refuse(state, context.IsConnected);
 
         if (refusal is MovementRefusal.None)
-            return expectedMapId is null || state.MapId == expectedMapId;
+        {
+            if (expectedMapId is null || state.MapId == expectedMapId)
+                return true;
+
+            LogRefusal(context.Log, state, MovementRefusal.MapChanged);
+
+            return false;
+        }
 
         LogRefusal(context.Log, state, refusal);
 
