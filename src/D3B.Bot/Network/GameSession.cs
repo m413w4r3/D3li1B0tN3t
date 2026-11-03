@@ -32,6 +32,7 @@ public sealed class GameSession : IConnectionInterceptor
     private readonly ILogger _log;
     private readonly ConcurrentDictionary<TranslationProblemKey, int> _translationProblems = new();
     private Func<IMessage, bool>? _sendGate;
+    private Func<Task>? _sendBarrier;
 
     // Set from the client's read loop on its first request, read from the server's once the character is chosen.
     private volatile GameAccount? _account;
@@ -59,6 +60,18 @@ public sealed class GameSession : IConnectionInterceptor
         set
         {
             Volatile.Write(ref _sendGate, value);
+        }
+    }
+
+    internal Func<Task>? SendBarrier
+    {
+        get
+        {
+            return Volatile.Read(ref _sendBarrier);
+        }
+        set
+        {
+            Volatile.Write(ref _sendBarrier, value);
         }
     }
 
