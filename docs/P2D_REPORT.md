@@ -1,8 +1,13 @@
 # P2D — controlled migration to client 3.7.13.17
 
-**Status: the artifact/data layer is READY; a new real supervised session is BLOCKED until the
-P2D apphost is installed and verified.** No host, relay to Ankama, or Dofus client was started in
-this mission. The P2C `3.7.12.12` report is preserved in [P2C_REPORT](P2C_REPORT.md).
+**Status: the artifact/data layer is READY, and the P2D apphost is installed and verified. A new
+real supervised session is READY for a separately authorized P2E GO.** No host, relay to Ankama, or
+Dofus client was started in this mission. The P2C `3.7.12.12` report is preserved in
+[P2C_REPORT](P2C_REPORT.md).
+
+The source commit is `c9c0d5e0660ecbd373380f1f57f2015b6f459125` on the local branch
+`p2d-linux-3.7.13.17`; the apphost was published from that clean tree. The P2B apphost was backed up
+to `~/.local/share/D3B/private-backups/apphost-p2b-20261103T162503Z` before replacement.
 
 ## A. Build identity
 
@@ -154,11 +159,11 @@ same identity is not.
 | Pack / schema / mapping | **READY** — offline load, audit and translation pass |
 | Runtime data stage | **READY** — `data/3.7.13.17` installed, `data/3.7.12.12` intact |
 | Mapping pins | **READY** — `3.7.13.17.json`, pairs identical to `3.7.12.12` |
-| P2D apphost payload | **STAGED** — `/tmp/p2d-3.7.13.17/apphost`: launcher `de9565…`, `D3B.Host.dll` 5,632 B `f3e1155d…`, `D3B.Network.dll` 112,640 B `fb341cd4…`, `D3B.Bot.dll` 650,240 B `238d5025…`, informational version `0.0.0-alpha.0.11+55b0df7…`, no capability |
-| Live apphost | **P2B, not P2D** — the live `/home/nill/.local/share/D3B/apphost` still has the P2B payload; it does not contain the P2D guard |
-| New real supervised session | **BLOCKED** — install and verify the staged P2D apphost (or republish after commit), then use [LINUX_ACCEPTANCE](LINUX_ACCEPTANCE.md) |
-| No host/relay/Dofus launched in P2D | confirmed |
+| P2D apphost payload | **INSTALLED** — `/home/nill/.local/share/D3B/apphost`: launcher 78,192 B `de9565…`, `D3B.Host.dll` 5,632 B `c6589b05…`, `D3B.Network.dll` 112,640 B `279e2cf3…`, `D3B.Bot.dll` 650,240 B `a71bdb88…`, informational version `0.0.0-alpha.0.12+c9c0d5e…`, directory `0700`, launcher `0700`, payload `0600`, no capability |
+| Live apphost | **P2D installed** — the P2B publication is backed up at `~/.local/share/D3B/private-backups/apphost-p2b-20261103T162503Z` (`D3B.Host.dll` `0cc2…`, `D3B.Network.dll` `0ce5…`, `D3B.Bot.dll` `65e4…`), 369 files and a verified manifest |
+| New real supervised session | **READY** — subject to a separate owner GO; use [LINUX_ACCEPTANCE](LINUX_ACCEPTANCE.md); no host or Dofus has been started |
+| No host/relay/Dofus launched in P2D/P2E | confirmed |
 
-The next gate is an owner GO to install the verified P2D apphost (directory `0700`, launcher `0700`,
-no capability) and then a separate supervised 5555 session. The P2C evidence is preserved; the
-`3.7.12.12` mapping is not reused.
+The P2D apphost is installed; the next gate is the owner's separate GO for the P2E live session. No
+host or client is started by this report. The P2C evidence is preserved; the `3.7.12.12` mapping is
+not reused.

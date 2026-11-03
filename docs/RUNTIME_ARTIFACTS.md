@@ -20,9 +20,9 @@ The previous P2C build remains under `/home/nill/.local/share/D3B/data/3.7.12.12
 | `schema-1.binpb` | 170,287 B | `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0` |
 | `mapping-15.binpb` | 14,687 B | `c3ec03cef5fd07aca4d0de601f7444bd66258032c82a050067b719a0dfddea7d` |
 
-The live dedicated host apphost is `/home/nill/.local/share/D3B/apphost/D3B.Host`, 78,192 bytes, SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`, x86-64 ELF PIE, mode `0700`, owner `nill`. Its informational version is `0.0.0-alpha.0.10+0b84ba47f60631f6443f5b4301f1c3751f617beb`. The managed payload files are `D3B.Host.dll` (5,632 B, SHA-256 `0cc2a33565e8a2539c625eb9cd81b144e360bdc926e939f2f239edb364792f87`) and `D3B.Network.dll` (108,544 B, SHA-256 `0ce58ee5db62ff3d295ab7e75984a3993c4fc95e8990907a57759c9ba975d432`); `D3B.Bot.dll` is `65e446ed…`. The ELF launcher hash is stable across republishes and does not alone identify the managed code; verify the payload hashes and informational version too. No capability is applied. The 443 capability procedure is restricted to this apphost and requires separate owner authorization; do not set it on shared `dotnet` or run the host as root.
+The live dedicated host apphost is `/home/nill/.local/share/D3B/apphost/D3B.Host`, 78,192 bytes, SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`, x86-64 ELF PIE, mode `0700`, owner `nill`. Its informational version is `0.0.0-alpha.0.12+c9c0d5e0660ecbd373380f1f57f2015b6f459125`. The managed payload files are `D3B.Host.dll` (5,632 B, SHA-256 `c6589b05a620471b4ab75a8d505fbb65c2185f4f72939c88c2abed732806baee`), `D3B.Network.dll` (112,640 B, SHA-256 `279e2cf3d8f2c897c78fbdf58943fa9e5f8e03010d58c08b340dddbd8f243af4`) and `D3B.Bot.dll` (650,240 B, SHA-256 `a71bdb884384107b2fd815247809c6be5c601159cffc9e0b7964789629ed8578`). The directory is `0700`, the launcher `0700` and the payload `0600`. The ELF launcher hash is stable across republishes and does not alone identify the managed code; verify the payload hashes and informational version too. No capability is applied. The 443 capability procedure is restricted to this apphost and requires separate owner authorization; do not set it on shared `dotnet` or run the host as root.
 
-The P2D code build is staged at `/tmp/p2d-3.7.13.17/apphost`; it is **not** installed over the live P2B apphost. Its launcher is the same `de956557…` ELF, its `D3B.Host.dll` is 5,632 B `f3e1155d…`, `D3B.Network.dll` 112,640 B `fb341cd4…`, `D3B.Bot.dll` 650,240 B `238d5025…`, and its informational version is `0.0.0-alpha.0.11+55b0df7…`. It has no capability. A new real session is blocked until this payload is installed as a set, with the directory `0700` and launcher `0700`, and every hash re-verified.
+The P2D apphost was published from commit `c9c0d5e0660ecbd373380f1f57f2015b6f459125` and installed over the P2B apphost; the P2B publication is preserved at `~/.local/share/D3B/private-backups/apphost-p2b-20261103T162503Z` (`D3B.Host.dll` `0cc2a335…`, `D3B.Network.dll` `0ce58ee5…`, `D3B.Bot.dll` `65e446ed…`), verified against its own 369-file manifest. No old P2B managed DLL is mixed in the live set: the live 369-file manifest and the payload hashes above were verified after installation.
 
 ## Publish the apphost
 
@@ -34,7 +34,7 @@ The apphost was published from the repository root at integrated P2B master `0b8
 
 Republish after any code change, then verify the `D3B.Host` launcher and both `D3B.Host.dll` and `D3B.Network.dll` hashes, plus the informational version. If the 443 capability is ever authorized, reapply and verify it after republishing because replacing the apphost can remove it. No capability is applied here.
 
-The P2D build was published offline from the P2D working tree with the same command, but to `--output /tmp/p2d-3.7.13.17/apphost`; the live apphost was left at P2B. The staged identity is the one above (`D3B.Host.dll` `f3e1155d…`, `D3B.Network.dll` `fb341cd4…`, `D3B.Bot.dll` `238d5025…`, informational version `0.0.0-alpha.0.11+55b0df7…`). Do not copy a mixed set: install the whole staged directory and re-verify every hash.
+The P2D build was published from commit `c9c0d5e0660ecbd373380f1f57f2015b6f459125` with the same command, to `/tmp/p2e/apphost`, verified against a 369-file manifest, and installed at the live path. Its identity is `0.0.0-alpha.0.12+c9c0d5e…` with the payload hashes above. The P2B publication is backed up at `~/.local/share/D3B/private-backups/apphost-p2b-20261103T162503Z` and was verified against its own 369-file manifest. Do not copy a mixed set: install a whole published directory and re-verify every hash.
 
 ## Verify staged files
 
@@ -61,11 +61,11 @@ APPHOST_DIR=/home/nill/.local/share/D3B/apphost
 APPHOST="$APPHOST_DIR/D3B.Host"
 stat -c '%s %a %U %n' "$APPHOST"
 file "$APPHOST"
-sha256sum "$APPHOST" "$APPHOST_DIR/D3B.Host.dll" "$APPHOST_DIR/D3B.Network.dll"
+sha256sum "$APPHOST" "$APPHOST_DIR/D3B.Host.dll" "$APPHOST_DIR/D3B.Network.dll" "$APPHOST_DIR/D3B.Bot.dll"
 getcap "$APPHOST"
 ```
 
-Expected: `78192 700 nill`, x86-64 ELF PIE; launcher SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`; `D3B.Host.dll` SHA-256 `0cc2a33565e8a2539c625eb9cd81b144e360bdc926e939f2f239edb364792f87`; `D3B.Network.dll` SHA-256 `0ce58ee5db62ff3d295ab7e75984a3993c4fc95e8990907a57759c9ba975d432`; informational version `0.0.0-alpha.0.10+0b84ba47f60631f6443f5b4301f1c3751f617beb`; and no capability output. The launcher and both managed payload hashes must match; the launcher hash by itself does not prove the managed code identity. This block checks the **live P2B apphost**; the staged P2D payload has different managed hashes, listed at the top of this document.
+Expected: `78192 700 nill`, x86-64 ELF PIE; launcher SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`; `D3B.Host.dll` SHA-256 `c6589b05a620471b4ab75a8d505fbb65c2185f4f72939c88c2abed732806baee`; `D3B.Network.dll` SHA-256 `279e2cf3d8f2c897c78fbdf58943fa9e5f8e03010d58c08b340dddbd8f243af4`; `D3B.Bot.dll` SHA-256 `a71bdb884384107b2fd815247809c6be5c601159cffc9e0b7964789629ed8578`; informational version `0.0.0-alpha.0.12+c9c0d5e0660ecbd373380f1f57f2015b6f459125`; and no capability output. The launcher and managed payload hashes must match; the launcher hash by itself does not prove the managed code identity. The P2B backup at `~/.local/share/D3B/private-backups/apphost-p2b-20261103T162503Z` still has `0cc2a335…`, `0ce58ee5…` and `65e446ed…` for rollback.
 
 ## Regenerate into scratch
 

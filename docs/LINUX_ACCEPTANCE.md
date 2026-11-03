@@ -1,10 +1,10 @@
 # Linux client acceptance runbook
 
-**Status: the P2D artifact/data layer is READY for client `3.7.13.17`; a new real supervised session is BLOCKED until the verified P2D apphost is installed and verified.** The live apphost is still the P2B build and does not contain the P2D build-change guard. The 443 route is **BLOCKED** until explicit owner authorization for the dedicated apphost capability; no capability has been applied. No P2D host, relay, or client result is claimed.
+**Status: the P2D artifact/data layer is READY and the P2D apphost is installed and verified. A new real supervised session is READY for a separately authorized P2E GO.** The 443 route is **BLOCKED** until explicit owner authorization for the dedicated apphost capability; no capability has been applied. No P2E host, relay, or client result is claimed.
 
 ## P2D — current build 3.7.13.17
 
-The P2C supervised run on `3.7.12.12` worked at the TCP, connection-protocol and game-connection layers; the launcher then updated the client to `3.7.13.17`. Its evidence is preserved in [P2C_REPORT](P2C_REPORT.md); the P2D details and the remaining apphost gate are in [P2D_REPORT](P2D_REPORT.md). The values in sections A–E below are the historical P2C `3.7.12.12` run; use this section for the current build.
+The P2C supervised run on `3.7.12.12` worked at the TCP, connection-protocol and game-connection layers; the launcher then updated the client to `3.7.13.17`. Its evidence is preserved in [P2C_REPORT](P2C_REPORT.md); the P2D details and deployment record are in [P2D_REPORT](P2D_REPORT.md). The values in sections A–E below are the historical P2C `3.7.12.12` run; use this section for the current build.
 
 ### Identity
 
@@ -52,13 +52,13 @@ Use the P2D apphost after the gate below. The only change from the P2C settings 
 
 Offline validation: `LoggingTests.TheSupervisedArgumentEnablesTheGameSessionAtDebug` and `GameLogTests` pass; the full suite is green.
 
-### Apphost gate
+### Apphost installed
 
-The live apphost `/home/nill/.local/share/D3B/apphost` is still the P2B payload (`D3B.Host.dll` `0cc2a335…`, `D3B.Network.dll` `0ce58ee5…`, `D3B.Bot.dll` `65e446ed…`) and does not contain the P2D build-change guard. A verified P2D apphost is staged at `/tmp/p2d-3.7.13.17/apphost`: launcher 78,192 B `de956557…`, `D3B.Host.dll` 5,632 B `f3e1155d…`, `D3B.Network.dll` 112,640 B `fb341cd4…`, `D3B.Bot.dll` 650,240 B `238d5025…`, informational version `0.0.0-alpha.0.11+55b0df7…`, no capability. Do not start the host until this payload is installed as a set with the directory `0700`, the launcher `0700`, and every hash re-verified. This installation is a separate owner-authorized deployment step; the live apphost is not changed by P2D.
+The live apphost `/home/nill/.local/share/D3B/apphost` is the verified P2D payload published from commit `c9c0d5e0660ecbd373380f1f57f2015b6f459125`: launcher 78,192 B `de956557…`, `D3B.Host.dll` 5,632 B `c6589b05…`, `D3B.Network.dll` 112,640 B `279e2cf3…`, `D3B.Bot.dll` 650,240 B `a71bdb88…`, informational version `0.0.0-alpha.0.12+c9c0d5e…`, no capability. The directory is `0700`, the launcher `0700`, the payload `0600`, owner `nill`; a 369-file manifest verifies the set. The P2B publication is backed up at `~/.local/share/D3B/private-backups/apphost-p2b-20261103T162503Z` (`D3B.Host.dll` `0cc2…`, `D3B.Network.dll` `0ce5…`, `D3B.Bot.dll` `65e4…`), with a verified 369-file manifest. No host or client was started. The remaining gate is the owner's separate P2E GO for the live session.
 
 ### Restore rules for 3.7.13.17
 
-Before the redirect, create a new private byte-for-byte backup of the `3.7.13.17` `version` file and record its hash. **Do not apply the P2C `3.7.12.12` backup** (`28f3f4…`) to the updated client. If the launcher rewrites the version file during the session, the P2D host logs `The client's build changed from … to …`, stops instead of relaying a protocol it was not prepared for, and leaves the launcher's new Ankama configuration in place; the normal stop then preserves it. Do not relaunch, and do not reuse the `3.7.13.17` artifacts if the new build's version or build date changes again: repeat the P2D identity and regeneration procedure first.
+The P2E pre-test backup is `~/.local/share/D3B/private-backups/p2e-20261103T162601Z/version.original` (113 B, SHA-256 `796d68f1…`), byte-identical to the current `version`. **Do not apply the P2C `3.7.12.12` backup** (`28f3f4…`) to the updated client. If the launcher rewrites the version file during the session, the P2D host logs `The client's build changed from … to …`, stops instead of relaying a protocol it was not prepared for, and leaves the launcher's new Ankama configuration in place; the normal stop then preserves it. Do not relaunch, and do not reuse the `3.7.13.17` artifacts if the new build's version or build date changes again: repeat the P2D identity and regeneration procedure first.
 
 This runbook is a sequential procedure for one supervised connection-phase observation. Keep the client closed until section C. A human supervisor must remain present at the client and host. Stop at the first unexpected prompt, error, reconnect, or activity. Do not run as root, configure a bot activity, or enable captures.
 

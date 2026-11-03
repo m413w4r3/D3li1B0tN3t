@@ -6649,6 +6649,15 @@ pulling them into its walls. On the owner's capture of 4 fights the AI played, 1
 - **Checked**: build 0 warnings/0 errors; targeted Network 133/133, Bot 439/439, Engine 257/257; full suite serialized 1,265/1,265; format verification exit 0; offline runtime check `READY=True`. No host, relay or client was run in P2D.
 - **Boundary**: the data/artifact layer is READY; the live apphost is still the P2B payload. A new real session is blocked until the staged P2D apphost (`/tmp/p2d-3.7.13.17/apphost`) is installed as a set and verified. The P2C transport/connection result is preserved in [P2C_REPORT](P2C_REPORT.md).
 
+## D291: Install the P2D apphost and open the P2E gate
+
+*2026-11-03, P2E apphost deployment.*
+
+- **Decision**: publish the dedicated apphost from the P2D source commit `c9c0d5e0660ecbd373380f1f57f2015b6f459125`, verify a clean 369-file manifest, back up the P2B publication, and install the P2D build at `/home/nill/.local/share/D3B/apphost` with directory `0700`, launcher `0700`, payload `0600`, and no capability.
+- **Identity**: informational version `0.0.0-alpha.0.12+c9c0d5e…`; launcher 78,192 B `de956557…`; `D3B.Host.dll` 5,632 B `c6589b05…`; `D3B.Network.dll` 112,640 B `279e2cf3…`; `D3B.Bot.dll` 650,240 B `a71bdb88…`; every `D3B.*.dll` differs from the P2B set. The P2B backup is `~/.local/share/D3B/private-backups/apphost-p2b-20261103T162503Z` (`0cc2…`, `0ce5…`, `65e4…`), verified against its own 369-file manifest.
+- **Preflight**: client `3.7.13.17`, build date `2026-11-03T14:11:23Z`, binary/metadata hashes match P2D; `data/3.7.13.17` matches the audit; the old pack is refused (version/build date); the client points to Ankama; ports 5555/5556 are free; the current version file is backed up at `~/.local/share/D3B/private-backups/p2e-20261103T162601Z/version.original` (`796d68f1…`); captures are absent; the database has 1 account, 1 character, 0 runs, 0 characters with `StartsOnConnection`, and 0 characters with a profile; no host or Dofus process exists. No host, relay or client was started.
+- **Boundary**: READY FOR P2E LIVE TEST, subject to a separate owner GO. The apphost source commit is `c9c0d5e`; the documentation update is a later docs-only commit. Do not push or open a pull request.
+
 ## Open questions
 
 Settled questions leave this table, and the decision that settles one says so.
