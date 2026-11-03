@@ -10,7 +10,17 @@ The host reads build-specific data from `/home/nill/.local/share/D3B/data`. The 
 | `schema-1.binpb` | 170,287 B | `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0` |
 | `mapping-15.binpb` | 14,687 B | `c3ec03cef5fd07aca4d0de601f7444bd66258032c82a050067b719a0dfddea7d` |
 
-The dedicated host apphost is `/home/nill/.local/share/D3B/apphost/D3B.Host`, 78,192 bytes, SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`, x86-64 ELF PIE, mode `0700`, owner `nill`. No capability is applied. The 443 capability procedure is restricted to this apphost and requires separate owner authorization; do not set it on shared `dotnet` or run the host as root.
+The dedicated host apphost is `/home/nill/.local/share/D3B/apphost/D3B.Host`, 78,192 bytes, SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`, x86-64 ELF PIE, mode `0700`, owner `nill`. Its informational version is `0.0.0-alpha.0.10+0b84ba47f60631f6443f5b4301f1c3751f617beb`. The managed payload files are `D3B.Host.dll` (5,632 B, SHA-256 `0cc2a33565e8a2539c625eb9cd81b144e360bdc926e939f2f239edb364792f87`) and `D3B.Network.dll` (108,544 B, SHA-256 `0ce58ee5db62ff3d295ab7e75984a3993c4fc95e8990907a57759c9ba975d432`). The ELF launcher hash is stable across this republish and does not alone identify the managed code; verify the payload hashes and informational version too. No capability is applied. The 443 capability procedure is restricted to this apphost and requires separate owner authorization; do not set it on shared `dotnet` or run the host as root.
+
+## Publish the apphost
+
+The apphost was published from the repository root at integrated P2B master `0b84ba47f60631f6443f5b4301f1c3751f617beb` with:
+
+```sh
+/home/nill/.dotnet/dotnet publish src/D3B.Host/D3B.Host.csproj --configuration Release --runtime linux-x64 --self-contained true -p:UseAppHost=true --artifacts-path /tmp/p2b-apphost/build --output /home/nill/.local/share/D3B/apphost -p:RestoreSources=/tmp/p2a-impl/emptyfeed -p:RestoreIgnoreFailedSources=true --verbosity minimal
+```
+
+Republish after any code change, then verify the `D3B.Host` launcher and both `D3B.Host.dll` and `D3B.Network.dll` hashes, plus the informational version. If the 443 capability is ever authorized, reapply and verify it after republishing because replacing the apphost can remove it. No capability is applied here.
 
 ## Verify staged files
 
@@ -33,14 +43,15 @@ stat -c '%a %U %n' "$DATA_ROOT" "$DATA" "$DATA/data-8.pack" "$DATA/schema-1.binp
 All checksums must pass, the two directories must report mode `700` and owner `nill`, and the files must report mode `600` and owner `nill`. The apphost check is:
 
 ```sh
-APPHOST=/home/nill/.local/share/D3B/apphost/D3B.Host
+APPHOST_DIR=/home/nill/.local/share/D3B/apphost
+APPHOST="$APPHOST_DIR/D3B.Host"
 stat -c '%s %a %U %n' "$APPHOST"
 file "$APPHOST"
-sha256sum "$APPHOST"
+sha256sum "$APPHOST" "$APPHOST_DIR/D3B.Host.dll" "$APPHOST_DIR/D3B.Network.dll"
 getcap "$APPHOST"
 ```
 
-Expected: `78192 700 nill`, x86-64 ELF PIE, the hash above, and no capability output.
+Expected: `78192 700 nill`, x86-64 ELF PIE; launcher SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`; `D3B.Host.dll` SHA-256 `0cc2a33565e8a2539c625eb9cd81b144e360bdc926e939f2f239edb364792f87`; `D3B.Network.dll` SHA-256 `0ce58ee5db62ff3d295ab7e75984a3993c4fc95e8990907a57759c9ba975d432`; informational version `0.0.0-alpha.0.10+0b84ba47f60631f6443f5b4301f1c3751f617beb`; and no capability output. The launcher and both managed payload hashes must match; the launcher hash by itself does not prove the managed code identity.
 
 ## Regenerate into scratch
 
