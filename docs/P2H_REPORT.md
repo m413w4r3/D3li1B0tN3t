@@ -281,9 +281,12 @@ GREEN evidence with SDK 10.0.403:
   only from the local NuGet cache with package auditing disabled.
 - `/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore` and `git diff --check` passed.
 
-The environment denied the Microsoft Testing Platform's named-pipe handshake, so the focused and full project runs used
-the local xUnit v3 in-process runner directly, sequentially, instead of `dotnet test`. No test data, captures, client,
-host, relay, or game were used.
+The environment denied the Microsoft Testing Platform's named-pipe handshake during the agent's run, so its focused and
+full project runs used the local xUnit v3 in-process runner directly, sequentially, instead of `dotnet test`. The parent
+reproduced the integrated result with `dotnet test` on the merged tree: the focused set passed 221/221,
+`D3B.Bot.Tests` passed 524/524, and the nine projects run serially passed 1,350/1,350, 0 failed, 0 skipped. The parent
+also reproduced the RED commit `c37bd2b` at 5 total, 4 failed, 1 passed; the build passed with 0 warnings and 0 errors;
+formatting and `git diff --check` passed. No test data, captures, client, host, relay, or game were used.
 
 The barrier covers every frame already posted to the bot inbox. A frame still held by the relay's read loop has not yet
 reached the inbox and can arrive after the barrier; the gate therefore cannot guarantee synchronization with an
