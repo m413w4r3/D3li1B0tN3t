@@ -126,6 +126,23 @@ public sealed class BankingTests
     }
 
     [Fact]
+    public async Task OpeningBankReturnsBusyWithoutTalkingFromAnUntrustedPosition()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await InTheBankAsync(play);
+        connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight });
+        connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Roleplay });
+        await bot.ProcessedAsync();
+
+        Assert.False(bot.State.IsPositionTrusted);
+
+        var outcome = await bot.RunAsync((context, token) => context.OpenBankAsync(token), TestContext.Current.CancellationToken);
+
+        Assert.Equal(BankOutcome.Busy, outcome);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
     public async Task ThePlayerClosingTheBankInterruptsBankingAndPausesTheBot()
     {
         await using var play = new TestPlay();

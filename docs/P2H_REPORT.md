@@ -123,9 +123,9 @@ published and reviewed for that test. It was **not executed** in P2H.
 
 The independent P2H audit found four gaps in the integrated implementation. This follow-up fixes each:
 
-1. **Raw movement sends bypassed the guard.** `BotContext.SendAsync` now rejects raw movement and map-transition
-   requests outside a fight before the display wait and again just before sending. Fight movement is allowed only while
-   the state remains in a fight. Production movement and transition sends use `SendGuardedAsync`.
+1. **Raw movement sends bypassed the guard.** `BotContext.SendAsync` rejects raw map transitions in every state and raw
+   movement unless the current behavior is a fight behavior and the state remains in a fight. It checks before the display
+   wait and again just before sending. Production movement and transition sends use `SendGuardedAsync`.
 2. **A delayed refusal could be applied to a newly placed map.** `CharacterState.PendingMovementMapId` records the map
    awaiting a movement answer. Client requests and guarded sends set it; map changes, accepted movement, confirmations,
    refusals, cancels, context changes, and walk settlement clear it. A refusal changes position only when the current map,
@@ -173,3 +173,69 @@ trust after release.
 
 No live client or game was run. The next live action still requires a **NEW OWNER GO**, plus publication and review of the
 build for that action. The earlier P2H live-action note is not authorization for this follow-up.
+
+## Second audit follow-up: session send gate and NPC continuations
+
+The second independent audit found that the first follow-up still trusted session sends too broadly and could leave a
+pending movement marker after a transport failure. This lot closes those paths:
+
+1. **Session send gate.** `GameSession` installs a default gate before any observer callback, so an observer registered
+   before `Bots` cannot send movement during session start. `Bots.OnSessionStarted` installs the same default, which blocks
+   every movement-capable request until bind. At bind, the session gate becomes `BotActor.CanSendRawRequest`; raw
+   `MapMovementRequest` then requires both fight state and a running fight behavior. `NpcDialogReplyRequest` requires a
+   connected, trusted, idle dialog state. Raw map changes, teleports, haven-bag requests, interactive uses, and NPC action
+   requests remain denied by the session gate.
+2. **Guarded movement and NPC policy.** `BotContext.SendAsync` allows raw movement only from a fight behavior while the
+   character remains in a fight. It always rejects raw map transitions and `NpcActionRequest`. Banking now sends its NPC
+   action through `SendGuardedAsync`; Banking and `MapChange.ThroughNpcAsync` recheck dialog trust before every raw reply,
+   cancel their expectations, and return Busy when the state no longer permits it. `SendGuardedAsync` stays internal and
+   bypasses the session gate only after each caller supplies its current movement guard; that call-site review is an
+   invariant because the method cannot validate a caller's predicate.
+3. **Failed-send cleanup.** Once a guarded send posts `PendingMovementMapId`, any transport or cancellation exception
+   clears the marker and is rethrown. The false-guard cleanup remains covered.
+
+The test-only commit `80b901c` was RED: `BotActorTests` ran 34 tests, with **9 failed and 25 passed**. The failures showed
+raw NPC/map transitions sent from a behavior, roleplay movement allowed during a fight, public observer sends allowed
+from roleplay and before bot binding, untrusted dialog replies allowed, and a closed transport leaving the marker at map
+`191104002`. The fight behavior positive case passed before the implementation.
+
+The nine failed tests were:
+
+- `AClosedConnectionDuringGuardedSendClearsThePendingMovementMap`: expected a null marker; actual `191104002`.
+- `RawMapTransitionRequestsAreProhibitedDuringFight`: expected `InvalidOperationException`; no exception was thrown.
+- `AnObserverCannotSendANpcDialogReplyFromAnUntrustedDialogPosition`: expected `InvalidOperationException`; no exception was thrown.
+- `RawMapTransitionRequestsAreProhibitedOutsideFight`: expected `InvalidOperationException` for the raw NPC action; no exception was thrown.
+- `ARoleplayBehaviorCannotSendRawMovementDuringAFight`: expected `InvalidOperationException`; no exception was thrown.
+- `AnObserverCannotSendRawMovementDuringAFightWithoutAFightBehavior`: expected `InvalidOperationException`; no exception was thrown.
+- `AnObserverCannotSendRawMovementWhileAFightBehaviorRuns`: expected `InvalidOperationException`; no exception was thrown.
+- `AnObserverRegisteredBeforeBotsCannotSendMovementDuringSessionStart`: expected `InvalidOperationException`; no exception was thrown.
+- `AnObserverCannotSendRawMovementFromATrustedRoleplayPosition`: expected `InvalidOperationException`; no exception was thrown.
+
+With SDK 10.0.403, the final targeted P2H/movement/runtime/element-use/banking/fight/session filter passed **216/216**.
+The final `D3B.Bot.Tests` run reached 519 tests: **508 passed and 11 host tests failed** while starting file watchers,
+because the shared environment reached its 128 inotify-instance limit. A preceding full solution run reached 1,344 tests;
+1,318 passed and 26 host tests hit the same limit, including a retry with one reported processor. The full solution run
+preceded the final active-fight observer regression test. `dotnet build D3B.slnx` passed with 0 warnings and 0 errors.
+The final format verification and `git diff --check` passed. No live client, host, relay, game, or capture was run.
+
+The RED command and final verification commands were:
+
+```sh
+/home/nill/.dotnet/dotnet test tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj --no-build --filter 'FullyQualifiedName~D3B.Bot.Tests.Runtime.BotActorTests' --max-parallel-test-modules 1
+/home/nill/.dotnet/dotnet test tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj --no-build --filter 'FullyQualifiedName~P2HPositionTrustTests|FullyQualifiedName~MovementGuardTests|FullyQualifiedName~MapWalkTests|FullyQualifiedName~MapChangeTests|FullyQualifiedName~WorldTravelTests|FullyQualifiedName~WorldTravelSimulationTests|FullyQualifiedName~CharacterEventsTests|FullyQualifiedName~CharacterPositionReliabilityTests|FullyQualifiedName~PositionLoggingTests|FullyQualifiedName~ElementUseTests|FullyQualifiedName~BotActorTests|FullyQualifiedName~BankingTests|FullyQualifiedName~FightPlayTests|FullyQualifiedName~GameSessionTests' --max-parallel-test-modules 1
+/home/nill/.dotnet/dotnet test tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj --no-build --max-parallel-test-modules 1
+/home/nill/.dotnet/dotnet build D3B.slnx
+/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore
+git diff --check
+```
+
+The full solution test command was run exactly as requested, then retried with one reported processor; both attempts
+reported 1,318 passed and 26 failures from the shared inotify-instance limit:
+
+```sh
+/home/nill/.dotnet/dotnet test --solution D3B.slnx --max-parallel-test-modules 1 --no-build
+DOTNET_PROCESSOR_COUNT=1 /home/nill/.dotnet/dotnet test --solution D3B.slnx --max-parallel-test-modules 1 --no-build
+```
+
+The ordered-connection assumption remains: refusals have no request correlation, so a refusal crossing a newer request on
+the same map is still indistinguishable. A mapless movement announcement can still match a newly placed cell.

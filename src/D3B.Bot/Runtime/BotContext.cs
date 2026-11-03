@@ -29,6 +29,15 @@ public sealed class BotContext
 
     internal bool IsConnected => _bot.IsConnected;
 
+    internal bool IsFightBehavior => _behavior.IsFight;
+
+    internal bool CanSendDialogReply => IsConnected
+        && State.IsInDialog
+        && State.IsPositionTrusted
+        && !State.IsWalking
+        && !State.IsWalkHeld
+        && !State.IsFighting;
+
     /// <summary>Gets the maps of the installed build's pack.</summary>
     public GameMaps Maps => _bot.Maps;
 
@@ -132,15 +141,17 @@ public sealed class BotContext
     /// <param name="request">The readable request, whole.</param>
     /// <param name="cancellationToken">Stops waiting; a request not gone yet then never goes.</param>
     /// <returns>A task that completes once the request went.</returns>
-    /// <exception cref="InvalidOperationException">The request starts automated movement or a map transition outside a fight; use a guarded movement action.</exception>
+    /// <exception cref="InvalidOperationException">The request is not a fight walk from a fight behavior, or is a raw map-transition request; use a guarded movement action.</exception>
     /// <remarks>
     /// The client follows what the server shows it only once it has drawn the map, its display time after the server
     /// placed the character on it, half a second measured (<see cref="BotDelays.Display"/>): a walk shown 1 or 50 ms after
     /// was never confirmed, and a door used before the client asked what is on the new map left it no longer confirming
     /// walks (D73, D77). A request sent sooner waits until then. Outside fights, raw <see cref="MapMovementRequest"/>,
-    /// <see cref="MapChangeRequest"/>, <see cref="TeleportRequest"/>, <see cref="HavenBagEnterRequest"/>, and
-    /// <see cref="InteractiveUseRequest"/> requests are prohibited; use the guarded movement actions instead. Fight
-    /// movement requests are allowed only while <see cref="CharacterState.IsFighting"/> is true.
+    /// <see cref="MapChangeRequest"/>, <see cref="TeleportRequest"/>, <see cref="HavenBagEnterRequest"/>,
+    /// <see cref="InteractiveUseRequest"/>, and <see cref="NpcActionRequest"/> requests are prohibited; use the guarded
+    /// movement actions instead. Raw fight movement is allowed only from a fight behavior while
+    /// <see cref="CharacterState.IsFighting"/> is true. Dialog replies are allowed only while the session's send gate
+    /// sees a trusted, connected dialog state.
     /// </remarks>
     public async Task SendAsync(IMessage request, CancellationToken cancellationToken)
     {
@@ -150,7 +161,7 @@ public sealed class BotContext
         await WaitUntilDrawnAsync(cancellationToken).ConfigureAwait(false);
 
         EnsureRawMovementSendAllowed(request);
-        await _behavior.Session.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await _bot.SendFromBehaviorAsync(_behavior, request, cancellationToken).ConfigureAwait(false);
     }
 
     internal async Task<bool> SendGuardedAsync(IMessage request, Func<bool> canSend, CancellationToken cancellationToken, Action? beforeSend = null)
@@ -173,7 +184,16 @@ public sealed class BotContext
         if (AwaitsMovementAnswer(request))
             MarkMovementRequested(RequestedMovementMap(request, requestedMapId));
 
-        await _behavior.Session.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        // This bypasses the session gate; every caller must supply a current movement guard that this method cannot verify.
+        try
+        {
+            await _behavior.Session.SendUnguardedAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            MarkMovementRequested(null);
+            throw;
+        }
 
         return true;
     }
@@ -197,11 +217,16 @@ public sealed class BotContext
 
     private void EnsureRawMovementSendAllowed(IMessage request)
     {
-        if (request is MapMovementRequest or MapChangeRequest or TeleportRequest or HavenBagEnterRequest or InteractiveUseRequest)
+        if (request is MapMovementRequest)
         {
-            if (!_bot.State.IsFighting)
-                throw new InvalidOperationException("Automated movement requests must use the guarded movement actions.");
+            if (State.IsFighting && IsFightBehavior)
+                return;
+
+            throw new InvalidOperationException("Automated movement requests must use the guarded movement actions.");
         }
+
+        if (request is MapChangeRequest or TeleportRequest or HavenBagEnterRequest or InteractiveUseRequest or NpcActionRequest)
+            throw new InvalidOperationException("Automated movement requests must use the guarded movement actions.");
     }
 
     private static bool AwaitsMovementAnswer(IMessage request)

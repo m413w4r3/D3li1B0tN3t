@@ -28,7 +28,7 @@ public sealed class GameReplayTests : IDisposable
         RedirectDirectory = "no-redirect",
     };
 
-    private static readonly MapMovementRequest _walk = new() { KeyMovements = { 398, 4495, 457, 461 }, MapId = 188744706 };
+    private static readonly DialogLeaveRequest _injected = new();
 
     private readonly ProtocolTranslation _translation = TestGame.Translation();
     private readonly FakeLogCollector _log = new();
@@ -149,12 +149,14 @@ public sealed class GameReplayTests : IDisposable
                 if (direction is RelayDirection.FromServer && frame.Content is MapInformationEvent)
                 {
                     lock (sending)
-                        sending.Add(session.SendAsync(_walk, TestContext.Current.CancellationToken));
+                    {
+                        sending.Add(session.SendAsync(_injected, TestContext.Current.CancellationToken));
+                    }
                 }
             },
         };
         var decoder = new RelayDecoder(_translation, new GameServerSelections(_settings, TimeProvider.System), new GameAccounts(_settings.SelectionLifetime, TimeProvider.System), [observer], _logs);
-        var injected = Framed(_translation.EncodeGameRequest(_walk)).Length;
+        var injected = Framed(_translation.EncodeGameRequest(_injected)).Length;
 
         await using var relay = await TestRelay.StartAsync(capturesDirectory: _captures.Path, interceptor: decoder);
 
@@ -234,7 +236,7 @@ public sealed class GameReplayTests : IDisposable
 
         Assert.True(request.IsUnderstood, request.Problem);
         Assert.Equal(ProtocolTranslation.UncountedRequestId, request.Envelope.Request.Id);
-        Assert.Equal(_walk, request.Content);
+        Assert.Equal(_injected, request.Content);
     }
 
     [Fact]
@@ -255,7 +257,7 @@ public sealed class GameReplayTests : IDisposable
             ],
             observer.Frames.Select(frame => (frame.Direction, frame.Frame.ReadableType?.Name)));
         Assert.All(observer.Frames, frame => Assert.True(frame.Frame.IsRead));
-        Assert.Contains(_log.GetSnapshot(), record => record.Level is LogLevel.Information && record.Message.Contains("D3B sent MapMovementRequest", StringComparison.Ordinal));
+        Assert.Contains(_log.GetSnapshot(), record => record.Level is LogLevel.Information && record.Message.Contains("D3B sent DialogLeaveRequest", StringComparison.Ordinal));
         Assert.DoesNotContain(_log.GetSnapshot(), record => record.Message.Contains(Secret, StringComparison.Ordinal));
     }
 
@@ -278,7 +280,7 @@ public sealed class GameReplayTests : IDisposable
 
         var sent = Assert.Single(Frames(await ToEndAsync(injected.Reader)));
 
-        Assert.Equal(_walk, _translation.DecodeGame(new ReadOnlySequence<byte>(sent)).Content);
+        Assert.Equal(_injected, _translation.DecodeGame(new ReadOnlySequence<byte>(sent)).Content);
         Assert.Equal(3, Frames(await ToEndAsync(fromClient.Reader)).Count);
     }
 }

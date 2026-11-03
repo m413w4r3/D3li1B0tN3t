@@ -6736,3 +6736,31 @@ Settled questions leave this table, and the decision that settles one says so.
   refusal crossing a newer request on the same map remains indistinguishable; the marker makes cross-map stale refusals
   harmless. A mapless movement announcement can still match a newly placed cell.
 - **Boundary**: The next live action still requires a NEW OWNER GO and publication and review of the build for that action.
+
+## D295: Gate session sends by bot state
+
+*2026-11-03, P2H second audit-fix lot.*
+
+- **Session gate**: `GameSession` initializes its send gate before any observer callback, blocking every movement-capable
+  request until a bot binds. `Bots.OnSessionStarted` installs that default gate as well; bind replaces it with
+  `BotActor.CanSendRawRequest`. Public `GameSession.SendAsync` checks the gate for each request. The internal
+  `SendUnguardedAsync` is used by `BotContext.SendGuardedAsync` only after its caller's guard passes. Fight movement
+  permission is scoped to the active behavior's send call, so an observer cannot borrow the permission while a fight
+  behavior happens to run.
+- **Fight movement**: Raw `MapMovementRequest` is allowed only while the character is fighting and the running behavior
+  was started with `Readiness.InFight`. Raw map changes, teleports, haven-bag requests, interactive uses, and NPC actions
+  are always prohibited. A raw NPC dialog reply requires a connected, trusted, idle dialog state; Banking and
+  `MapChange.ThroughNpcAsync` check the same conditions before sending and cancel expectations when they fail.
+- **Review invariant**: `SendGuardedAsync` remains internal and does not validate request type or trust itself. Every
+  caller must supply a current movement guard; review all call sites when this method changes or new calls are added.
+- **Marker cleanup**: A transport or cancellation failure after posting `PendingMovementMapId` clears the marker and
+  rethrows. A false guard continues to clear it before returning.
+- **Evidence**: The test-only commit `80b901c` ran RED at 9 failures and 25 passes in 34 `BotActorTests`. The targeted
+  P2H/movement/runtime/element-use/banking/fight/session filter passed 216/216. The final `D3B.Bot.Tests` run reached
+  519 tests: 508 passed and 11 host tests failed while starting file watchers at the shared 128 inotify-instance limit.
+  `dotnet build D3B.slnx` passed with 0 warnings and errors. A preceding full solution attempt reported 1,318/1,344
+  passed and 26 host-test failures from the same limit, including a retry with one reported processor. Formatting and
+  `git diff --check` passed. No live client, host, relay, game, or capture was run.
+- **Residual**: One ordered game connection is assumed. The refusal protocol has no request correlation, so a refusal
+  crossing a newer request on the same map remains indistinguishable. A mapless movement announcement may still match a
+  newly placed cell.

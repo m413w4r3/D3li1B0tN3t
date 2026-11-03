@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Concurrent;
+using D3B.Bot.Runtime;
 using D3B.Network.Relay;
 using D3B.Protocol.Game;
 using D3B.Protocol.Translation;
@@ -30,6 +31,7 @@ public sealed class GameSession : IConnectionInterceptor
     private readonly IReadOnlyList<IGameObserver> _observers;
     private readonly ILogger _log;
     private readonly ConcurrentDictionary<TranslationProblemKey, int> _translationProblems = new();
+    private Func<IMessage, bool>? _sendGate;
 
     // Set from the client's read loop on its first request, read from the server's once the character is chosen.
     private volatile GameAccount? _account;
@@ -48,6 +50,18 @@ public sealed class GameSession : IConnectionInterceptor
     /// </remarks>
     public GameAccount? Account => _account;
 
+    internal Func<IMessage, bool>? SendGate
+    {
+        get
+        {
+            return Volatile.Read(ref _sendGate);
+        }
+        set
+        {
+            Volatile.Write(ref _sendGate, value);
+        }
+    }
+
     private GameSession(IRelayConnection connection, ProtocolTranslation translation, GameAccounts accounts, IReadOnlyList<IGameObserver> observers, ILogger log)
     {
         _connection = connection;
@@ -55,6 +69,7 @@ public sealed class GameSession : IConnectionInterceptor
         _accounts = accounts;
         _observers = observers;
         _log = log;
+        SendGate = request => !MovementRequests.IsMovementCapable(request);
     }
 
     /// <summary>Starts reading a game connection, and shows it to the observers before any of its frames.</summary>
@@ -95,8 +110,19 @@ public sealed class GameSession : IConnectionInterceptor
     /// <param name="cancellationToken">Stops waiting; a request not gone yet then never goes.</param>
     /// <returns>A task that completes once the request went to the server's side.</returns>
     /// <exception cref="ArgumentException">The request is no message the game's frames carry, the mapping lacks it, or it is partial.</exception>
+    /// <exception cref="InvalidOperationException">The request is not allowed from the current bot state.</exception>
     /// <exception cref="RelayInjectionException">The connection closed before the request went.</exception>
     public async Task SendAsync(IMessage request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (SendGate is { } gate && !gate(request))
+            throw new InvalidOperationException("The request is not allowed from the current bot state.");
+
+        await SendUnguardedAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal async Task SendUnguardedAsync(IMessage request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 

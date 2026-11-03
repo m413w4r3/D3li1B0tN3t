@@ -441,6 +441,15 @@ public static class MapChange
 
             var answered = context.Expect((side, message, _) => side is RelayDirection.FromServer && message is NpcDialogQuestionEvent or DialogLeaveEvent or MapCurrentEvent);
 
+            if (!context.CanSendDialogReply)
+            {
+                answered.Cancel();
+                current.Cancel();
+                placed.Cancel();
+
+                return MapChangeOutcome.Busy;
+            }
+
             await context.SendAsync(new NpcDialogReplyRequest { ReplyId = offered[0] }, cancellationToken).ConfigureAwait(false);
 
             switch (await answered.WaitAsync(context.Delays.Answer, cancellationToken).ConfigureAwait(false))

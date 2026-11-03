@@ -198,16 +198,40 @@ public sealed class GameSessionTests : IDisposable
 
         Start(observer);
 
-        var reply = new NpcDialogReplyRequest { ReplyId = 64361 };
+        var request = new DialogLeaveRequest();
 
-        await observer.Sessions[0].SendAsync(reply, TestContext.Current.CancellationToken);
+        await observer.Sessions[0].SendAsync(request, TestContext.Current.CancellationToken);
 
         var envelope = GameMessage.Parser.ParseFrom(Assert.Single(_connection.Sent));
 
         Assert.Equal(ProtocolTranslation.UncountedRequestId, envelope.Request.Id);
-        Assert.Equal(TestGame.TypeUrl(reply), envelope.Request.Content.TypeUrl);
-        Assert.Equal(reply, NpcDialogReplyRequest.Parser.ParseFrom(envelope.Request.Content.Value));
-        Assert.Contains(_log.GetSnapshot(), record => record.Level is LogLevel.Information && record.Message == $"Connection g1: D3B sent NpcDialogReplyRequest, {_connection.Sent[0].Length} bytes");
+        Assert.Equal(TestGame.TypeUrl(request), envelope.Request.Content.TypeUrl);
+        Assert.Equal(request, DialogLeaveRequest.Parser.ParseFrom(envelope.Request.Content.Value));
+        Assert.Contains(_log.GetSnapshot(), record => record.Level is LogLevel.Information && record.Message == $"Connection g1: D3B sent DialogLeaveRequest, {_connection.Sent[0].Length} bytes");
+    }
+
+    [Fact]
+    public async Task AnUnboundSessionBlocksEveryMovementCapableRequest()
+    {
+        var observer = new RecordingObserver();
+
+        Start(observer);
+
+        IMessage[] requests =
+        [
+            new MapMovementRequest { MapId = 1 },
+            new MapChangeRequest { MapId = 1 },
+            new TeleportRequest { MapId = 1 },
+            new HavenBagEnterRequest { OwnerId = 1 },
+            new InteractiveUseRequest { ElementId = 1, SkillInstanceId = 1 },
+            new NpcActionRequest { Action = 3, MapId = 1, NpcActorId = -1 },
+            new NpcDialogReplyRequest { ReplyId = 1 },
+        ];
+
+        foreach (var request in requests)
+            await Assert.ThrowsAsync<InvalidOperationException>(() => observer.Sessions[0].SendAsync(request, TestContext.Current.CancellationToken));
+
+        Assert.Empty(_connection.Sent);
     }
 
     [Fact]

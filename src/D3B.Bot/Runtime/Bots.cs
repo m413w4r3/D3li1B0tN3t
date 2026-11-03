@@ -131,6 +131,7 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
 
     void IGameObserver.OnSessionStarted(GameSession session)
     {
+        session.SendGate = request => !MovementRequests.IsMovementCapable(request);
         var binding = new Binding();
 
         _sessions[session] = binding;
@@ -176,6 +177,7 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
             }
         }
 
+        session.SendGate = bot.CanSendRawRequest;
         bot.Attach(session, state);
         binding.Bot = bot;
 

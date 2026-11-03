@@ -206,6 +206,15 @@ after a map change and new placement harmless. The protocol does not correlate r
 requests, so one ordered game connection is assumed; a refusal that crosses a newer request on the
 same map still cannot be distinguished. The absent MapCurrentEvent.map_id presence warning remains.
 
+P2H's second audit-fix lot adds a `GameSession` send gate before observer callbacks and replaces it when `Bots` binds the
+session. The gate blocks movement-capable sends until a bot is attached, permits raw `MapMovementRequest` only while a
+fight behavior runs in fight state, and permits raw dialog replies only from a connected, trusted, idle dialog. Raw
+`NpcActionRequest` and other map-transition requests are denied; Banking uses a guarded NPC action and both Banking and
+`MapChange.ThroughNpcAsync` recheck dialog trust before replies. `SendGuardedAsync` remains internal, bypasses the session
+gate after the caller's movement guard, and requires review of every call site. Fight movement permission is scoped to the
+active behavior's send call so observers cannot borrow it. The refusal's same-map correlation
+ambiguity and the mapless movement-announcement risk remain.
+
 ## F. Supervised visual test and reproducible procedure
 
 **Not run during P2F.** The described observation-only visual validation was subsequently executed

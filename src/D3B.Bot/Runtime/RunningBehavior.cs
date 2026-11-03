@@ -13,14 +13,17 @@ internal sealed class RunningBehavior
 
     public GameSession Session { get; }
 
+    public bool IsFight { get; }
+
     public CancellationToken Token { get; }
 
     /// <summary>Gets why the behavior was interrupted, or <see langword="null"/> while it was not.</summary>
     public Interruption? Reason => Volatile.Read(ref _reason) is var reason and not NotInterrupted ? (Interruption)reason : null;
 
-    public RunningBehavior(GameSession session, CancellationToken cancellationToken)
+    public RunningBehavior(GameSession session, bool isFight, CancellationToken cancellationToken)
     {
         Session = session;
+        IsFight = isFight;
         _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Token = _cancellation.Token;
     }

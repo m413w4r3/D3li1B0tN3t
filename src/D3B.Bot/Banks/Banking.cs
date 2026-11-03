@@ -260,7 +260,15 @@ public static class Banking
     {
         var asked = context.Expect((side, message, _) => side is RelayDirection.FromServer && message is NpcDialogQuestionEvent or NpcActionErrorEvent);
 
-        await context.SendAsync(new NpcActionRequest { Action = Banker.TalkAction, MapId = mapId, NpcActorId = npc.ActorId }, cancellationToken).ConfigureAwait(false);
+        if (!await context.SendGuardedAsync(
+            new NpcActionRequest { Action = Banker.TalkAction, MapId = mapId, NpcActorId = npc.ActorId },
+            () => MovementGuard.IsAllowed(context),
+            cancellationToken).ConfigureAwait(false))
+        {
+            asked.Cancel();
+
+            return BankOutcome.Busy;
+        }
 
         switch (await asked.WaitAsync(context.Delays.Answer, cancellationToken).ConfigureAwait(false))
         {
@@ -288,6 +296,14 @@ public static class Banking
         // The storage's content comes last of what opens the bank; a question again refuses the reply.
         var opened = context.Expect((side, message, state) => side is RelayDirection.FromServer
             && (message is StorageContentEvent && state.Storage is not null || message is NpcDialogQuestionEvent));
+
+        if (!context.CanSendDialogReply)
+        {
+            opened.Cancel();
+            asked.Cancel();
+
+            return BankOutcome.Busy;
+        }
 
         await context.SendAsync(new NpcDialogReplyRequest { ReplyId = reply }, cancellationToken).ConfigureAwait(false);
 

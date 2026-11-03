@@ -48,15 +48,16 @@ public sealed class BotActor : IAsyncDisposable
     private readonly List<Waiter> _waiters = [];
     private readonly List<Starting> _parked = [];
     private readonly Lock _activityLock = new();
+    private readonly AsyncLocal<RunningBehavior?> _movementSendBehavior = new();
     private readonly ILogger _log;
     private readonly Lazy<WorldPathfinder> _world;
     private readonly Lazy<BankDirectory> _banks;
     private readonly Func<BotDelays> _delays;
     private readonly Task _loop;
 
-    // Only the loop reads and writes these.
+    // The loop writes these; the session gate reads the current behavior.
     private GameSession? _session;
-    private RunningBehavior? _behavior;
+    private volatile RunningBehavior? _behavior;
 
     // The loop writes these, and anyone reads them.
     private volatile CharacterState _state;
@@ -143,6 +144,51 @@ public sealed class BotActor : IAsyncDisposable
 
     /// <summary>Gets when the server last created a fight's context for the character, if it ever did.</summary>
     internal DateTimeOffset? FightBeganAt => Volatile.Read(ref _fightBeganAt) is var ticks and not NeverEnded ? new DateTimeOffset(ticks, TimeSpan.Zero) : null;
+
+    internal bool CanSendRawRequest(IMessage request)
+    {
+        if (!MovementRequests.IsMovementCapable(request))
+            return true;
+
+        return request switch
+        {
+            MapMovementRequest => CanSendRawMovementRequest(),
+            NpcDialogReplyRequest => _connected
+                && State.IsInDialog
+                && State.IsPositionTrusted
+                && !State.IsWalking
+                && !State.IsWalkHeld
+                && !State.IsFighting,
+            _ => false,
+        };
+    }
+
+    internal async Task SendFromBehaviorAsync(RunningBehavior behavior, IMessage request, CancellationToken cancellationToken)
+    {
+        if (request is MapMovementRequest)
+            _movementSendBehavior.Value = behavior;
+
+        try
+        {
+            await behavior.Session.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _movementSendBehavior.Value = null;
+        }
+    }
+
+    private bool CanSendRawMovementRequest()
+    {
+        var sendingBehavior = _movementSendBehavior.Value;
+
+        // A fight behavior may send a raw walk; an observer with the same session must not inherit that permission.
+        _movementSendBehavior.Value = null;
+
+        return State.IsFighting
+            && _behavior is { IsFight: true } behavior
+            && ReferenceEquals(behavior, sendingBehavior);
+    }
 
     internal BotActor(CharacterState state, GameMaps maps, Lazy<WorldPathfinder> world, Lazy<BankDirectory> banks, Func<BotDelays> delays, TimeProvider time, ILogger log)
     {
@@ -658,7 +704,7 @@ public sealed class BotActor : IAsyncDisposable
 
     private void Start(Starting starting)
     {
-        var behavior = new RunningBehavior(_session!, starting.CancellationToken);
+        var behavior = new RunningBehavior(_session!, starting.Readiness is Readiness.InFight, starting.CancellationToken);
 
         // A start that waited may have been cancelled meanwhile: then no behavior runs.
         if (!starting.Started.TrySetResult(behavior))
