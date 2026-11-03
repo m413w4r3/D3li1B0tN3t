@@ -75,12 +75,33 @@ public sealed class ProtocolTranslationTests
     }
 
     [Fact]
+    public void ACompleteMappingIncludingAuthenticationRequestCreatesATranslation()
+    {
+        var translation = Translate();
+        var request = new AuthenticationRequest { Ticket = "synthetic", Language = "fr" };
+        var envelope = GameMessage.Parser.ParseFrom(translation.EncodeGameRequest(request));
+        var obfuscation = new Obfuscation(ReadableProtocol.Files);
+
+        Assert.True(translation.Audit.Passed, string.Join('\n', translation.Audit.Failures));
+        Assert.Equal("type.ankama.com/" + obfuscation.Of(AuthenticationRequest.Descriptor.FullName), envelope.Request.Content.TypeUrl);
+    }
+
+    [Fact]
     public void AMappingThatFailsTheAuditIsRefused()
     {
         var exception = Assert.Throws<ProtocolMismatchException>(() => Translate(edit: (_, mapping) => mapping.Messages.Remove(mapping.Messages.Single(pair => pair.Readable == Ping.Descriptor.FullName))));
 
         Assert.Contains("d3b.connection.Ping has no counterpart.", exception.Failures);
         Assert.StartsWith($"The mapping of client {Version} does not hold: {exception.Failures.Count} failures, the first: ", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AMappingWithoutAuthenticationRequestIsRefused()
+    {
+        var exception = Assert.Throws<ProtocolMismatchException>(() => Translate(edit: (_, mapping) =>
+            mapping.Messages.Remove(mapping.Messages.Single(pair => pair.Readable == AuthenticationRequest.Descriptor.FullName))));
+
+        Assert.Contains("d3b.game.AuthenticationRequest has no counterpart.", exception.Failures);
     }
 
     [Fact]
