@@ -10,11 +10,74 @@ namespace D3B.Bot.Runtime;
 /// <summary>The bots' log messages, each naming its bot by its character's id.</summary>
 internal static partial class BotLog
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: plays through game connection {ConnectionId}")]
-    public static partial void Attached(ILogger logger, long character, string connectionId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: plays through game connection {ConnectionId}; position unknown")]
+    public static partial void AttachedUnknown(ILogger logger, long character, string connectionId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: game connection {ConnectionId} closed")]
-    public static partial void Detached(ILogger logger, long character, string connectionId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: plays through game connection {ConnectionId}; map {Map} cell unknown")]
+    public static partial void AttachedOnMap(ILogger logger, long character, string connectionId, long map);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: plays through game connection {ConnectionId}; map {Map} cell {Cell}")]
+    public static partial void AttachedAt(ILogger logger, long character, string connectionId, long map, int cell);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: game connection {ConnectionId} closed; position unknown")]
+    public static partial void DetachedUnknown(ILogger logger, long character, string connectionId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: game connection {ConnectionId} closed; last known map {Map}, position unknown")]
+    public static partial void DetachedOnMap(ILogger logger, long character, string connectionId, long map);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: game connection {ConnectionId} closed; last known map {Map} cell {Cell}")]
+    public static partial void DetachedAt(ILogger logger, long character, string connectionId, long map, int cell);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: map {Map} known; cell unknown until its information")]
+    public static partial void MapKnown(ILogger logger, long character, long map);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: map changed from {From} to {To}; cell unknown until its information")]
+    public static partial void MapChanged(ILogger logger, long character, long from, long to);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: map {Map} repeated; cell cleared")]
+    public static partial void MapRepeated(ILogger logger, long character, long map);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: placed on map {Map} at cell {Cell}")]
+    public static partial void Placed(ILogger logger, long character, long map, int cell);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: position unknown on map {Map} until it is placed")]
+    public static partial void PositionUnknown(ILogger logger, long character, long map);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: walk shown on map {Map} from cell {From} to cell {To}, {Steps} steps, not confirmed")]
+    public static partial void WalkShown(ILogger logger, long character, long map, int from, int to, int steps);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: ignored self walk because the character is not placed on a map")]
+    public static partial void WalkIgnoredUnplaced(ILogger logger, long character);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: ignored self walk on map {Map} because the character is not placed")]
+    public static partial void WalkIgnoredUnplacedOnMap(ILogger logger, long character, long map);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: ignored self walk on map {Map} because its start differs from the known cell")]
+    public static partial void WalkIgnoredStartMismatch(ILogger logger, long character, long map);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: ignored self walk on map {Map} because its path is invalid")]
+    public static partial void WalkIgnoredInvalid(ILogger logger, long character, long map);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: walk confirmed on map {Map} at cell {Cell}")]
+    public static partial void WalkConfirmed(ILogger logger, long character, long map, int cell);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: walk refused on map {Map} at cell {Cell}")]
+    public static partial void WalkRefused(ILogger logger, long character, long map, int cell);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: position unknown after a refused walk on map {Map}")]
+    public static partial void WalkRefusedUnknown(ILogger logger, long character, long map);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: walk cancelled by the client on map {Map} at cell {Cell}, not server-confirmed")]
+    public static partial void WalkCancelled(ILogger logger, long character, long map, int cell);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Bot {Character}: ignored client walk cancellation because no walk is active")]
+    public static partial void WalkCancelIgnored(ILogger logger, long character);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Bot {Character}: ignored client walk cancellation because its cell is invalid")]
+    public static partial void WalkCancelInvalid(ILogger logger, long character);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: walk settled on map {Map} at cell {Cell}, estimated while the server may still hold it")]
+    public static partial void WalkSettled(ILogger logger, long character, long map, int cell);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: the player sent {Request}, the bot pauses until it is resumed")]
     public static partial void PausedByPlayer(ILogger logger, long character, string request);

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using D3B.Network.Relay;
 using D3B.Protocol.Game;
 using D3B.Protocol.Translation;
@@ -28,6 +29,7 @@ public sealed class GameSession : IConnectionInterceptor
     private readonly GameAccounts _accounts;
     private readonly IReadOnlyList<IGameObserver> _observers;
     private readonly ILogger _log;
+    private readonly ConcurrentDictionary<TranslationProblemKey, int> _translationProblems = new();
 
     // Set from the client's read loop on its first request, read from the server's once the character is chosen.
     private volatile GameAccount? _account;
@@ -137,8 +139,8 @@ public sealed class GameSession : IConnectionInterceptor
             GameLog.Decoded(_log, Id, side, message, frame.Length, state);
         }
 
-        if (decoded.Problem is { } problem)
-            GameLog.NotUnderstood(_log, Id, side, message, frame.Length, problem);
+        if (decoded.Problem is not null)
+            LogTranslationProblem(side, message, decoded);
 
         if (direction is RelayDirection.FromClient && _account is null && decoded.Content is AuthenticationRequest authentication)
             _account = _accounts.Take(authentication.Ticket);
@@ -159,8 +161,32 @@ public sealed class GameSession : IConnectionInterceptor
         return null;
     }
 
+    private void LogTranslationProblem(string side, string message, DecodedGameFrame decoded)
+    {
+        var category = GameLog.ProblemCategory(decoded);
+        var key = new TranslationProblemKey(side, message, category);
+        var count = _translationProblems.AddOrUpdate(key, 1, (_, previous) => previous + 1);
+
+        if (count is 1)
+        {
+            if (decoded.IsRead)
+                GameLog.Partial(_log, Id, side, message, category);
+            else
+                GameLog.NotUnderstood(_log, Id, side, message, category);
+
+            return;
+        }
+
+        if (decoded.IsRead)
+            GameLog.RepeatedPartial(_log, Id, side, message, count, category);
+        else
+            GameLog.RepeatedUnread(_log, Id, side, message, count, category);
+    }
+
     void IConnectionInterceptor.OnHoldAbandoned(RelayDirection direction, string reason)
     {
         // Nothing is held on the game connection.
     }
+
+    private readonly record struct TranslationProblemKey(string Side, string Message, string Category);
 }
