@@ -85,7 +85,7 @@ public static class CharacterEvents
     {
         return message switch
         {
-            MapMovementCancelRequest cancel when IsCell(cancel.CellId) => state with { Cell = cancel.CellId, Path = [] },
+            MapMovementCancelRequest cancel when state.IsWalking && IsCell(cancel.CellId) => state with { Cell = cancel.CellId, Path = [] },
             _ => state,
         };
     }
@@ -128,7 +128,7 @@ public static class CharacterEvents
             },
             InteractiveUsedEvent used when used.ActorId == self && used.Duration > 0 => state with { Use = new CurrentUse(used.ElementId, used.SkillId) },
             InteractiveUseEndedEvent ended when state.Use == new CurrentUse(ended.ElementId, ended.SkillId) => state with { Use = null },
-            MapMovementEvent movement when movement.ActorId == self && movement.Cells.Count > 0 && movement.Cells.All(IsCell) => state with { Path = [.. movement.Cells], IsWalkHeld = false, LastWalkEnd = movement.Cells[^1] },
+            MapMovementEvent movement when movement.ActorId == self && state.Cell is { } cell && movement.Cells.Count > 0 && movement.Cells.All(IsCell) && movement.Cells[0] == cell => state with { Path = [.. movement.Cells], IsWalkHeld = false, LastWalkEnd = movement.Cells[^1] },
             // A group's walk names only its first and last cells, and the client attacks it where it stops.
             MapMovementEvent movement when movement.Cells.Count > 0 && IsCell(movement.Cells[^1]) && state.MonsterGroups.TryGetValue(movement.ActorId, out var walker) => state with
             {
@@ -141,9 +141,9 @@ public static class CharacterEvents
             MapActorRemovedEvent removed when state.MonsterGroups.ContainsKey(removed.ActorId) => state with { MonsterGroups = state.MonsterGroups.Remove(removed.ActorId) },
             MapMovementConfirmResponse when state.IsWalking => state with { Cell = state.Path[^1], Path = [] },
             MapMovementConfirmResponse => state with { IsWalkHeld = false },
-            MapMovementRefusedEvent refused => state with
+            MapMovementRefusedEvent refused when state.Cell is not null => state with
             {
-                Cell = MapGeometry.TryGetCell(new MapPoint(refused.X, refused.Y), out var cell) ? cell : state.Cell,
+                Cell = MapGeometry.TryGetCell(new MapPoint(refused.X, refused.Y), out var cell) ? cell : null,
                 Path = [],
                 IsWalkHeld = false,
             },
@@ -191,7 +191,7 @@ public static class CharacterEvents
     private static CharacterState Placed(CharacterState state, MapInformationEvent information)
     {
         var self = information.Actors.FirstOrDefault(actor => actor.Id == state.Key.CharacterId);
-        var cell = self?.Disposition is { HasCellId: true } disposition && IsCell(disposition.CellId) ? disposition.CellId : state.Cell;
+        int? cell = self?.Disposition is { HasCellId: true } disposition && IsCell(disposition.CellId) ? disposition.CellId : null;
 
         // The information also lists the neighbouring maps' elements, which cannot be used from here; their updates follow,
         // which only a known element takes.
