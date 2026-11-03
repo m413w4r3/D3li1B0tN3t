@@ -189,10 +189,21 @@ no-position test verifies Busy and no request. No new CLI or production change w
 Relevant code paths: src/D3B.Bot/Movement/WorldTravel.cs,
 src/D3B.Bot/Movement/WorldPathfinder.cs, and src/D3B.Bot/Movement/MapChange.cs.
 
+**Residual risk — automated movement trust.** WorldTravel gates on MapId, Cell, and IsBusy, but
+does not reject IsWalkHeld or a client-reported cancel cell. MapChange awaits
+ReleaseHeldWalkAsync but ignores its outcome before continuing. Before allowing automated movement
+from a position that is not server-confirmed, the project needs a trusted-position and recovery
+policy or an explicit decision accepting this constraint.
+
+Two lower risks remain: a delayed mapless event can pass the guards if it arrives after a new
+placement and happens to match that cell; and an absent MapCurrentEvent.map_id has no presence guard
+and can decode as 0.
+
 ## F. Next supervised visual test
 
 **Not run in P2F. A new owner GO is required.** P2E's GO does not authorize this session. The
 step-by-step procedure is in [LINUX_ACCEPTANCE.md](LINUX_ACCEPTANCE.md#p2f-next-supervised-visual-validation).
+This next visual test is manual and observation-only; it does not authorize bot movement.
 
 Before the GO is used, close Dofus and confirm no updater, host, or relay is active. Recheck the
 installed client build, date, platform, Unity and metadata identity, and binary fingerprint against
