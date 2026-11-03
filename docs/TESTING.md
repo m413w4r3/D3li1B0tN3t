@@ -95,6 +95,20 @@ The capture CLI keeps text output available and adds JSON diagnostics. These com
 
 Stderr was empty in all three JSON demonstrations. JSON adds message/schema/mapping sections. The invalid-mapping result `mapping.file_invalid`, exit 1, is linked-test/demo evidence only, not live compatibility. These are synthetic offline results, not real-client acceptance.
 
+## Phase 2B restore-safety results
+
+The following counts were recorded on the P2B branch based on integrated master `9f1836d`:
+
+| Check | Recorded result |
+| --- | --- |
+| Targeted `D3B.Network.Tests` | PASS, 127/127. |
+| Full suite | PASS, 1,253/1,253. |
+| Build | PASS, 0 warnings, 0 errors. |
+| Formatting | PASS, `/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore` exited 0. |
+| Fake-install CLI restore guard | A version file without `ConfigUrl` printed `has no ConfigUrl line: repair the client from the launcher...` and exited 2. |
+
+These checks cover offline restore safety. No installed client, host, relay, or sniffer was run. Re-record the build, suite, and format results after the final merge.
+
 ## Real-client procedures (manual/supervised)
 
 Use an installed Linux client at `/home/nill/.config/Ankama/Dofus-dofus3`. These procedures are not CI commands. They need a NuGet restore and client-file access. Keep build artifacts and results under `/tmp`.
