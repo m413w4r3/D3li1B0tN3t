@@ -197,7 +197,8 @@ pending movement marker after a transport failure. This lot closes those paths:
 The test-only commit `80b901c` was RED: `BotActorTests` ran 34 tests, with **9 failed and 25 passed**. The failures showed
 raw NPC/map transitions sent from a behavior, roleplay movement allowed during a fight, public observer sends allowed
 from roleplay and before bot binding, untrusted dialog replies allowed, and a closed transport leaving the marker at map
-`191104002`. The fight behavior positive case passed before the implementation.
+`191104002`. The fight behavior positive case passed before the implementation. The parent reproduced this RED run
+independently from a detached worktree: 34 total, 9 failed, 25 passed.
 
 The nine failed tests were:
 
@@ -212,11 +213,13 @@ The nine failed tests were:
 - `AnObserverCannotSendRawMovementFromATrustedRoleplayPosition`: expected `InvalidOperationException`; no exception was thrown.
 
 With SDK 10.0.403, the final targeted P2H/movement/runtime/element-use/banking/fight/session filter passed **216/216**.
-The final `D3B.Bot.Tests` run reached 519 tests: **508 passed and 11 host tests failed** while starting file watchers,
-because the shared environment reached its 128 inotify-instance limit. A preceding full solution run reached 1,344 tests;
-1,318 passed and 26 host tests hit the same limit, including a retry with one reported processor. The full solution run
-preceded the final active-fight observer regression test. `dotnet build D3B.slnx` passed with 0 warnings and 0 errors.
-The final format verification and `git diff --check` passed. No live client, host, relay, game, or capture was run.
+The agent's own full-suite attempts hit the shared environment's 128 inotify-instance limit (519 Bot tests: 508 passed,
+11 host tests failed; a preceding solution attempt: 1,318 passed, 26 host tests failed). The parent then ran every test
+project serially on the integrated tree and all passed: `D3B.Bot.Tests` **519/519**, `D3B.App.Tests` **142/142**,
+`D3B.Engine.Tests` **257/257**, `D3B.Data.Tests` **133/133**, `D3B.Network.Tests` **133/133**, `D3B.Protocol.Tests`
+**88/88**, `D3B.Scripts.Tests` **35/35**, `D3B.Storage.Tests` **27/27**, and `D3B.Core.Tests` **11/11** — **1,345/1,345
+passed, 0 failed, 0 skipped** (1,292 baseline, +53). `dotnet build D3B.slnx` passed with 0 warnings and 0 errors. The
+final format verification and `git diff --check` passed. No live client, host, relay, game, or capture was run.
 
 The RED command and final verification commands were:
 
@@ -229,13 +232,16 @@ The RED command and final verification commands were:
 git diff --check
 ```
 
-The full solution test command was run exactly as requested, then retried with one reported processor; both attempts
-reported 1,318 passed and 26 failures from the shared inotify-instance limit:
+The agent's solution-level attempts were limited by the shared inotify-instance environment, not by a test failure. The
+parent verified the integrated tree by running every test project serially instead:
 
 ```sh
-/home/nill/.dotnet/dotnet test --solution D3B.slnx --max-parallel-test-modules 1 --no-build
-DOTNET_PROCESSOR_COUNT=1 /home/nill/.dotnet/dotnet test --solution D3B.slnx --max-parallel-test-modules 1 --no-build
+for p in tests/D3B.*.Tests; do /home/nill/.dotnet/dotnet test "$p" --no-build --max-parallel-test-modules 1; done
 ```
+
+The serial per-project run passed **1,345/1,345**, 0 failed, 0 skipped, as listed above. The solution-level
+`dotnet test --solution` command stalled in environment-level orchestration while 185 inotify instances were open for a
+maximum of 128; it was stopped, and the equivalent serial run passed.
 
 The ordered-connection assumption remains: refusals have no request correlation, so a refusal crossing a newer request on
 the same map is still indistinguishable. A mapless movement announcement can still match a newly placed cell.
