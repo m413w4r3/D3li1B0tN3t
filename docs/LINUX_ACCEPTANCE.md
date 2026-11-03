@@ -1,6 +1,40 @@
 # Linux client acceptance runbook
 
-**Status: the P2D artifact/data layer is READY and the P2D apphost is installed and verified. A new real supervised session is READY for a separately authorized P2E GO.** The 443 route is **BLOCKED** until explicit owner authorization for the dedicated apphost capability; no capability has been applied. No P2E host, relay, or client result is claimed.
+**Status: P2E is COMPLETE/PASS** for connection and relay, authentication, character selection, the supervised game session, and stop/restore on `3.7.13.17`. Frame decoding was mixed, and visual map/cell validation remains unverified; see [P2E_REPORT](P2E_REPORT.md). The next visual validation is documented below and requires a new GO. The 443 route remains **BLOCKED** until explicit owner authorization for the dedicated apphost capability; no capability has been applied.
+
+## P2F next supervised visual validation
+
+**Do not run this session during P2F implementation; it requires a new GO.** P2E's GO does not authorize another client session.
+
+1. **Preflight.** Close Dofus and confirm no updater, host or relay is active. Recheck the installed client version, build date, platform, Unity/metadata identity and binary fingerprint against [BUILD_IDENTITY](BUILD_IDENTITY.md). Verify that the pack, schema, mapping and pins all match that build and pass their audit; verify the P2F apphost version and managed payload identity against its build record. Make a fresh private byte-for-byte backup of the current `version` file. Confirm the configured ports are free, the client is not redirected, captures are disabled, `Fights:Alone=false`, and no bot profile, activity or schedule can act. Stop on any identity mismatch or unexpected state.
+
+2. **Start the host.** Use the verified apphost and the approved loopback/port configuration. Keep captures off and enable targeted game-session logging:
+
+   ```sh
+   /home/nill/.local/share/D3B/apphost/D3B.Host \
+     --Client:Directory /home/nill/.config/Ankama/Dofus-dofus3 \
+     --Data:Directory /home/nill/.local/share/D3B/data \
+     --Network:Redirect:Directory /home/nill/.local/share/D3B/client \
+     --Network:Captures:Enabled false \
+     --Fights:Alone false \
+     --Network:Address 127.0.13.59 \
+     --Network:Ports:0 5555 \
+     --Network:Game:Ports:0 5556 \
+     --Logging:LogLevel:D3B.Bot.Network.GameSession Debug
+   ```
+
+   Before launch, confirm the host build exposes the current observed map/cell and labels it **server-confirmed** or **estimated**. If that display is unavailable, stop and mark the validation BLOCKED; message names alone are not position evidence.
+
+3. **Observe manually.** The supervisor launches Dofus and selects the character manually. The supervisor compares the real client map/cell with the host's observed map/cell. If useful, perform one short manual movement. The host may mark a requested or in-progress destination as estimated; it must reflect server movement and confirmation before calling the resulting cell confirmed. Do not enable a bot activity or inject movement.
+
+4. **Stop and restore.** The supervisor closes the client. Stop the host, verify the original configuration is restored, and check that no redirect, host listener or test process remains. Keep any detailed local log private; record only build identity, outcomes and non-sensitive aggregate counts.
+
+| Result | PASS/BLOCKED criterion |
+| --- | --- |
+| Confirmed map | **PASS** when the host reports the server-observed current map and it matches the visible client. |
+| Confirmed cell | **PASS** when the host reports a cell supported by server placement or server movement plus confirmation, and it matches the visible client. Overall visual validation requires a confirmed cell. |
+| Estimated position only | **BLOCKED for cell validation.** Record it as estimated; a client request or unconfirmed path is not server confirmation. |
+| Missing, decode error or disagreement | **BLOCKED.** Stop the session and preserve only sanitized diagnostics. |
 
 ## P2D — current build 3.7.13.17
 
@@ -54,7 +88,7 @@ Offline validation: `LoggingTests.TheSupervisedArgumentEnablesTheGameSessionAtDe
 
 ### Apphost installed
 
-The live apphost `/home/nill/.local/share/D3B/apphost` is the verified P2D payload published from commit `c9c0d5e0660ecbd373380f1f57f2015b6f459125`: launcher 78,192 B `de956557…`, `D3B.Host.dll` 5,632 B `c6589b05…`, `D3B.Network.dll` 112,640 B `279e2cf3…`, `D3B.Bot.dll` 650,240 B `a71bdb88…`, informational version `0.0.0-alpha.0.12+c9c0d5e…`, no capability. The directory is `0700`, the launcher `0700`, the payload `0600`, owner `nill`; a 369-file manifest verifies the set. The P2B publication is backed up at `~/.local/share/D3B/private-backups/apphost-p2b-20261103T162503Z` (`D3B.Host.dll` `0cc2…`, `D3B.Network.dll` `0ce5…`, `D3B.Bot.dll` `65e4…`), with a verified 369-file manifest. No host or client was started. The remaining gate is the owner's separate P2E GO for the live session.
+The live apphost `/home/nill/.local/share/D3B/apphost` is the verified P2D payload published from commit `c9c0d5e0660ecbd373380f1f57f2015b6f459125`: launcher 78,192 B `de956557…`, `D3B.Host.dll` 5,632 B `c6589b05…`, `D3B.Network.dll` 112,640 B `279e2cf3…`, `D3B.Bot.dll` 650,240 B `a71bdb88…`, informational version `0.0.0-alpha.0.12+c9c0d5e…`, no capability. The directory is `0700`, the launcher `0700`, the payload `0600`, owner `nill`; a 369-file manifest verifies the set. The P2B publication is backed up at `~/.local/share/D3B/private-backups/apphost-p2b-20261103T162503Z` (`D3B.Host.dll` `0cc2…`, `D3B.Network.dll` `0ce5…`, `D3B.Bot.dll` `65e4…`), with a verified 369-file manifest. No host or client was started during the P2D preparation mission. The subsequent supervised P2E result is recorded in [P2E_REPORT](P2E_REPORT.md).
 
 ### Restore rules for 3.7.13.17
 
