@@ -126,6 +126,34 @@ These checks cover offline restore safety. No installed client, host, relay, or 
 - Offline runtime check of the installed `3.7.13.17` pack/schema/mapping: `pack_identity_ok=True`, `mapping_identity_ok=True`, `translation_ok=True`, `READY=True`.
 - No host, relay to Ankama, or Dofus client was started.
 
+## P2F state, navigation, and observability results
+
+The final integrated P2F verification used the pinned SDK at /home/nill/.dotnet/dotnet, outside the
+Codex sandbox:
+
+| Check | Command or filter | Result |
+| --- | --- | --- |
+| Solution build | /home/nill/.dotnet/dotnet build D3B.slnx | PASS, 0 warnings, 0 errors. |
+| Character reliability | FullyQualifiedName~Character | 115 total, 115 passed. |
+| World travel | FullyQualifiedName~WorldTravel | 20 total, 20 passed. |
+| Position and translation logs | GameSessionTests, GameLogTests, and PositionLoggingTests | 21 total, 21 passed. |
+| Integrated D3B.Bot.Tests project | Full project | 466 total, 466 passed. |
+| Full solution | /home/nill/.dotnet/dotnet test --solution D3B.slnx --max-parallel-test-modules 1 --no-build | 1,292 total, 1,292 passed, 0 failed, 0 skipped. |
+| Formatting | /home/nill/.dotnet/dotnet format --verify-no-changes --no-restore | PASS, exit 0. |
+
+The P2D baseline was 1,265 tests. P2F adds 27: 13 character position reliability tests,
+2 simulated navigation tests, and 12 observability tests (8 PositionLoggingTests, 3 GameSessionTests,
+and 1 GameLogTests). The observability worktree's earlier 464-case Bot project count preceded the two
+navigation tests; the final integrated project count is 466.
+
+The new state cases cover map placement clearing and invalid self placement, delayed movement/cancel/
+refusal guards, matching movement starts, confirmation, reconnect state, unknown protobuf fields,
+and navigation with no position. The navigation simulations cover a journey reaching the target on
+a confirmed cell and a refused walk ending on the server-named cell without a follow-up request.
+Observability coverage checks transition logs, deduplicated translation diagnostics, and that private
+markers are not logged. These are offline automated results, not installed-client acceptance. P2F
+did not launch a game, host, relay, or client.
+
 ## Real-client procedures (manual/supervised)
 
 Use an installed Linux client at `/home/nill/.config/Ankama/Dofus-dofus3`. These procedures are not CI commands. They need a NuGet restore and client-file access. Keep build artifacts and results under `/tmp`.

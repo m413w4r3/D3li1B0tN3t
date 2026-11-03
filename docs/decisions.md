@@ -6658,6 +6658,28 @@ pulling them into its walls. On the owner's capture of 4 fights the AI played, 1
 - **Preflight**: client `3.7.13.17`, build date `2026-11-03T14:11:23Z`, binary/metadata hashes match P2D; `data/3.7.13.17` matches the audit; the old pack is refused (version/build date); the client points to Ankama; ports 5555/5556 are free; the current version file is backed up at `~/.local/share/D3B/private-backups/p2e-20261103T162601Z/version.original` (`796d68f1…`); captures are absent; the database has 1 account, 1 character, 0 runs, 0 characters with `StartsOnConnection`, and 0 characters with a profile; no host or Dofus process exists. No host, relay or client was started.
 - **Boundary**: READY FOR P2E LIVE TEST, subject to a separate owner GO. The apphost source commit is `c9c0d5e`; the documentation update is a later docs-only commit. Do not push or open a pull request.
 
+## D292: Keep map position guarded and make its evidence visible
+
+*2026-11-03, P2F state reliability, simulated travel, and transition logging.*
+
+- **Decision**: Take MapId only from MapCurrentEvent. Clear Cell on map changes, invalid or absent
+  self placement, and unmappable refusal. Accept self movement only from a known matching cell,
+  apply refusal only when positioned, and accept a client cancel only during a walk. Keep
+  LastWalkEnd as map-agnostic movement history, never as current Cell. Treat server placement and
+  confirmation as observed/confirmed, client cancellation as client-reported, and NotConfirmed
+  settlement as estimated.
+- **Evidence**: P2E on 3.7.13.17 recorded 848 frames (499 understood, 139 read/partial, 210 not
+  read); the mapping audit covered 222 messages and 492 fields with 0 failures and no unmatched
+  readable fields. P2F adds 13 state tests, 2 simulated travel tests, and 12 logging tests.
+  Integrated D3B.Bot.Tests passed 466/466; the full solution passed 1292/1292 from a 1265 baseline.
+  Transition logs distinguish placement, confirmed walks, estimated settlement, unknown position,
+  and detach with the last known snapshot; partial translation diagnostics are deduplicated per
+  session.
+- **Boundary**: No live client, host, relay, or game action was performed, and nothing was pushed.
+  P2E's GO does not carry forward. The next supervised visual comparison requires a new owner GO
+  and an apphost freshly published and verified from the P2F implementation commit, not the P2D
+  apphost.
+
 ## Open questions
 
 Settled questions leave this table, and the decision that settles one says so.
