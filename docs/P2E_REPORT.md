@@ -34,10 +34,12 @@ The aggregate frame states were 499 **understood**, 139 **read/partial**, and 21
 The character-state consumer's relevant field use is visible in `src/D3B.Bot/Characters/CharacterEvents.cs`:
 
 - `MapCurrentEvent.MapId` updates the current map and clears the cell until placement is supplied (`:103–118`).
-- A matching `MapInformationEvent` supplies `SubAreaId` and, when present and in range, the current character's `Disposition.CellId`; otherwise the prior cell is retained (`:120`, `:191–215`, cell range `:321–324`).
-- A self `MapMovementEvent` with valid cells stores the path and its last cell as `LastWalkEnd`; it does not set the current `Cell` (`:131`).
+- A matching `MapInformationEvent` supplies `SubAreaId` and sets the current character's `Cell` from its valid `Disposition.CellId`; absent or invalid self placement clears `Cell` rather than retaining the prior value (`:120`, `:191–215`, cell range `:321–324`).
+- A self `MapMovementEvent` is accepted only when the character has a known cell and the path begins at that cell. It stores the path and its last cell as `LastWalkEnd`; it does not set the current `Cell` (`:131`).
 - `MapMovementConfirmResponse` sets `Cell` to the last stored path cell and clears the path while a walk is pending (`:142–143`).
 - `MapMovementRequest` and `MapMovementConfirmRequest` have no matching state update in `CharacterEvents`; their presence alone is not server confirmation. The client cancel request is handled separately (`:84–90`).
+
+**P2F update.** P2F also clears `Cell` when a refusal coordinate cannot be mapped, applies a refusal only when the current cell is known, and accepts a client `MapMovementCancelRequest` only during an active walk. These are later state guards, not claims about events seen in P2E. See [P2F_REPORT](P2F_REPORT.md) for the complete state and observability behavior.
 
 These source paths describe what the current code would consume from successfully translated fields. The P2E aggregate log proves message names and message-level read states and counts. It does not expose the decoded map or cell values, prove which optional fields were populated in each partial message, or show that a particular `CharacterState` update occurred. Runtime map/cell correctness remains unverified.
 
@@ -53,7 +55,7 @@ The retained aggregate evidence proves normal relay closure and the restoration 
 | --- | --- | --- |
 | `MapCurrentEvent` | 4, all understood | Server map ID is consumed; the state clears its cell pending map information. |
 | `MapInformationEvent` | 4, all read/partial | Can supply sub-area and the character's valid disposition cell, but the aggregate does not show whether those fields were present in each frame. |
-| `MapMovementEvent` | 40, all read/partial | For the character's own actor, a valid path is stored; this alone does not advance the current cell. |
+| `MapMovementEvent` | 40, all read/partial | P2F stores a self path only from a known matching start cell; the announcement alone does not advance the current cell. |
 | `MapMovementConfirmResponse` | 13, all understood | While a path is pending, the state advances its cell to the path's last cell and clears the path. The log has no cell value to verify. |
 | `MapMovementRequest` | 17, all understood | Client-originated request; the request itself does not update the character's current cell. |
 | `MapMovementConfirmRequest` | 13, all understood | Client-originated confirmation request; it has no direct `CharacterState` update. |
@@ -71,4 +73,4 @@ The aggregate contains no `MapMovementRefusedEvent` and no `MapMovementCancelReq
 
 ## Next
 
-P2F's next supervised validation should display the host's observed map/cell with a clear distinction between server-confirmed and estimated position, then compare it with the visible client. Follow the short procedure in [LINUX_ACCEPTANCE](LINUX_ACCEPTANCE.md#p2f-next-supervised-visual-validation). It requires a new GO; P2E's authorization does not carry forward.
+P2F's next supervised validation should use the host's transition logs to distinguish server-observed placement and server-confirmed movement from estimated position, then compare the map/cell with the visible client. Follow the procedure in [LINUX_ACCEPTANCE](LINUX_ACCEPTANCE.md#p2f-next-supervised-visual-validation). It requires a new GO; P2E's authorization does not carry forward.

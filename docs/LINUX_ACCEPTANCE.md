@@ -4,37 +4,76 @@
 
 ## P2F next supervised visual validation
 
-**Do not run this session during P2F implementation; it requires a new GO.** P2E's GO does not authorize another client session.
+**Not run during P2F. A new GO is required before the next client session.** P2E's GO does not
+authorize another run. The current P2E result and its historical procedure below remain in force.
 
-1. **Preflight.** Close Dofus and confirm no updater, host or relay is active. Recheck the installed client version, build date, platform, Unity/metadata identity and binary fingerprint against [BUILD_IDENTITY](BUILD_IDENTITY.md). Verify that the pack, schema, mapping and pins all match that build and pass their audit; verify the P2F apphost version and managed payload identity against its build record. Make a fresh private byte-for-byte backup of the current `version` file. Confirm the configured ports are free, the client is not redirected, captures are disabled, `Fights:Alone=false`, and no bot profile, activity or schedule can act. Stop on any identity mismatch or unexpected state.
+1. **Preflight.** Close Dofus and confirm no updater, host, or relay is active. Recheck the installed
+   client version, build date, platform, Unity/metadata identity, and binary fingerprint against
+   [BUILD_IDENTITY](BUILD_IDENTITY.md). Verify that the pack, schema, mapping, and pins match that
+   build and pass their audit. Make a fresh private byte-for-byte backup of the current version file.
+   Confirm the client is not redirected, ports 5555 and 5556 are free, captures are disabled,
+   Fights:Alone=false, and no bot profile, activity, or schedule can act. Stop on any identity
+   mismatch or unexpected state.
 
-2. **Start the host.** Use the verified apphost and the approved loopback/port configuration. Keep captures off and enable targeted game-session logging:
+2. **Publish and install the P2F apphost.** Do not reuse the P2D apphost. From a clean source tree at
+   the P2F implementation merge commit
+   e873b71e09af2beaf54ea60406870df01648a5b9, publish into scratch with the pinned SDK:
 
-   ```sh
-   /home/nill/.local/share/D3B/apphost/D3B.Host \
-     --Client:Directory /home/nill/.config/Ankama/Dofus-dofus3 \
-     --Data:Directory /home/nill/.local/share/D3B/data \
-     --Network:Redirect:Directory /home/nill/.local/share/D3B/client \
-     --Network:Captures:Enabled false \
-     --Fights:Alone false \
-     --Network:Address 127.0.13.59 \
-     --Network:Ports:0 5555 \
-     --Network:Game:Ports:0 5556 \
-     --Logging:LogLevel:D3B.Bot.Network.GameSession Debug
-   ```
+       git worktree add --detach /tmp/p2f-apphost/source e873b71e09af2beaf54ea60406870df01648a5b9
+       cd /tmp/p2f-apphost/source
+       /home/nill/.dotnet/dotnet publish src/D3B.Host/D3B.Host.csproj --configuration Release --runtime linux-x64 --self-contained true -p:UseAppHost=true --artifacts-path /tmp/p2f-apphost/build --output /tmp/p2f-apphost/publish --verbosity minimal
 
-   Before launch, confirm the host build exposes the current observed map/cell and labels it **server-confirmed** or **estimated**. If that display is unavailable, stop and mark the validation BLOCKED; message names alone are not position evidence.
+   Preserve the installed P2D apphost in a private backup, then install the complete P2F publish
+   directory as one set; do not mix individual files from the two builds. Set the private directory,
+   launcher, and payload permissions as in [RUNTIME_ARTIFACTS](RUNTIME_ARTIFACTS.md#publish-the-apphost).
+   Before launch, record the P2F informational version and SHA-256 values for the launcher,
+   D3B.Host.dll, D3B.Network.dll, and D3B.Bot.dll. Compare the installed files and full manifest with
+   the fresh publish output. The P2D identity is not a substitute for this P2F identity. Leave the
+   apphost without a capability.
 
-3. **Observe manually.** The supervisor launches Dofus and selects the character manually. The supervisor compares the real client map/cell with the host's observed map/cell. If useful, perform one short manual movement. The host may mark a requested or in-progress destination as estimated; it must reflect server movement and confirmation before calling the resulting cell confirmed. Do not enable a bot activity or inject movement.
+3. **Complete the GO-gated host preflight.** Obtain the owner's new GO before starting the session.
+   Use the verified P2F apphost as the normal user. Keep captures off and enable game-session and
+   position transition logging:
 
-4. **Stop and restore.** The supervisor closes the client. Stop the host, verify the original configuration is restored, and check that no redirect, host listener or test process remains. Keep any detailed local log private; record only build identity, outcomes and non-sensitive aggregate counts.
+       /home/nill/.local/share/D3B/apphost/D3B.Host \
+         --Client:Directory /home/nill/.config/Ankama/Dofus-dofus3 \
+         --Data:Directory /home/nill/.local/share/D3B/data \
+         --Network:Redirect:Directory /home/nill/.local/share/D3B/client \
+         --Network:Captures:Enabled false \
+         --Fights:Alone false \
+         --Network:Address 127.0.13.59 \
+         --Network:Ports:0 5555 \
+         --Network:Game:Ports:0 5556 \
+         --Logging:LogLevel:D3B.Bot.Network.GameSession Debug \
+         --Logging:LogLevel:D3B.Bot.Runtime.BotActor Information
+
+   Start only after the owner GO and every preflight check passes.
+
+4. **Observe manually.** The supervisor launches Dofus and selects the character manually. Compare
+   the visible map and cell with the host's transition records. These are the exact sanitized P2F
+   message templates to recognize:
+
+   - Placed: “Bot <character>: placed on map <map> at cell <cell>”
+   - Walk confirmed: “Bot <character>: walk confirmed on map <map> at cell <cell>”
+   - Walk settled, estimated: “Bot <character>: walk settled on map <map> at cell <cell>, estimated while the server may still hold it”
+   - Position unknown: “Bot <character>: position unknown on map <map> until it is placed”
+   - Detach, last known: “Bot <character>: game connection <connection> closed; last known map <map> cell <cell>”
+
+   A shown path is not confirmation. Treat the estimated-settlement line as estimated and wait for
+   server confirmation before calling that cell confirmed. A position-unknown line blocks cell
+   validation until placement. The detach line records the last known snapshot; it does not prove
+   the position remained current after detachment. Do not enable a bot activity or inject movement.
+
+5. **Stop and restore.** The supervisor closes the client. Stop the host, verify the original
+   configuration is restored, and check that no redirect, host listener, or test process remains.
+   Keep detailed local logs private; record only build identity, outcomes, and non-sensitive
+   aggregate counts.
 
 | Result | PASS/BLOCKED criterion |
 | --- | --- |
-| Confirmed map | **PASS** when the host reports the server-observed current map and it matches the visible client. |
-| Confirmed cell | **PASS** when the host reports a cell supported by server placement or server movement plus confirmation, and it matches the visible client. Overall visual validation requires a confirmed cell. |
-| Estimated position only | **BLOCKED for cell validation.** Record it as estimated; a client request or unconfirmed path is not server confirmation. |
-| Missing, decode error or disagreement | **BLOCKED.** Stop the session and preserve only sanitized diagnostics. |
+| Confirmed position | **PASS** when the server-observed map and a server-placed or server-confirmed cell match the visible client. |
+| Estimated or client-reported cell only | **BLOCKED for cell validation.** Record its quality accurately; it is not server confirmation. |
+| Unknown position, decode error, identity failure, or disagreement | **BLOCKED.** Stop and preserve only sanitized diagnostics. |
 
 ## P2D — current build 3.7.13.17
 
