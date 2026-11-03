@@ -1,4 +1,5 @@
 using D3B.Bot.Runtime;
+using D3B.Bot.Tests.Network;
 using D3B.Network.Relay;
 using D3B.Protocol.Game;
 using Google.Protobuf;
@@ -99,6 +100,7 @@ public sealed class BotActorTests : IAsyncDisposable
             new TeleportRequest { MapId = TestPlay.EastMapId, Source = TeleporterType.Map },
             new HavenBagEnterRequest { OwnerId = TestPlay.CharacterId },
             new InteractiveUseRequest { ElementId = TestPlay.TreeElementId, SkillInstanceId = TestPlay.TreeInstanceId },
+            new NpcActionRequest { Action = 3, MapId = TestPlay.MapId, NpcActorId = TestPlay.WayActorId },
         ];
 
         foreach (var request in requests)
@@ -116,6 +118,211 @@ public sealed class BotActorTests : IAsyncDisposable
         }
 
         Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task RawMapTransitionRequestsAreProhibitedDuringFight()
+    {
+        var (connection, bot) = await _play.EnterAsync(300);
+        connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight });
+        await bot.ProcessedAsync();
+        IMessage[] requests =
+        [
+            new MapChangeRequest { MapId = 1 },
+            new TeleportRequest { MapId = TestPlay.EastMapId, Source = TeleporterType.Map },
+            new HavenBagEnterRequest { OwnerId = TestPlay.CharacterId },
+            new InteractiveUseRequest { ElementId = TestPlay.TreeElementId, SkillInstanceId = TestPlay.TreeInstanceId },
+            new NpcActionRequest { Action = 3, MapId = TestPlay.MapId, NpcActorId = TestPlay.WayActorId },
+        ];
+
+        foreach (var request in requests)
+        {
+            var exception = await Record.ExceptionAsync(() => bot.RunAsync(
+                async (context, token) =>
+                {
+                    await context.SendAsync(request, token);
+
+                    return true;
+                },
+                TestContext.Current.CancellationToken));
+
+            Assert.IsType<InvalidOperationException>(exception);
+        }
+
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task ARoleplayBehaviorCannotSendRawMovementDuringAFight()
+    {
+        var (connection, bot) = await _play.EnterAsync(300);
+        connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight });
+        await bot.ProcessedAsync();
+
+        var exception = await Record.ExceptionAsync(() => bot.RunAsync(
+            async (context, token) =>
+            {
+                await context.SendAsync(new MapMovementRequest { MapId = (int)TestPlay.MapId }, token);
+
+                return true;
+            },
+            TestContext.Current.CancellationToken));
+
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AFightBehaviorCanSendRawMovementDuringAFight()
+    {
+        var (connection, bot) = await _play.EnterAsync(300);
+        connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight });
+        await bot.ProcessedAsync();
+
+        var sent = await bot.RunInFightAsync(
+            async (context, token) =>
+            {
+                await context.SendAsync(new MapMovementRequest { MapId = (int)TestPlay.MapId }, token);
+
+                return true;
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.True(sent);
+        Assert.IsType<MapMovementRequest>(Assert.Single(connection.Sent));
+    }
+
+    [Fact]
+    public async Task AnObserverCannotSendRawMovementFromATrustedRoleplayPosition()
+    {
+        var observer = new RecordingObserver();
+        await using var play = new TestPlay([observer]);
+        var (connection, _) = await play.EnterAsync(300);
+
+        var exception = await Record.ExceptionAsync(() => observer.Sessions[0].SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken));
+
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AnObserverCannotSendRawMovementDuringAFightWithoutAFightBehavior()
+    {
+        var observer = new RecordingObserver();
+        await using var play = new TestPlay([observer]);
+        var (connection, bot) = await play.EnterAsync(300);
+        connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight });
+        await bot.ProcessedAsync();
+
+        var exception = await Record.ExceptionAsync(() => observer.Sessions[0].SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken));
+
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AnObserverCannotSendRawMovementWhileAFightBehaviorRuns()
+    {
+        var observer = new RecordingObserver();
+        await using var play = new TestPlay([observer]);
+        var (connection, bot) = await play.EnterAsync(300);
+        connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight });
+        await bot.ProcessedAsync();
+
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var behavior = bot.RunInFightAsync(
+            async (_, token) =>
+            {
+                started.TrySetResult();
+                await finish.Task.WaitAsync(token);
+
+                return true;
+            },
+            TestContext.Current.CancellationToken);
+
+        await started.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        var exception = await Record.ExceptionAsync(() => observer.Sessions[0].SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken));
+
+        finish.TrySetResult();
+        await behavior;
+
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AnObserverRegisteredBeforeBotsCannotSendMovementDuringSessionStart()
+    {
+        Exception? failure = null;
+        var observer = new RecordingObserver
+        {
+            OnStarted = session =>
+            {
+                try
+                {
+                    session.SendAsync(new MapMovementRequest { MapId = (int)TestPlay.MapId }).GetAwaiter().GetResult();
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+            },
+        };
+        await using var play = TestPlay.WithObserversBeforeBots(observer);
+
+        var connection = play.Connect(TestPlay.Account);
+
+        Assert.IsType<InvalidOperationException>(failure);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AnObserverCannotSendANpcDialogReplyFromAnUntrustedDialogPosition()
+    {
+        var observer = new RecordingObserver();
+        await using var play = new TestPlay([observer]);
+        var (connection, bot) = await play.EnterAsync(300);
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
+        connection.Client(new MapMovementCancelRequest { CellId = 300 });
+        connection.Server(new NpcDialogCreationEvent { MapId = TestPlay.MapId, NpcActorId = TestPlay.WayActorId });
+        connection.Server(new NpcDialogQuestionEvent { MessageId = 1, Replies = { new NpcReply { ReplyId = TestPlay.WayReplyId } } });
+        await bot.ProcessedAsync();
+
+        Assert.True(bot.State.IsInDialog);
+        Assert.False(bot.State.IsPositionTrusted);
+
+        var exception = await Record.ExceptionAsync(() => observer.Sessions[0].SendAsync(
+            new NpcDialogReplyRequest { ReplyId = TestPlay.WayReplyId },
+            TestContext.Current.CancellationToken));
+
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AnObserverCanSendANpcDialogReplyFromATrustedDialogPosition()
+    {
+        var observer = new RecordingObserver();
+        await using var play = new TestPlay([observer]);
+        var (connection, bot) = await play.EnterAsync(300);
+        connection.Server(new NpcDialogCreationEvent { MapId = TestPlay.MapId, NpcActorId = TestPlay.WayActorId });
+        connection.Server(new NpcDialogQuestionEvent { MessageId = 1, Replies = { new NpcReply { ReplyId = TestPlay.WayReplyId } } });
+        await bot.ProcessedAsync();
+
+        Assert.True(bot.State.IsInDialog);
+        Assert.True(bot.State.IsPositionTrusted);
+
+        await observer.Sessions[0].SendAsync(new NpcDialogReplyRequest { ReplyId = TestPlay.WayReplyId }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<NpcDialogReplyRequest>(Assert.Single(connection.Sent));
     }
 
     [Fact]
@@ -139,6 +346,29 @@ public sealed class BotActorTests : IAsyncDisposable
         await bot.ProcessedAsync();
 
         Assert.False(sent);
+        Assert.Null(bot.State.PendingMovementMapId);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AClosedConnectionDuringGuardedSendClearsThePendingMovementMap()
+    {
+        var (connection, bot) = await _play.EnterAsync(300);
+        var failure = bot.RunAsync(
+            async (context, token) =>
+            {
+                connection.Close();
+
+                return await context.SendGuardedAsync(
+                    new MapMovementRequest { MapId = (int)TestPlay.MapId },
+                    () => true,
+                    token);
+            },
+            TestContext.Current.CancellationToken);
+
+        await Record.ExceptionAsync(() => failure);
+        await bot.ProcessedAsync();
+
         Assert.Null(bot.State.PendingMovementMapId);
         Assert.Empty(connection.Sent);
     }

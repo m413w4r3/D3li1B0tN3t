@@ -160,7 +160,17 @@ internal sealed class TestPlay : IAsyncDisposable
     {
     }
 
+    public static TestPlay WithObserversBeforeBots(params IGameObserver[] observers)
+    {
+        return new TestPlay(observers, true, [], []);
+    }
+
     private TestPlay(IReadOnlyList<IGameObserver> observers, IReadOnlyList<NpcWay> npcWays, int[] blocked)
+        : this(observers, false, npcWays, blocked)
+    {
+    }
+
+    private TestPlay(IReadOnlyList<IGameObserver> observers, bool observersBeforeBots, IReadOnlyList<NpcWay> npcWays, int[] blocked)
     {
         var path = _directory.Combine("data-3.pack");
 
@@ -174,7 +184,8 @@ internal sealed class TestPlay : IAsyncDisposable
         // The wait between two steps is a test's own to ask for: the others drive their steps by the server's answers alone.
         Bots = new Bots(Maps, World, Tables, Time, _logs, npcWays) { Delays = BotDelays.Measured with { BetweenSteps = TimeSpan.Zero } };
         _accounts = new GameAccounts(_settings.SelectionLifetime, Time);
-        _decoder = new RelayDecoder(Translation, new GameServerSelections(_settings, Time), _accounts, [Bots, .. observers], _logs);
+        IGameObserver[] registeredObservers = observersBeforeBots ? [.. observers, Bots] : [Bots, .. observers];
+        _decoder = new RelayDecoder(Translation, new GameServerSelections(_settings, Time), _accounts, registeredObservers, _logs);
     }
 
     /// <summary>A play whose journeys go through an NPC's way: the NPC who is no banker, in <see cref="InsideMapId"/>, leads to <see cref="NorthMapId"/> by <see cref="WayReplyId"/> then <see cref="WayLastReplyId"/> (D253).</summary>

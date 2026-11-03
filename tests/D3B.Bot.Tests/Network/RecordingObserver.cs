@@ -13,6 +13,8 @@ internal sealed class RecordingObserver : IGameObserver
 
     public bool Fails { get; init; }
 
+    public Action<GameSession>? OnStarted { get; init; }
+
     /// <summary>Gets what it does with each frame, once kept, such as sending the server a request.</summary>
     public Action<GameSession, RelayDirection, DecodedGameFrame>? OnEachFrame { get; init; }
 
@@ -26,6 +28,7 @@ internal sealed class RecordingObserver : IGameObserver
             throw new InvalidOperationException("The observer failed.");
 
         _sessions.Enqueue(session);
+        OnStarted?.Invoke(session);
     }
 
     public void OnFrame(GameSession session, RelayDirection direction, DecodedGameFrame frame)
