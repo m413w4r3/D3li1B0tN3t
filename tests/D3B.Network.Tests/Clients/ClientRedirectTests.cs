@@ -24,8 +24,14 @@ public sealed class ClientRedirectTests : IDisposable
 
         await redirect.StartAsync(TestContext.Current.CancellationToken);
 
-        var given = ClientConfiguration.Parse(await File.ReadAllTextAsync(Path.Combine(_client.RedirectDirectory, ClientRedirectFiles.ConfigFileName), TestContext.Current.CancellationToken));
+        var originalConfig = await File.ReadAllTextAsync(_client.AnkamaConfig, TestContext.Current.CancellationToken);
+        var originalConfigCopy = Path.Combine(_client.RedirectDirectory, ClientRedirectFiles.OriginalConfigFileName);
+        var config = Path.Combine(_client.RedirectDirectory, ClientRedirectFiles.ConfigFileName);
+        var given = ClientConfiguration.Parse(await File.ReadAllTextAsync(config, TestContext.Current.CancellationToken));
 
+        Assert.Equal(_client.AnkamaConfigUrl, ClientRedirectFiles.OriginalUrl(_client.RedirectDirectory));
+        Assert.Equal(originalConfig, await File.ReadAllTextAsync(originalConfigCopy, TestContext.Current.CancellationToken));
+        Assert.True(File.Exists(config));
         Assert.Equal(_client.D3BConfigUrl, ClientVersionFile.ReadConfigUrl(_client.VersionFile));
         Assert.StartsWith("file:///", _client.D3BConfigUrl, StringComparison.Ordinal);
         Assert.Equal("Test:127.0.13.59:5555,443", Assert.Single(given.ConnectionHosts).ToString());
@@ -34,6 +40,21 @@ public sealed class ClientRedirectTests : IDisposable
         await redirect.StopAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(TestClient.VersionText(_client.AnkamaConfigUrl), await File.ReadAllTextAsync(_client.VersionFile, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task AFirstRedirectSidecarFailureLeavesTheVersionFileUntouched()
+    {
+        var original = await File.ReadAllBytesAsync(_client.VersionFile, TestContext.Current.CancellationToken);
+        Directory.CreateDirectory(Path.Combine(_client.RedirectDirectory, ClientRedirectFiles.OriginalUrlFileName));
+
+        using var redirect = _client.Redirect();
+
+        var exception = await Assert.ThrowsAsync<RelayUnavailableException>(() => redirect.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("D3B cannot send the client", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(original, await File.ReadAllBytesAsync(_client.VersionFile, TestContext.Current.CancellationToken));
+        Assert.Equal(_client.AnkamaConfigUrl, ClientVersionFile.ReadConfigUrl(_client.VersionFile));
     }
 
     [Fact]
@@ -50,12 +71,111 @@ public sealed class ClientRedirectTests : IDisposable
 
         await File.WriteAllTextAsync(_client.VersionFile, crashed, TestContext.Current.CancellationToken);
 
+        var savedUrlPath = Path.Combine(_client.RedirectDirectory, ClientRedirectFiles.OriginalUrlFileName);
+        var savedUrlBytes = await File.ReadAllBytesAsync(savedUrlPath, TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(savedUrlPath, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var savedUrlLastWriteTimeUtc = File.GetLastWriteTimeUtc(savedUrlPath);
+        UnixFileMode? originalMode = null;
+
+        if (!OperatingSystem.IsWindows())
+        {
+            originalMode = File.GetUnixFileMode(savedUrlPath);
+            File.SetUnixFileMode(savedUrlPath, originalMode.Value & ~(UnixFileMode.UserWrite | UnixFileMode.GroupWrite | UnixFileMode.OtherWrite));
+        }
+
+        try
+        {
+            using var redirect = _client.Redirect();
+
+            await redirect.StartAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(savedUrlBytes, await File.ReadAllBytesAsync(savedUrlPath, TestContext.Current.CancellationToken));
+            Assert.Equal(savedUrlLastWriteTimeUtc, File.GetLastWriteTimeUtc(savedUrlPath));
+
+            await redirect.StopAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(savedUrlBytes, await File.ReadAllBytesAsync(savedUrlPath, TestContext.Current.CancellationToken));
+            Assert.Equal(savedUrlLastWriteTimeUtc, File.GetLastWriteTimeUtc(savedUrlPath));
+            Assert.Equal(_client.AnkamaConfigUrl, ClientVersionFile.ReadConfigUrl(_client.VersionFile));
+        }
+        finally
+        {
+            if (!OperatingSystem.IsWindows() && originalMode is { } mode)
+                File.SetUnixFileMode(savedUrlPath, mode);
+        }
+    }
+
+    [Fact]
+    public async Task ACrashWithNoSavedUrlFailsWithRepairInstructions()
+    {
+        string crashed;
+
+        using (var first = _client.Redirect())
+        {
+            await first.StartAsync(TestContext.Current.CancellationToken);
+            crashed = await File.ReadAllTextAsync(_client.VersionFile, TestContext.Current.CancellationToken);
+        }
+
+        await File.WriteAllTextAsync(_client.VersionFile, crashed, TestContext.Current.CancellationToken);
+        File.Delete(Path.Combine(_client.RedirectDirectory, ClientRedirectFiles.OriginalUrlFileName));
+
         using var redirect = _client.Redirect();
 
-        await redirect.StartAsync(TestContext.Current.CancellationToken);
-        await redirect.StopAsync(TestContext.Current.CancellationToken);
+        var exception = await Assert.ThrowsAsync<RelayUnavailableException>(() => redirect.StartAsync(TestContext.Current.CancellationToken));
 
+        Assert.Contains("repair the client from the launcher", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(_client.D3BConfigUrl, ClientVersionFile.ReadConfigUrl(_client.VersionFile));
+        Assert.Null(ClientRedirectFiles.OriginalUrl(_client.RedirectDirectory));
+    }
+
+    [Fact]
+    public async Task AMalformedConfigurationLeavesTheOriginalVersionFileUntouched()
+    {
+        var original = await File.ReadAllBytesAsync(_client.VersionFile, TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(_client.AnkamaConfig, "{not-json", TestContext.Current.CancellationToken);
+
+        using var redirect = _client.Redirect();
+
+        await Assert.ThrowsAsync<RelayUnavailableException>(() => redirect.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(original, await File.ReadAllBytesAsync(_client.VersionFile, TestContext.Current.CancellationToken));
         Assert.Equal(_client.AnkamaConfigUrl, ClientVersionFile.ReadConfigUrl(_client.VersionFile));
+        Assert.Null(ClientRedirectFiles.OriginalUrl(_client.RedirectDirectory));
+    }
+
+    [Fact]
+    public async Task AVersionFileWithoutConfigUrlFailsAndKeepsItsBytes()
+    {
+        byte[] original = "Version=3.7.12.12\nBuildDate=2026-10-19T15:11:45+00:00\n"u8.ToArray();
+        await File.WriteAllBytesAsync(_client.VersionFile, original, TestContext.Current.CancellationToken);
+
+        using var redirect = _client.Redirect();
+
+        var exception = await Assert.ThrowsAsync<RelayUnavailableException>(() => redirect.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("has no ConfigUrl line", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(original, await File.ReadAllBytesAsync(_client.VersionFile, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RedirectingOneInstallationLeavesAnotherInstallationUntouched()
+    {
+        using var other = new TestClient("\"Other:other.test:5555,443\"");
+        var otherVersion = await File.ReadAllBytesAsync(other.VersionFile, TestContext.Current.CancellationToken);
+        var otherConfig = await File.ReadAllBytesAsync(other.AnkamaConfig, TestContext.Current.CancellationToken);
+
+        using (var redirect = _client.Redirect())
+        {
+            await redirect.StartAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(otherVersion, await File.ReadAllBytesAsync(other.VersionFile, TestContext.Current.CancellationToken));
+            Assert.Equal(otherConfig, await File.ReadAllBytesAsync(other.AnkamaConfig, TestContext.Current.CancellationToken));
+
+            await redirect.StopAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(otherVersion, await File.ReadAllBytesAsync(other.VersionFile, TestContext.Current.CancellationToken));
+        Assert.Equal(otherConfig, await File.ReadAllBytesAsync(other.AnkamaConfig, TestContext.Current.CancellationToken));
     }
 
     [Fact]

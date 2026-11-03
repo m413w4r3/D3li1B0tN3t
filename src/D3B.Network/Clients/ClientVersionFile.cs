@@ -39,7 +39,13 @@ public static class ClientVersionFile
     /// <exception cref="InvalidDataException">The file has no <c>ConfigUrl</c> line.</exception>
     public static void WriteConfigUrl(string path, string url)
     {
+        WriteConfigUrl(path, url, static (temporaryPath, destinationPath) => File.Move(temporaryPath, destinationPath, overwrite: true));
+    }
+
+    internal static void WriteConfigUrl(string path, string url, Action<string, string> commit)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(url);
+        ArgumentNullException.ThrowIfNull(commit);
 
         if (url.AsSpan().ContainsAny('\r', '\n'))
             throw new ArgumentException("A URL holds no line break.", nameof(url));
@@ -52,7 +58,32 @@ public static class ClientVersionFile
 
         lines[index] = $"{ConfigUrlKey}={url}{(lines[index].EndsWith('\r') ? "\r" : string.Empty)}";
 
-        File.WriteAllBytes(path, Encoding.Latin1.GetBytes(string.Join('\n', lines)));
+        var bytes = Encoding.Latin1.GetBytes(string.Join('\n', lines));
+        var destinationPath = System.IO.Path.GetFullPath(path);
+        var directory = System.IO.Path.GetDirectoryName(destinationPath)!;
+        var temporaryPath = System.IO.Path.Combine(directory, $".{System.IO.Path.GetFileName(destinationPath)}.{Guid.NewGuid():N}.tmp");
+        // Atomic replacement creates a new file entry: preserve its mode, but cannot retain symlink identity, ACLs, or ownership.
+        var originalMode = OperatingSystem.IsWindows() ? (UnixFileMode?)null : File.GetUnixFileMode(path);
+
+        try
+        {
+            using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(bytes);
+
+                if (!OperatingSystem.IsWindows())
+                    File.SetUnixFileMode(temporaryPath, originalMode!.Value);
+
+                stream.Flush(flushToDisk: true);
+            }
+
+            commit(temporaryPath, destinationPath);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
     }
 
     private static string Read(string path)

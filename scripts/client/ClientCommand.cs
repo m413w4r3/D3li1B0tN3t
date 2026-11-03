@@ -103,7 +103,16 @@ internal static class ClientCommand
 
     private static int Restore(string versionFile, string directory)
     {
-        if (ClientVersionFile.ReadConfigUrl(versionFile) != ClientRedirectFiles.ConfigUrl(directory))
+        var current = ClientVersionFile.ReadConfigUrl(versionFile);
+
+        if (current is null)
+        {
+            Console.Error.WriteLine($"{versionFile} has no ConfigUrl line: repair the client from the launcher, which writes the version file anew.");
+
+            return Unreadable;
+        }
+
+        if (current != ClientRedirectFiles.ConfigUrl(directory))
         {
             Console.WriteLine($"Nothing to do: {versionFile} already names Ankama's configuration.");
 
