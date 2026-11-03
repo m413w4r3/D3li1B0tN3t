@@ -177,7 +177,8 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
             }
         }
 
-        session.SendGate = bot.CanSendRawRequest;
+        session.SendGate = request => bot.CanSendRawRequest(session, request);
+        session.SendBarrier = bot.ProcessedAsync;
         bot.Attach(session, state);
         binding.Bot = bot;
 

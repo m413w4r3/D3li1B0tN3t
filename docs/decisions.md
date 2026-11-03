@@ -6765,3 +6765,30 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Residual**: One ordered game connection is assumed. The refusal protocol has no request correlation, so a refusal
   crossing a newer request on the same map remains indistinguishable. A mapless movement announcement may still match a
   newly placed cell.
+
+## D296: Bind send authority to the session and synchronize the bot inbox
+
+*2026-11-03, P2H third audit-fix lot. This entry completes the session-send guarantees recorded historically in D295.*
+
+- **Session identity**: `BotActor.CanSendRawRequest` receives the invoking `GameSession`. It allows a non-current
+  session to send non-movement requests, but denies every movement-capable request from that session. The actor's
+  current session reference is volatile for reads from sender threads. `Bots.Bind` captures the exact session in its
+  send gate, so an older connection cannot borrow the current connection's trusted dialog or fight state.
+- **Inbox barrier**: `Bots.Bind` assigns `BotActor.ProcessedAsync` as the bound session's send barrier. A movement-capable
+  `GameSession.SendAsync` awaits the barrier before the gate; non-movement sends skip it. `BotContext.SendGuardedAsync`
+  awaits the same processing marker after the display delay and before its guard. Authorization therefore sees every
+  frame already posted to the actor inbox.
+- **Send ordering**: The guarded path keeps the order barrier, guard, pending movement marker post, then transport send.
+  A server answer is posted only after the send. Raw behavior sends use the session barrier and do not add a second one.
+- **Evidence**: Test commit `c37bd2b` ran 5 regression cases RED (4 failed, 1 passed). The focused P2H/movement/runtime/
+  element-use/banking/fight/session set passed 221/221; `D3B.Bot.Tests` passed 524/524; the project-by-project serial
+  suite passed 1,350/1,350, up 5 from D295's baseline. Build and formatting passed with SDK 10.0.403 and `-m:1`;
+  `git diff --check` passed. The Microsoft Testing
+  Platform named-pipe handshake was unavailable in this environment; the tests ran with the local xUnit v3 in-process
+  runner. No live client, host, relay, game, or capture was used.
+- **Residual**: The barrier covers frames already posted to the bot inbox, not a frame still in flight in the relay read
+  loop. Such a frame may be posted after the barrier completes. D294's same-map refusal-correlation ambiguity and the
+  mapless movement-announcement risk remain. `Recovery`, `Banking`, and `GuildChest` still ignore explicit held-release
+  outcomes.
+- **Boundary**: The next live action still requires a NEW OWNER GO and publication and review of the build for that
+  action.

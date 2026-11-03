@@ -215,6 +215,18 @@ gate after the caller's movement guard, and requires review of every call site. 
 active behavior's send call so observers cannot borrow it. The refusal's same-map correlation
 ambiguity and the mapless movement-announcement risk remain.
 
+P2H's third audit follow-up binds the gate to the exact session that invokes it. A non-current session may send
+non-movement requests, but cannot send movement-capable requests using the current session's trusted state. For current
+sessions, movement-capable `GameSession.SendAsync` first awaits the actor's processed-inbox marker, then checks the gate;
+`SendGuardedAsync` waits at that same point after the display delay and before its movement predicate. Non-movement sends
+do not wait on the barrier, and guarded sends keep the order of authorization, pending-marker post, and transport send.
+
+This serializes every frame already posted to the actor inbox, including a queued map change or dialog update. It cannot
+serialize a frame still in flight in the relay read loop; such a frame may be posted after the barrier completes. The
+third follow-up's focused tests pass 221/221, `D3B.Bot.Tests` passes 524/524, and the project-by-project serial suite
+passes 1,350/1,350. The remaining same-map refusal correlation and mapless movement-announcement risks are unchanged.
+The next live action still requires a **NEW OWNER GO** and publication and review of the build for that action.
+
 ## F. Supervised visual test and reproducible procedure
 
 **Not run during P2F.** The described observation-only visual validation was subsequently executed

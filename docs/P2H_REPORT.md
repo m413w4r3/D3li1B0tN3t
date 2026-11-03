@@ -245,3 +245,47 @@ maximum of 128; it was stopped, and the equivalent serial run passed.
 
 The ordered-connection assumption remains: refusals have no request correlation, so a refusal crossing a newer request on
 the same map is still indistinguishable. A mapless movement announcement can still match a newly placed cell.
+
+## Third audit follow-up: session identity and inbox barrier
+
+The third independent audit found two remaining authorization gaps in the second follow-up. Its session gate read
+bot-wide state without checking which session invoked it, and actor state could lag behind frames already posted to the
+bot's inbox. This follow-up closes both paths. D295 remains the historical record of the second lot; the session gate
+description there did not yet guarantee session identity or inbox ordering.
+
+1. **Session identity.** `BotActor._session` is volatile because sender threads read it. The send authorization receives
+   the invoking `GameSession`. A non-current session may send non-movement requests, but every movement-capable request
+   from it is denied. `Bots.Bind` captures that exact session in its gate, so an older open session cannot borrow a newer
+   session's trusted dialog or fight state.
+2. **Inbox barrier.** `Bots.Bind` gives the session `BotActor.ProcessedAsync` as its barrier. A movement-capable
+   `GameSession.SendAsync` awaits it before checking the session gate; non-movement requests skip it. Guarded sends await
+   the same actor processing point after the display wait and before the movement guard. The order remains barrier,
+   authorization, pending movement marker post, then transport send. `BotContext.SendAsync` relies on the session barrier
+   and does not add a second one.
+3. **Deterministic regression coverage.** Two open sessions prove the older dialog reply is rejected on the older
+   connection. A blocking expectation holds the actor while a map change is posted, then starts a guarded send; it waits
+   for processing and refuses without sending. Separate tests assert the bound barrier, barrier-before-gate ordering,
+   and no barrier for non-movement sends.
+
+The test-only commit `c37bd2b` compiled and ran RED: 5 tests, 4 failed and 1 passed. The failures were the stale-session
+reply, queued map change, missing binding barrier, and missing barrier-before-gate ordering. The test-only first commit
+added only the internal barrier property needed to compile those tests; it did not perform synchronization.
+
+GREEN evidence with SDK 10.0.403:
+
+- The focused P2H/movement/runtime/element-use/banking/fight/session set passed **221/221**, including the five new tests.
+- `D3B.Bot.Tests` passed **524/524** (519 previous + 5).
+- The nine projects passed serially: Bot 524, App 142, Engine 257, Data 133, Network 133, Protocol 88, Scripts 35,
+  Storage 27, and Core 11 — **1,350/1,350**, 0 failed, 0 skipped (1,345 previous + 5).
+- `/home/nill/.dotnet/dotnet build D3B.slnx --no-restore -m:1` passed with 0 warnings and 0 errors after restoring
+  only from the local NuGet cache with package auditing disabled.
+- `/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore` and `git diff --check` passed.
+
+The environment denied the Microsoft Testing Platform's named-pipe handshake, so the focused and full project runs used
+the local xUnit v3 in-process runner directly, sequentially, instead of `dotnet test`. No test data, captures, client,
+host, relay, or game were used.
+
+The barrier covers every frame already posted to the bot inbox. A frame still held by the relay's read loop has not yet
+reached the inbox and can arrive after the barrier; the gate therefore cannot guarantee synchronization with an
+in-flight relay frame. The older same-map refusal-correlation and mapless movement-announcement risks remain. The next
+live action still requires a **NEW OWNER GO** and publication and review of the build for that action.

@@ -129,6 +129,9 @@ public sealed class GameSession : IConnectionInterceptor
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        if (MovementRequests.IsMovementCapable(request) && SendBarrier is { } barrier)
+            await barrier().ConfigureAwait(false);
+
         if (SendGate is { } gate && !gate(request))
             throw new InvalidOperationException("The request is not allowed from the current bot state.");
 

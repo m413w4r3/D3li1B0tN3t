@@ -56,7 +56,7 @@ public sealed class BotActor : IAsyncDisposable
     private readonly Task _loop;
 
     // The loop writes these; the session gate reads the current behavior.
-    private GameSession? _session;
+    private volatile GameSession? _session;
     private volatile RunningBehavior? _behavior;
 
     // The loop writes these, and anyone reads them.
@@ -145,8 +145,11 @@ public sealed class BotActor : IAsyncDisposable
     /// <summary>Gets when the server last created a fight's context for the character, if it ever did.</summary>
     internal DateTimeOffset? FightBeganAt => Volatile.Read(ref _fightBeganAt) is var ticks and not NeverEnded ? new DateTimeOffset(ticks, TimeSpan.Zero) : null;
 
-    internal bool CanSendRawRequest(IMessage request)
+    internal bool CanSendRawRequest(GameSession session, IMessage request)
     {
+        if (!ReferenceEquals(session, _session))
+            return !MovementRequests.IsMovementCapable(request);
+
         if (!MovementRequests.IsMovementCapable(request))
             return true;
 
