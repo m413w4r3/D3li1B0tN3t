@@ -199,11 +199,13 @@ Two lower risks remain: a delayed mapless event can pass the guards if it arrive
 placement and happens to match that cell; and an absent MapCurrentEvent.map_id has no presence guard
 and can decode as 0.
 
-## F. Next supervised visual test
+## F. Supervised visual test and reproducible procedure
 
-**Not run in P2F. A new owner GO is required.** P2E's GO does not authorize this session. The
-step-by-step procedure is in [LINUX_ACCEPTANCE.md](LINUX_ACCEPTANCE.md#p2f-next-supervised-visual-validation).
-This next visual test is manual and observation-only; it does not authorize bot movement.
+**Not run during P2F.** The described observation-only visual validation was subsequently executed
+and passed in P2G; see [P2G_REPORT.md](P2G_REPORT.md). P2E's GO did not authorize the later session.
+The procedure is retained as a reproducible runbook in
+[LINUX_ACCEPTANCE.md](LINUX_ACCEPTANCE.md#p2f-visual-validation-procedure). P2G does not authorize
+bot movement.
 
 Before the GO is used, close Dofus and confirm no updater, host, or relay is active. Recheck the
 installed client build, date, platform, Unity and metadata identity, and binary fingerprint against
@@ -217,8 +219,9 @@ e873b71e09af2beaf54ea60406870df01648a5b9 using the pinned SDK and the procedure 
 as a private backup, install the complete P2F publish directory, and verify the launcher and managed
 payload identity against the fresh publish output. Record the P2F informational version and hashes
 for D3B.Host, D3B.Host.dll, D3B.Network.dll, and D3B.Bot.dll; the old P2D apphost is not a valid
-substitute. Keep the apphost without a capability. P2F's apphost has not yet been published or
-installed, so its version and hashes remain for the next GO-gated preflight to record.
+substitute. Keep the apphost without a capability. At the time of the P2F report, its apphost had
+not yet been published or installed, so its version and hashes remained for the next GO-gated
+preflight to record.
 
 After the GO and all preflight gates pass, start the verified apphost as the normal user with
 captures disabled and both position and game-session diagnostics enabled:
@@ -249,4 +252,5 @@ private; retain only build identity, result, and non-sensitive aggregate counts.
 | PASS | The server-observed map and a server-placed or server-confirmed cell match the visible client. |
 | BLOCKED | Only an estimated or client-reported cell is available, position remains unknown, decoding fails, the log and client disagree, or any identity/preflight check fails. Stop and preserve only sanitized diagnostics. |
 
-No live or visual validation is claimed by this report.
+P2F itself made no live or visual validation claim; the later P2G result is recorded in
+[P2G_REPORT.md](P2G_REPORT.md).

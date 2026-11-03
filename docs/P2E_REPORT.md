@@ -41,7 +41,12 @@ The character-state consumer's relevant field use is visible in `src/D3B.Bot/Cha
 
 **P2F update.** P2F also clears `Cell` when a refusal coordinate cannot be mapped, applies a refusal only when the current cell is known, and accepts a client `MapMovementCancelRequest` only during an active walk. These are later state guards, not claims about events seen in P2E. See [P2F_REPORT](P2F_REPORT.md) for the complete state and observability behavior.
 
-These source paths describe what the current code would consume from successfully translated fields. The P2E aggregate log proves message names and message-level read states and counts. It does not expose the decoded map or cell values, prove which optional fields were populated in each partial message, or show that a particular `CharacterState` update occurred. Runtime map/cell correctness remains unverified.
+These source paths describe what the current code would consume from successfully translated
+fields. The P2E aggregate log proves message names and message-level read states and counts. It
+does not expose the decoded map or cell values, prove which optional fields were populated in each
+partial message, or show that a particular `CharacterState` update occurred. Runtime map/cell
+correctness was unverified in P2E; the later owner-confirmed visual result is recorded in
+[P2G_REPORT.md](P2G_REPORT.md).
 
 ## D. Restoration confirmation
 
@@ -71,6 +76,11 @@ The aggregate contains no `MapMovementRefusedEvent` and no `MapMovementCancelReq
 - The 349 warnings add noise, including repeated partial movement messages.
 - The client update guard remains important: a version or build-date change requires stopping and rechecking the client identity and matching runtime artifacts before another session. The full binary fingerprint remains a manual preflight gate.
 
-## Next
+## Next (P2E plan, later completed in P2G)
 
-P2F's next supervised validation should use the host's transition logs to distinguish server-observed placement and server-confirmed movement from estimated position, then compare the map/cell with the visible client. Follow the procedure in [LINUX_ACCEPTANCE](LINUX_ACCEPTANCE.md#p2f-next-supervised-visual-validation). It requires a new GO; P2E's authorization does not carry forward.
+At the time of P2E, the next supervised validation was planned to use the host's transition logs
+to distinguish server-observed placement and server-confirmed movement from estimated position,
+then compare the map/cell with the visible client. That observation-only validation was
+subsequently executed and passed in P2G; see [P2G_REPORT.md](P2G_REPORT.md). The reproducible
+procedure is retained in [LINUX_ACCEPTANCE.md](LINUX_ACCEPTANCE.md#p2f-visual-validation-procedure).
+P2E's authorization did not carry forward to that later session.

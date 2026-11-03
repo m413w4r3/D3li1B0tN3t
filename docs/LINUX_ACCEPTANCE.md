@@ -1,11 +1,19 @@
 # Linux client acceptance runbook
 
-**Status: P2E is COMPLETE/PASS** for connection and relay, authentication, character selection, the supervised game session, and stop/restore on `3.7.13.17`. Frame decoding was mixed, and visual map/cell validation remains unverified; see [P2E_REPORT](P2E_REPORT.md). The next visual validation is documented below and requires a new GO. The 443 route remains **BLOCKED** until explicit owner authorization for the dedicated apphost capability; no capability has been applied.
+**Status: P2E is COMPLETE/PASS** for connection and relay, authentication, character selection, the
+supervised game session, and stop/restore on `3.7.13.17`. Frame decoding was mixed. P2G subsequently
+completed and passed visual map/cell validation on Dofus Linux `3.7.13.17`; see
+[P2G_REPORT.md](P2G_REPORT.md). The P2F procedure below is retained as a historical, reproducible
+runbook. Any further live session requires a new owner GO, including the future one-neighbour
+automated move; P2G did not authorize or execute that move. The 443 route remains **BLOCKED** until
+explicit owner authorization for the dedicated apphost capability; no capability has been applied.
 
-## P2F next supervised visual validation
+## P2F visual validation procedure
 
-**Not run during P2F. A new GO is required before the next client session.** P2E's GO does not
-authorize another run. The current P2E result and its historical procedure below remain in force.
+**Not run during P2F.** The supervised visual validation was subsequently executed and passed in
+P2G; see [P2G_REPORT.md](P2G_REPORT.md). P2E's GO did not authorize that later run. This procedure
+is retained for reproducibility. A new owner GO is required before any further client session,
+including the future one-neighbour automated move, which P2G did not authorize or execute.
 
 1. **Preflight.** Close Dofus and confirm no updater, host, or relay is active. Recheck the installed
    client version, build date, platform, Unity/metadata identity, and binary fingerprint against
