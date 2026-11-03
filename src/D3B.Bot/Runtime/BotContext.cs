@@ -26,6 +26,8 @@ public sealed class BotContext
     /// <summary>Gets the character's state now: a snapshot, which the next message the bot sees replaces.</summary>
     public CharacterState State => _bot.State;
 
+    internal bool IsConnected => _bot.IsConnected;
+
     /// <summary>Gets the maps of the installed build's pack.</summary>
     public GameMaps Maps => _bot.Maps;
 
@@ -138,16 +140,36 @@ public sealed class BotContext
     public async Task SendAsync(IMessage request, CancellationToken cancellationToken)
     {
         // Again once waited: the display time raised meanwhile, or a new map placed, holds the request longer.
-        for (var wait = _bot.DrawnAt - _bot.Time.GetUtcNow(); wait > TimeSpan.Zero; wait = _bot.DrawnAt - _bot.Time.GetUtcNow())
-            await Task.Delay(wait, _bot.Time, cancellationToken).ConfigureAwait(false);
+        await WaitUntilDrawnAsync(cancellationToken).ConfigureAwait(false);
 
         await _behavior.Session.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal async Task<bool> SendGuardedAsync(IMessage request, Func<bool> canSend, CancellationToken cancellationToken, Action? beforeSend = null)
+    {
+        ArgumentNullException.ThrowIfNull(canSend);
+
+        await WaitUntilDrawnAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!canSend())
+            return false;
+
+        beforeSend?.Invoke();
+        await _behavior.Session.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+        return true;
     }
 
     /// <summary>Begins an action the journal writes once over, within the actions begun before it and not over (D112).</summary>
     internal JournalAction BeginAction()
     {
         return new JournalAction(this, _actions++, _bot.Time.GetUtcNow());
+    }
+
+    private async Task WaitUntilDrawnAsync(CancellationToken cancellationToken)
+    {
+        for (var wait = _bot.DrawnAt - _bot.Time.GetUtcNow(); wait > TimeSpan.Zero; wait = _bot.DrawnAt - _bot.Time.GetUtcNow())
+            await Task.Delay(wait, _bot.Time, cancellationToken).ConfigureAwait(false);
     }
 
     internal void EndAction()

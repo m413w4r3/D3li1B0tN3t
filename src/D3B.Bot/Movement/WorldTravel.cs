@@ -39,6 +39,15 @@ public static class WorldTravel
     {
         ArgumentNullException.ThrowIfNull(bot);
 
+        var refusal = MovementGuard.Refuse(bot.State, bot.IsConnected);
+
+        if (refusal is MovementRefusal.Disconnected)
+        {
+            MovementGuard.LogRefusal(bot.Log, bot.State, refusal);
+
+            return Task.FromResult(TravelOutcome.Busy);
+        }
+
         FrozenSet<long> maps = [mapId];
 
         return bot.RunAsync((context, token) => context.TravelAsync(maps, token), cancellationToken);
@@ -127,9 +136,12 @@ public static class WorldTravel
 
         while (true)
         {
+            if (!MovementGuard.IsAllowed(context))
+                return (changes is 0 && failures is 0 ? TravelOutcome.Busy : TravelOutcome.Failed, changes);
+
             var state = context.State;
 
-            if (state.MapId is not { } mapId || state.Cell is not { } cell || state.IsBusy)
+            if (state.MapId is not { } mapId || state.Cell is not { } cell)
                 return (changes is 0 && failures is 0 ? TravelOutcome.Busy : TravelOutcome.Failed, changes);
 
             if (maps.Contains(mapId) || (changes > 0 && !state.IsInHavenBag && stopAt is not null && stopAt(state)))

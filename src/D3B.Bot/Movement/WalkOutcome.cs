@@ -6,7 +6,7 @@ public enum WalkOutcome
     /// <summary>The character stands on the cell: the server answered the client's confirmation, or it stood there already.</summary>
     Arrived,
 
-    /// <summary>The character walks already, uses an element, is in a dialog or an exchange, which the server refuses a walk during, or where it stands is not known yet: nothing was sent.</summary>
+    /// <summary>The character is walking or held, fighting, busy, disconnected, or has an unknown or untrusted position: this walk sent no request.</summary>
     Busy,
 
     /// <summary>The pack's cells hold no path to the cell, or the pack lacks the map: nothing was sent.</summary>

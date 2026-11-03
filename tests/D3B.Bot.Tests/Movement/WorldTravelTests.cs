@@ -5,6 +5,7 @@ using D3B.Bot.Movement;
 using D3B.Bot.Runtime;
 using D3B.Bot.Tests.Runtime;
 using D3B.Protocol.Game;
+using D3B.Engine.Maps;
 
 namespace D3B.Bot.Tests.Movement;
 
@@ -149,6 +150,90 @@ public sealed class WorldTravelTests
 
         Assert.Equal(TravelOutcome.Busy, await bot.TravelAsync(TestPlay.NorthMapId, TestContext.Current.CancellationToken));
         Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AJourneyFromAClientReportedCellIsBusyAndSendsNothing()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(368);
+
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 368, 369 } });
+        connection.Client(new MapMovementCancelRequest { CellId = 368 });
+        await bot.ProcessedAsync();
+
+        Assert.Equal(TravelOutcome.Busy, await bot.TravelAsync(TestPlay.NorthMapId, TestContext.Current.CancellationToken));
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AJourneyFromAnEstimatedHeldCellIsBusyWithoutAnotherRequest()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(433);
+        Assert.True(CellPathfinder.TryFind(play.Maps.Get(TestPlay.MapId).Cells.Span, 433, 388, out var path));
+        var walk = bot.WalkAsync(388, TestContext.Current.CancellationToken);
+
+        await connection.SentAsync(1);
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { path.Cells.ToArray() } });
+        Assert.Equal(WalkOutcome.NotConfirmed, await TestWalks.AdvanceUntilDoneAsync(play.Time, walk));
+
+        Assert.Equal(TravelOutcome.Busy, await bot.TravelAsync(TestPlay.NorthMapId, TestContext.Current.CancellationToken));
+        Assert.Single(connection.Sent);
+        Assert.True(bot.State.IsWalkHeld);
+    }
+
+    [Fact]
+    public async Task AJourneyInAFightIsBusyAndSendsNothing()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(433);
+
+        connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight });
+        await bot.ProcessedAsync();
+
+        Assert.Equal(TravelOutcome.Busy, await bot.TravelAsync(TestPlay.NorthMapId, TestContext.Current.CancellationToken));
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task ADisconnectedJourneyIsBusyAndSendsNothing()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(433);
+
+        connection.Close();
+        await bot.ProcessedAsync();
+
+        Assert.Equal(TravelOutcome.Busy, await bot.TravelAsync(TestPlay.NorthMapId, TestContext.Current.CancellationToken));
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AJourneyFromAServerConfirmedCellCanReachItsTarget()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(300, TestPlay.NorthMapId);
+
+        Assert.True(CellPathfinder.TryFind(play.Maps.Get(TestPlay.NorthMapId).Cells.Span, 300, 301, out var manualPath));
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { manualPath.Cells.ToArray() } });
+        connection.Response(new MapMovementConfirmResponse());
+        await bot.ProcessedAsync();
+
+        Assert.Equal(301, bot.State.Cell);
+        Assert.Equal(CellProvenance.ServerConfirmed, bot.State.Provenance);
+
+        var journey = bot.TravelAsync(TestPlay.EastMapId, TestContext.Current.CancellationToken);
+
+        Assert.True(await TestWalks.WalkedAsync(play, connection, 1) >= 532);
+        Assert.Equal(new MapChangeRequest { MapId = (int)TestPlay.MapId }, await TestWalks.SentAsync(play, connection, 2));
+        TestWalks.Arrive(connection, TestPlay.MapId, 20);
+
+        Assert.Equal(TestPlay.ActionCell, await TestWalks.WalkedAsync(play, connection, 3, new MapCurrentEvent { MapId = TestPlay.EastMapId }));
+        connection.Server(TestPlay.Information(253, TestPlay.EastMapId));
+
+        Assert.Equal(TravelOutcome.Arrived, await TestWalks.AdvanceUntilDoneAsync(play.Time, journey));
+        Assert.True(bot.State.IsPositionTrusted);
     }
 
     [Fact]

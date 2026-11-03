@@ -1,4 +1,5 @@
 using D3B.Engine.Maps;
+using D3B.Bot.Movement;
 using D3B.Protocol.Game;
 using Microsoft.Extensions.Logging;
 
@@ -194,5 +195,29 @@ public sealed class PositionLoggingTests
         Assert.Contains(PositionMessages(play), message => message == $"Bot {TestPlay.CharacterId}: game connection g1 closed; last known map {TestPlay.MapId} cell 433");
         Assert.Contains(PositionMessages(play), message => message == $"Bot {TestPlay.CharacterId}: plays through game connection g2; position unknown");
         Assert.Contains(PositionMessages(play), message => message == $"Bot {TestPlay.CharacterId}: placed on map {TestPlay.MapId} at cell 434");
+    }
+
+    [Fact]
+    public async Task NavigationRefusalLogsProvenanceAndReasonOnceWithoutPayload()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(368);
+
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 368, 369 } });
+        connection.Client(new MapMovementCancelRequest { CellId = 368 });
+        await bot.ProcessedAsync();
+
+        Assert.Equal(WalkOutcome.Busy, await bot.WalkAsync(434, TestContext.Current.CancellationToken));
+        Assert.Empty(connection.Sent);
+
+        for (var index = 0; index < 100; index++)
+            connection.Server(new InventoryWeightEvent { Weight = index, MaxWeight = 100 });
+
+        await bot.ProcessedAsync();
+
+        var refusal = Assert.Single(PositionMessages(play), message => message.Contains("navigation refused", StringComparison.Ordinal));
+
+        Assert.Equal($"Bot {TestPlay.CharacterId}: navigation refused at map {TestPlay.MapId} cell 368; provenance ClientReported, reason ClientReported; nothing was sent", refusal);
+        Assert.DoesNotContain(play.Log.GetSnapshot(), record => record.Message.Contains("ticket-of-g1", StringComparison.Ordinal));
     }
 }

@@ -1,3 +1,4 @@
+using D3B.Bot.Characters;
 using D3B.Bot.Journal;
 using D3B.Bot.Runtime;
 using D3B.Data.Maps;
@@ -26,7 +27,8 @@ namespace D3B.Bot.Movement;
 /// such a walk goes in two, to the cell before its last, then the last step, or a step aside first when it has one step.
 /// A walk the client did not follow leaves the server with the character on the path's last cell, which the state then
 /// takes, and the client follows the next walk from there (D85). The server may still hold the character walking it,
-/// refusing what is not a walk from there: a step aside lets it go (<see cref="ReleaseHeldWalkAsync"/>, D89).
+/// refusing what is not a walk from there: a step aside lets it go (<see cref="ReleaseHeldWalkAsync"/>, D89). That
+/// measured recovery is explicit; an ordinary walk never attempts it.
 /// </para>
 /// </remarks>
 public static class MapWalk
@@ -44,6 +46,15 @@ public static class MapWalk
     {
         ArgumentNullException.ThrowIfNull(bot);
         CheckCell(cell);
+
+        var refusal = MovementGuard.Refuse(bot.State, bot.IsConnected);
+
+        if (refusal is MovementRefusal.Disconnected)
+        {
+            MovementGuard.LogRefusal(bot.Log, bot.State, refusal);
+
+            return Task.FromResult(WalkOutcome.Busy);
+        }
 
         return bot.RunAsync((context, token) => context.WalkAsync(cell, token), cancellationToken);
     }
@@ -69,14 +80,26 @@ public static class MapWalk
         return outcome;
     }
 
-    /// <summary>Lets go of a walk the server still holds, which the client did not follow: a step to a neighbour, within a behavior.</summary>
+    /// <summary>Tries the measured D89 step-aside recovery for a server-held walk, within a behavior.</summary>
     /// <param name="context">The behavior's context.</param>
     /// <param name="cancellationToken">The behavior's token.</param>
-    /// <returns>How the step ended: <see cref="WalkOutcome.Arrived"/> at once when the server holds no walk.</returns>
+    /// <returns>
+    /// <see cref="WalkOutcome.Arrived"/> when no walk is held, or when one aside walk was server-confirmed and the
+    /// resulting state is trusted on the same map, still; <see cref="WalkOutcome.Busy"/> when its preconditions or proof
+    /// are missing; otherwise the aside walk's outcome.
+    /// </returns>
     /// <remarks>
+    /// <para>
     /// Measured (client.md, D85): after a walk the client did not confirm, the server refused a map change, the haven bag
-    /// and teleports, 9 and 11 s later, and walked a path from the walk's last cell, which the client followed, first
-    /// bringing its character there. A behavior whose first request is not such a walk calls this first (D89).
+    /// and teleports, 9 and 11 s later, and walked a path from the walk's last cell, which the client followed. D89
+    /// measured a step aside to let the held walk go.
+    /// </para>
+    /// <para>
+    /// Preconditions: a live connection, known map and estimated cell, no active walk, fight, use or dialog. It sends at
+    /// most one reachable aside walk. It reports Arrived only after that walk's Arrived outcome and a trusted, confirmed
+    /// cell on the same map with neither walking nor held state. WorldTravel and ordinary MapWalk do not invoke this
+    /// exception; MapChange and explicit callers may.
+    /// </para>
     /// </remarks>
     public static async Task<WalkOutcome> ReleaseHeldWalkAsync(this BotContext context, CancellationToken cancellationToken)
     {
@@ -87,7 +110,14 @@ public static class MapWalk
         if (!state.IsWalkHeld)
             return WalkOutcome.Arrived;
 
-        if (state.MapId is not { } mapId || state.Cell is not { } from || state.IsBusy)
+        if (!context.IsConnected
+            || state.MapId is not { } mapId
+            || state.Cell is not { } from
+            || state.IsWalking
+            || state.IsFighting
+            || state.IsUsing
+            || state.IsInDialog
+            || state.Provenance is not CellProvenance.Estimated)
             return WalkOutcome.Busy;
 
         var neighbours = Enumerable.Range(0, MapCell.DirectionCount).Select(direction => MapGeometry.Neighbour(from, direction)).Where(neighbour => neighbour >= 0).ToArray();
@@ -95,7 +125,20 @@ public static class MapWalk
         if (!context.Maps.TryGet(mapId, out var map) || !CellPathfinder.TryFindNearest(map.Cells.Span, from, neighbours, out var aside))
             return WalkOutcome.NoPath;
 
-        return await WalkAlongAsync(context, mapId, aside, cancellationToken).ConfigureAwait(false);
+        var outcome = await WalkAlongAsync(context, mapId, aside, cancellationToken, heldWalkRelease: true).ConfigureAwait(false);
+
+        if (outcome is not WalkOutcome.Arrived)
+            return outcome;
+
+        var recovered = context.State;
+
+        return recovered.IsPositionTrusted
+            && !recovered.IsWalking
+            && !recovered.IsWalkHeld
+            && recovered.MapId == mapId
+            && recovered.Cell is not null
+                ? WalkOutcome.Arrived
+                : WalkOutcome.Busy;
     }
 
     /// <summary>Gets the request to walk a path, as the client words its own.</summary>
@@ -122,21 +165,14 @@ public static class MapWalk
     {
         var state = context.State;
 
-        if (state.MapId is not { } mapId || state.Cell is not { } from || state.IsBusy)
+        if (!MovementGuard.IsAllowed(context))
+            return WalkOutcome.Busy;
+
+        if (state.MapId is not { } mapId || state.Cell is not { } from)
             return WalkOutcome.Busy;
 
         if (from == cell)
-        {
-            if (!state.IsWalkHeld)
-                return WalkOutcome.Arrived;
-
-            var aside = await context.ReleaseHeldWalkAsync(cancellationToken).ConfigureAwait(false);
-
-            if (aside is not WalkOutcome.Arrived || context.State.Cell is not { } stepped || context.State.MapId != mapId)
-                return aside;
-
-            from = stepped;
-        }
+            return WalkOutcome.Arrived;
 
         if (!context.Maps.TryGet(mapId, out var map) || !CellPathfinder.TryFind(map.Cells.Span, from, cell, out var path))
             return WalkOutcome.NoPath;
@@ -179,7 +215,7 @@ public static class MapWalk
         return await WalkAlongAsync(context, mapId, away, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<WalkOutcome> WalkAlongAsync(BotContext context, long mapId, CellPath path, CancellationToken cancellationToken)
+    private static async Task<WalkOutcome> WalkAlongAsync(BotContext context, long mapId, CellPath path, CancellationToken cancellationToken, bool heldWalkRelease = false)
     {
         var self = context.State.Key.CharacterId;
 
@@ -188,14 +224,49 @@ public static class MapWalk
             && (message is MapMovementEvent movement && movement.ActorId == self || message is MapMovementRefusedEvent));
         var arrival = context.Expect((side, message, _) => side is RelayDirection.FromServer && message is MapMovementConfirmResponse);
 
-        BotLog.Walking(context.Log, self, path.Start, path.End, path.Steps);
-        await context.SendAsync(Request(mapId, path), cancellationToken).ConfigureAwait(false);
+        var sent = await context.SendGuardedAsync(
+            Request(mapId, path),
+            () => CanSendWalk(context, mapId, path.Start, heldWalkRelease),
+            cancellationToken,
+            () => BotLog.Walking(context.Log, self, path.Start, path.End, path.Steps)).ConfigureAwait(false);
+
+        if (!sent)
+        {
+            answer.Cancel();
+            arrival.Cancel();
+
+            return WalkOutcome.Busy;
+        }
 
         var outcome = await AnswerAsync(context, answer, arrival, path, cancellationToken).ConfigureAwait(false);
 
         BotLog.Walked(context.Log, self, path.End, outcome);
 
         return outcome;
+    }
+
+    private static bool CanSendWalk(BotContext context, long mapId, int from, bool heldWalkRelease)
+    {
+        var state = context.State;
+
+        if (heldWalkRelease
+            && context.IsConnected
+            && state.MapId == mapId
+            && state.Cell == from
+            && state.IsWalkHeld
+            && !state.IsWalking
+            && !state.IsFighting
+            && !state.IsUsing
+            && !state.IsInDialog
+            && state.Provenance is CellProvenance.Estimated)
+        {
+            return true;
+        }
+
+        if (!MovementGuard.IsAllowed(context))
+            return false;
+
+        return state.MapId == mapId && state.Cell == from;
     }
 
     private static async Task<WalkOutcome> AnswerAsync(BotContext context, GameExpectation answer, GameExpectation arrival, CellPath path, CancellationToken cancellationToken)

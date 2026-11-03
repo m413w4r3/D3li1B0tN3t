@@ -176,6 +176,27 @@ public sealed class P2HPositionTrustTests
     }
 
     [Fact]
+    public void MovementMessagesWithoutAMapCannotChangeTheKnownCellOrRestoreTrust()
+    {
+        var unpositioned = Chosen() with { Cell = 300, Path = [300, 301], Provenance = CellProvenance.Unknown };
+        var announced = CharacterEvents.Apply(unpositioned, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 302 } });
+        var cancelled = CharacterEvents.Apply(announced, RelayDirection.FromClient, new MapMovementCancelRequest { CellId = 302 });
+        var confirmed = CharacterEvents.Apply(cancelled, RelayDirection.FromServer, new MapMovementConfirmResponse());
+        var refused = CharacterEvents.Apply(confirmed, RelayDirection.FromServer, new MapMovementRefusedEvent { X = 0, Y = 0 });
+
+        Assert.Null(unpositioned.MapId);
+        Assert.Equal(300, announced.Cell);
+        Assert.Equal([300, 301], announced.Path);
+        Assert.Equal(300, cancelled.Cell);
+        Assert.Equal(CellProvenance.Unknown, cancelled.Provenance);
+        Assert.Equal(300, confirmed.Cell);
+        Assert.Equal(CellProvenance.Unknown, confirmed.Provenance);
+        Assert.Equal(300, refused.Cell);
+        Assert.Equal(CellProvenance.Unknown, refused.Provenance);
+        Assert.False(refused.IsPositionTrusted);
+    }
+
+    [Fact]
     public void ContradictoryEventsAfterAMapChangeCannotRestoreTrustOrACell()
     {
         var changed = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapCurrentEvent { MapId = TestPlay.NorthMapId });

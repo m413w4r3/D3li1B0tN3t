@@ -6692,3 +6692,22 @@ Settled questions leave this table, and the decision that settles one says so.
 | Q13 | What is a blueprint mod: who writes it, where it lives, what a node is over D3B's behaviors and state, how a graph runs as an activity, interrupted and resumed from the state, its settings, and which canvas in Avalonia (D117)? | Step 7 |
 | Q14 | Does a client update renumber the maps' graphics, so that a skill learned on one (D138), which is never forgotten, would foretell another's maps wrongly: are the graphics learned kept as they are, checked, or forgotten at a new build? | The session after the next client update, with Q10 |
 | Q16 | Which casts and walks does the server refuse that D3B's rules allow, or allow that they refuse: how it counts a corner beside what blocks, a proportional diagonal, the 11 zones no capture cast (D190, D191)? It refuses with an error text, 29 ms after the request (D203); which casts, but a Zobal's masks, is left. It allowed 11 casts the rules refuse, each a breed's mechanism: spells whose cost or range a gathered state changes, and summons (D214). The Zobal's 6 refused were the masks' states the bot kept, whose end it did not read (D224, D225). | Captures the owner makes, the AI sending its casts (D202), with those of D196; the breeds' mechanisms in 9f |
+
+## D293: Require server-derived position before automated movement
+
+*2026-11-03, P2H trusted-position implementation.*
+
+- **Decision**: Track cell provenance as unknown, client-reported, estimated, server-placed, server-confirmed, or
+  server-refused. Guard every automated movement and map-transition request against the current connection, map, cell,
+  action state, and server-derived provenance. A map change, fight context, or new connection does not restore trust;
+  fresh matching server placement is required.
+- **Recovery exception**: D85 and D89 support one bounded step-aside attempt for a held estimated walk. MapChange may
+  use it only with an estimated known cell and a live idle connection, then only continue when the aside walk arrives
+  and its resulting same-map cell is server-trusted and neither walking nor held. Ordinary MapWalk and WorldTravel do
+  not attempt this recovery.
+- **Evidence**: P2H first committed failing state tests, then implemented the transitions and guard. The focused
+  movement filter passed 134/134, D3B.Bot.Tests passed 495/495, and the full suite passed 1,321/1,321 from the 1,292
+  baseline. Build and formatting passed offline. No live client, host, relay, or game action was performed.
+- **Boundary**: Four non-movement callers (`Recovery`, `ElementUse`, `Banking`, `GuildChest`) still ignore the explicit
+  held-release outcome. The next permissible live action is one supervised automatic move to a single neighboring map;
+  it was not executed.

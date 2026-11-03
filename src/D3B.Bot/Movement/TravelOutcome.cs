@@ -6,12 +6,12 @@ public enum TravelOutcome
     /// <summary>The character is on one of the maps sought, placed.</summary>
     Arrived,
 
-    /// <summary>The character walks already, uses an element, is in a dialog or an exchange, or where it stands is not known yet: nothing was sent.</summary>
+    /// <summary>The first journey state is walking or held, fighting, busy, disconnected, or has an unknown or untrusted position: no request was sent.</summary>
     Busy,
 
     /// <summary>No path the character may follow leads to the maps sought from where it stands, the transitions that failed left out.</summary>
     NoPath,
 
-    /// <summary>Map changes failed too often, the journey went on too long, or where the character stands is no longer known.</summary>
+    /// <summary>Map changes failed too often, the journey went on too long, or a later state became unknown or untrusted; no further request is sent after that refusal.</summary>
     Failed,
 }

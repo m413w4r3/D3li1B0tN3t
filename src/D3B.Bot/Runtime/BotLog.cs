@@ -1,5 +1,6 @@
 using D3B.Bot.Activities;
 using D3B.Bot.Banks;
+using D3B.Bot.Characters;
 using D3B.Bot.Interactives;
 using D3B.Bot.Movement;
 using D3B.Data.World;
@@ -78,6 +79,12 @@ internal static partial class BotLog
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: walk settled on map {Map} at cell {Cell}, estimated while the server may still hold it")]
     public static partial void WalkSettled(ILogger logger, long character, long map, int cell);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: navigation refused at map {Map} cell {Cell}; provenance {Provenance}, reason {Reason}; nothing was sent")]
+    public static partial void NavigationRefused(ILogger logger, long character, string map, string cell, CellProvenance provenance, MovementRefusal reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: held-walk release failed at map {Map} cell {Cell}; outcome {Outcome}, resulting provenance {Provenance}; no further movement follows")]
+    public static partial void HeldWalkReleaseFailed(ILogger logger, long character, string map, string cell, WalkOutcome outcome, CellProvenance provenance);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: the player sent {Request}, the bot pauses until it is resumed")]
     public static partial void PausedByPlayer(ILogger logger, long character, string request);

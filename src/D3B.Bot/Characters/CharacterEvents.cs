@@ -78,14 +78,14 @@ public static class CharacterEvents
     {
         ArgumentNullException.ThrowIfNull(state);
 
-        return state.IsWalking ? state with { Cell = state.Path[^1], Path = [], IsWalkHeld = true } : state;
+        return state.IsWalking ? state with { Cell = state.Path[^1], Path = [], IsWalkHeld = true, Provenance = CellProvenance.Estimated } : state;
     }
 
     private static CharacterState FromClient(CharacterState state, IMessage message)
     {
         return message switch
         {
-            MapMovementCancelRequest cancel when state.IsWalking && IsCell(cancel.CellId) => state with { Cell = cancel.CellId, Path = [] },
+            MapMovementCancelRequest cancel when state.MapId is not null && state.Cell is not null && state.IsWalking && IsCell(cancel.CellId) => state with { Cell = cancel.CellId, Path = [], Provenance = CellProvenance.ClientReported },
             _ => state,
         };
     }
@@ -115,8 +115,9 @@ public static class CharacterEvents
                 ZaapDialog = null,
                 HavenBagOwnerId = null,
                 IsWalkHeld = false,
+                Provenance = CellProvenance.Unknown,
             },
-            ContextCreationEvent created => state with { Fight = created.Context is ContextCreationEvent.Types.GameContext.Fight ? new FightState() : null },
+            ContextCreationEvent created => Context(state, created),
             MapInformationEvent information when information.MapId == state.MapId => Placed(state, information),
             InteractiveElementUpdatedEvent { Element: { } element } when state.Elements.ContainsKey(element.ElementId) => state with
             {
@@ -128,7 +129,7 @@ public static class CharacterEvents
             },
             InteractiveUsedEvent used when used.ActorId == self && used.Duration > 0 => state with { Use = new CurrentUse(used.ElementId, used.SkillId) },
             InteractiveUseEndedEvent ended when state.Use == new CurrentUse(ended.ElementId, ended.SkillId) => state with { Use = null },
-            MapMovementEvent movement when movement.ActorId == self && state.Cell is { } cell && movement.Cells.Count > 0 && movement.Cells.All(IsCell) && movement.Cells[0] == cell => state with { Path = [.. movement.Cells], IsWalkHeld = false, LastWalkEnd = movement.Cells[^1] },
+            MapMovementEvent movement when movement.ActorId == self && state.MapId is not null && state.Cell is { } cell && movement.Cells.Count > 0 && movement.Cells.All(IsCell) && movement.Cells[0] == cell => state with { Path = [.. movement.Cells], IsWalkHeld = false, LastWalkEnd = movement.Cells[^1] },
             // A group's walk names only its first and last cells, and the client attacks it where it stops.
             MapMovementEvent movement when movement.Cells.Count > 0 && IsCell(movement.Cells[^1]) && state.MonsterGroups.TryGetValue(movement.ActorId, out var walker) => state with
             {
@@ -139,13 +140,15 @@ public static class CharacterEvents
                 MonsterGroups = state.MonsterGroups.SetItems(shown.Actors.Where(IsMonsterGroup).Select(actor => KeyValuePair.Create(actor.Id, Group(actor)))),
             },
             MapActorRemovedEvent removed when state.MonsterGroups.ContainsKey(removed.ActorId) => state with { MonsterGroups = state.MonsterGroups.Remove(removed.ActorId) },
-            MapMovementConfirmResponse when state.IsWalking => state with { Cell = state.Path[^1], Path = [] },
+            MapMovementConfirmResponse when state.MapId is not null && state.Cell is not null && state.IsWalking => state with { Cell = state.Path[^1], Path = [], IsWalkHeld = false, Provenance = CellProvenance.ServerConfirmed },
+            MapMovementConfirmResponse when state.MapId is not null && state.Cell is not null && state.IsWalkHeld && state.Provenance is CellProvenance.Estimated => state with { IsWalkHeld = false, Provenance = CellProvenance.ServerConfirmed },
             MapMovementConfirmResponse => state with { IsWalkHeld = false },
-            MapMovementRefusedEvent refused when state.Cell is not null => state with
+            MapMovementRefusedEvent refused when state.MapId is not null && state.Cell is not null => state with
             {
                 Cell = MapGeometry.TryGetCell(new MapPoint(refused.X, refused.Y), out var cell) ? cell : null,
                 Path = [],
                 IsWalkHeld = false,
+                Provenance = MapGeometry.TryGetCell(new MapPoint(refused.X, refused.Y), out _) ? CellProvenance.ServerRefused : CellProvenance.Unknown,
             },
             NpcDialogCreationEvent creation when creation.MapId == state.MapId => state with { Dialog = new NpcDialog(creation.NpcActorId) },
             NpcDialogQuestionEvent question when state.Dialog is { } dialog => state with
@@ -188,6 +191,14 @@ public static class CharacterEvents
         };
     }
 
+    private static CharacterState Context(CharacterState state, ContextCreationEvent created)
+    {
+        if (created.Context is ContextCreationEvent.Types.GameContext.Fight)
+            return state with { Fight = new FightState(), Path = [], IsWalkHeld = false, Provenance = CellProvenance.Unknown };
+
+        return state with { Fight = null };
+    }
+
     private static CharacterState Placed(CharacterState state, MapInformationEvent information)
     {
         var self = information.Actors.FirstOrDefault(actor => actor.Id == state.Key.CharacterId);
@@ -212,7 +223,16 @@ public static class CharacterEvents
 
         var owner = information.PlaceCase is MapInformationEvent.PlaceOneofCase.HavenBag ? information.HavenBag.Owner?.Id : null;
 
-        return state with { SubAreaId = information.SubAreaId, Cell = cell, Elements = elements, Npcs = npcs, MonsterGroups = groups, HavenBagOwnerId = owner };
+        return state with
+        {
+            SubAreaId = information.SubAreaId,
+            Cell = cell,
+            Provenance = cell is null ? CellProvenance.Unknown : CellProvenance.ServerPlaced,
+            Elements = elements,
+            Npcs = npcs,
+            MonsterGroups = groups,
+            HavenBagOwnerId = owner,
+        };
     }
 
     private static bool IsMonsterGroup(Actor actor)

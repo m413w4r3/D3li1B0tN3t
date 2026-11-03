@@ -9,7 +9,7 @@ public enum MapChangeOutcome
     /// <summary>The character is on another map than the step's destination, placed: the server sent it elsewhere.</summary>
     Elsewhere,
 
-    /// <summary>The character walks already, uses an element, is in a dialog or an exchange, or where it stands is not known yet: nothing was sent.</summary>
+    /// <summary>The character is walking or held without proven recovery, fighting, busy, disconnected, or has an unknown or untrusted position: no map-change action request was sent.</summary>
     Busy,
 
     /// <summary>The step does not leave where the character stands, no cell it leaves from can be reached, the server offers no door's skill on its element, or there is no haven bag of the character's to leave: nothing was sent.</summary>

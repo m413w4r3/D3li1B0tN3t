@@ -1,3 +1,4 @@
+using System.Globalization;
 using D3B.Bot.Interactives;
 using D3B.Bot.Journal;
 using D3B.Bot.Runtime;
@@ -65,6 +66,15 @@ public static class MapChange
     {
         ArgumentNullException.ThrowIfNull(bot);
 
+        var refusal = MovementGuard.Refuse(bot.State, bot.IsConnected);
+
+        if (refusal is MovementRefusal.Disconnected)
+        {
+            MovementGuard.LogRefusal(bot.Log, bot.State, refusal);
+
+            return Task.FromResult(MapChangeOutcome.Busy);
+        }
+
         return bot.RunAsync((context, token) => context.ChangeMapAsync(step, WorldTravel.RulesOf(context), token), cancellationToken);
     }
 
@@ -118,13 +128,13 @@ public static class MapChange
 
     private static async Task<MapChangeOutcome> ChangeAsync(BotContext context, WorldStep step, WorldPathRules rules, long destination, CancellationToken cancellationToken)
     {
-        // The server refuses a map change or a teleport while it holds a walk the client did not follow (D89).
-        await context.ReleaseHeldWalkAsync(cancellationToken).ConfigureAwait(false);
+        if (!await PositionAllowsChangeAsync(context, cancellationToken).ConfigureAwait(false))
+            return MapChangeOutcome.Busy;
 
         var state = context.State;
         var world = context.World;
 
-        if (state.MapId is not { } mapId || state.Cell is not { } cell || state.IsBusy)
+        if (state.MapId is not { } mapId || state.Cell is not { } cell)
             return MapChangeOutcome.Busy;
 
         if (!context.Maps.TryGet(mapId, out var map) || !world.TryGetVertex(map, cell, out var vertex) || vertex != step.From
@@ -179,12 +189,13 @@ public static class MapChange
 
     private static async Task<MapChangeOutcome> LeaveAsync(BotContext context, CancellationToken cancellationToken)
     {
-        await context.ReleaseHeldWalkAsync(cancellationToken).ConfigureAwait(false);
+        if (!await PositionAllowsChangeAsync(context, cancellationToken).ConfigureAwait(false))
+            return MapChangeOutcome.Busy;
 
         var state = context.State;
         var self = state.Key.CharacterId;
 
-        if (state.MapId is not { } mapId || state.Cell is null || state.IsBusy)
+        if (state.MapId is not { } mapId || state.Cell is null)
             return MapChangeOutcome.Busy;
 
         if (state.HavenBagOwnerId != self)
@@ -194,7 +205,13 @@ public static class MapChange
 
         var (current, placed) = ExpectNewMap(context, mapId);
 
-        await context.SendAsync(new HavenBagEnterRequest { OwnerId = self }, cancellationToken).ConfigureAwait(false);
+        if (!await context.SendGuardedAsync(new HavenBagEnterRequest { OwnerId = self }, () => MovementGuard.IsAllowed(context, mapId), cancellationToken).ConfigureAwait(false))
+        {
+            current.Cancel();
+            placed.Cancel();
+
+            return MapChangeOutcome.Busy;
+        }
 
         var outcome = await NewMapAsync(context, current, placed, cancellationToken).ConfigureAwait(false);
 
@@ -212,17 +229,61 @@ public static class MapChange
         return (current, placed);
     }
 
+    private static async Task<bool> PositionAllowsChangeAsync(BotContext context, CancellationToken cancellationToken)
+    {
+        var before = context.State;
+
+        if (before.IsWalkHeld)
+        {
+            var outcome = await context.ReleaseHeldWalkAsync(cancellationToken).ConfigureAwait(false);
+            var recovered = context.State;
+
+            if (outcome is not WalkOutcome.Arrived
+                || !recovered.IsPositionTrusted
+                || recovered.IsWalkHeld
+                || recovered.IsWalking
+                || recovered.MapId != before.MapId
+                || recovered.Cell is null)
+            {
+                if (context.Log.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Information))
+                {
+                    var map = recovered.MapId is { } mapId ? mapId.ToString(CultureInfo.InvariantCulture) : "unknown";
+                    var cell = recovered.Cell is { } cellId ? cellId.ToString(CultureInfo.InvariantCulture) : "unknown";
+
+                    BotLog.HeldWalkReleaseFailed(context.Log, recovered.Key.CharacterId, map, cell, outcome, recovered.Provenance);
+                }
+
+                return false;
+            }
+        }
+
+        return MovementGuard.IsAllowed(context);
+    }
+
     private static async Task<MapChangeOutcome> ScrollAsync(BotContext context, long mapId, CellPath path, int neighbour, CancellationToken cancellationToken)
     {
         // Expected before the walk: a walk onto a cell of the edge may end on a map action's, which moves the character as
         // its walk is confirmed (client.md). The request for the neighbour, then, would go unanswered.
         var (current, placed) = ExpectNewMap(context, mapId);
 
-        if (path.Steps > 0 && await context.WalkAsync(path.End, cancellationToken).ConfigureAwait(false) is not WalkOutcome.Arrived && context.State.MapId == mapId)
-            return MapChangeOutcome.NotWalked;
+        if (path.Steps > 0)
+        {
+            var walk = await context.WalkAsync(path.End, cancellationToken).ConfigureAwait(false);
+
+            if (walk is not WalkOutcome.Arrived && context.State.MapId == mapId)
+                return walk is WalkOutcome.Busy ? MapChangeOutcome.Busy : MapChangeOutcome.NotWalked;
+        }
 
         if (context.State.MapId == mapId)
-            await context.SendAsync(new MapChangeRequest { MapId = neighbour }, cancellationToken).ConfigureAwait(false);
+        {
+            if (!await context.SendGuardedAsync(new MapChangeRequest { MapId = neighbour }, () => MovementGuard.IsAllowed(context, mapId), cancellationToken).ConfigureAwait(false))
+            {
+                current.Cancel();
+                placed.Cancel();
+
+                return MapChangeOutcome.Busy;
+            }
+        }
 
         return await NewMapAsync(context, current, placed, cancellationToken).ConfigureAwait(false);
     }
@@ -241,14 +302,16 @@ public static class MapChange
             if (!CellPathfinder.TryFindNearest(cells, path.End, neighbours, out var off) || !CellPathfinder.TryFind(cells, off.End, path.End, out _))
                 return MapChangeOutcome.NoPath;
 
-            if (await context.WalkAsync(off.End, cancellationToken).ConfigureAwait(false) is not WalkOutcome.Arrived)
-                return MapChangeOutcome.NotWalked;
+            var walkOff = await context.WalkAsync(off.End, cancellationToken).ConfigureAwait(false);
+
+            if (walkOff is not WalkOutcome.Arrived)
+                return walkOff is WalkOutcome.Busy ? MapChangeOutcome.Busy : MapChangeOutcome.NotWalked;
         }
 
         var walk = context.State.MapId == map.Id ? await context.WalkAsync(path.End, cancellationToken).ConfigureAwait(false) : WalkOutcome.Arrived;
 
         if (walk is not WalkOutcome.Arrived && context.State.MapId == map.Id)
-            return MapChangeOutcome.NotWalked;
+            return walk is WalkOutcome.Busy ? MapChangeOutcome.Busy : MapChangeOutcome.NotWalked;
 
         return await NewMapAsync(context, current, placed, cancellationToken).ConfigureAwait(false);
     }
@@ -261,15 +324,27 @@ public static class MapChange
 
         var (current, placed) = ExpectNewMap(context, mapId);
 
-        if (path.Steps > 0 && await context.WalkAsync(path.End, cancellationToken).ConfigureAwait(false) is not WalkOutcome.Arrived && context.State.MapId == mapId)
-            return MapChangeOutcome.NotWalked;
+        if (path.Steps > 0)
+        {
+            var walk = await context.WalkAsync(path.End, cancellationToken).ConfigureAwait(false);
+
+            if (walk is not WalkOutcome.Arrived && context.State.MapId == mapId)
+                return walk is WalkOutcome.Busy ? MapChangeOutcome.Busy : MapChangeOutcome.NotWalked;
+        }
 
         if (context.State.MapId == mapId)
         {
             var answer = context.Expect((side, message, _) => side is RelayDirection.FromServer
                 && (message is MapCurrentEvent || message is InteractiveUseErrorEvent error && error.ElementId == door.ElementId));
 
-            await context.SendAsync(ElementUse.Request(door.ElementId, skill), cancellationToken).ConfigureAwait(false);
+            if (!await context.SendGuardedAsync(ElementUse.Request(door.ElementId, skill), () => MovementGuard.IsAllowed(context, mapId), cancellationToken).ConfigureAwait(false))
+            {
+                answer.Cancel();
+                current.Cancel();
+                placed.Cancel();
+
+                return MapChangeOutcome.Busy;
+            }
 
             if (await answer.WaitAsync(context.Delays.Answer, cancellationToken).ConfigureAwait(false) is InteractiveUseErrorEvent)
                 return MapChangeOutcome.Refused;
@@ -284,7 +359,14 @@ public static class MapChange
         var answer = context.Expect((side, message, _) => side is RelayDirection.FromServer
             && (message is MapCurrentEvent || message is TextInformationEvent { Type: TextInformationType.Error }));
 
-        await context.SendAsync(new TeleportRequest { MapId = zaap, Source = TeleporterType.Map }, cancellationToken).ConfigureAwait(false);
+        if (!await context.SendGuardedAsync(new TeleportRequest { MapId = zaap, Source = TeleporterType.Map }, () => MovementGuard.IsAllowed(context, mapId), cancellationToken).ConfigureAwait(false))
+        {
+            answer.Cancel();
+            current.Cancel();
+            placed.Cancel();
+
+            return MapChangeOutcome.Busy;
+        }
 
         return await answer.WaitAsync(context.Delays.Answer, cancellationToken).ConfigureAwait(false) switch
         {
@@ -303,7 +385,14 @@ public static class MapChange
         var (current, placed) = ExpectNewMap(context, mapId);
         var asked = context.Expect((side, message, _) => side is RelayDirection.FromServer && message is NpcDialogQuestionEvent or NpcActionErrorEvent or MapCurrentEvent);
 
-        await context.SendAsync(new NpcActionRequest { Action = Banker.TalkAction, MapId = mapId, NpcActorId = npc.ActorId }, cancellationToken).ConfigureAwait(false);
+        if (!await context.SendGuardedAsync(new NpcActionRequest { Action = Banker.TalkAction, MapId = mapId, NpcActorId = npc.ActorId }, () => MovementGuard.IsAllowed(context, mapId), cancellationToken).ConfigureAwait(false))
+        {
+            asked.Cancel();
+            current.Cancel();
+            placed.Cancel();
+
+            return MapChangeOutcome.Busy;
+        }
 
         switch (await asked.WaitAsync(context.Delays.Answer, cancellationToken).ConfigureAwait(false))
         {

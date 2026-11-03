@@ -89,6 +89,8 @@ public sealed class CharacterEventsTests
               "MapId": 191104002,
               "SubAreaId": 440,
               "Cell": 300,
+              "Provenance": 3,
+              "IsPositionTrusted": true,
               "Path": [],
               "IsWalking": false,
               "IsWalkHeld": false,

@@ -1,4 +1,5 @@
 using D3B.Bot.Movement;
+using D3B.Bot.Characters;
 using D3B.Bot.Runtime;
 using D3B.Bot.Tests.Runtime;
 using D3B.Engine.Maps;
@@ -177,7 +178,7 @@ public sealed class MapWalkTests
     }
 
     [Fact]
-    public async Task AWalkTheServerStillHoldsIsLetGoByAStepAsideAndBack()
+    public async Task APublicWalkRefusesWhileTheServerHoldsAWalkAndSendsNothing()
     {
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(433);
@@ -191,8 +192,28 @@ public sealed class MapWalkTests
         Assert.Equal(WalkOutcome.NotConfirmed, await AdvanceUntilDoneAsync(play.Time, walk));
         Assert.True(bot.State.IsWalkHeld);
 
-        // Already on the cell, the bot still walks: from it to a neighbour, which the server takes, then back.
-        var again = bot.WalkAsync(388, TestContext.Current.CancellationToken);
+        var cell = bot.State.Cell;
+        var refused = await bot.WalkAsync(cell!.Value, TestContext.Current.CancellationToken);
+
+        Assert.Equal(WalkOutcome.Busy, refused);
+        Assert.Single(connection.Sent);
+        Assert.True(bot.State.IsWalkHeld);
+    }
+
+    [Fact]
+    public async Task AnExplicitHeldWalkReleaseArrivesOnlyAfterTheAsideWalkIsConfirmed()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(433);
+        var path = PathOn(play, 433, 388);
+        var walk = bot.WalkAsync(388, TestContext.Current.CancellationToken);
+
+        await connection.SentAsync(1);
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { path.Cells.ToArray() } });
+        Assert.Equal(WalkOutcome.NotConfirmed, await AdvanceUntilDoneAsync(play.Time, walk));
+        Assert.True(bot.State.IsWalkHeld);
+
+        var release = bot.RunAsync((context, token) => context.ReleaseHeldWalkAsync(token), TestContext.Current.CancellationToken);
         var aside = Assert.IsType<MapMovementRequest>(await connection.SentAsync(2));
 
         Assert.Equal(388, aside.KeyMovements[0] & 0xFFF);
@@ -200,10 +221,38 @@ public sealed class MapWalkTests
 
         await TestWalks.WalkedAsync(play, connection, 2);
 
-        Assert.Equal(388, await TestWalks.WalkedAsync(play, connection, 3));
-        Assert.Equal(WalkOutcome.Arrived, await again);
+        Assert.Equal(WalkOutcome.Arrived, await release);
         Assert.False(bot.State.IsWalkHeld);
-        Assert.Equal(388, bot.State.Cell);
+        Assert.False(bot.State.IsWalking);
+        Assert.Equal(CellProvenance.ServerConfirmed, bot.State.Provenance);
+        Assert.True(bot.State.IsPositionTrusted);
+        Assert.Equal(2, connection.Sent.Count);
+    }
+
+    [Fact]
+    public async Task AnUnconfirmedAsideWalkDoesNotCompleteHeldWalkRecoveryOrRetry()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(433);
+        var path = PathOn(play, 433, 388);
+        var walk = bot.WalkAsync(388, TestContext.Current.CancellationToken);
+
+        await connection.SentAsync(1);
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { path.Cells.ToArray() } });
+        Assert.Equal(WalkOutcome.NotConfirmed, await AdvanceUntilDoneAsync(play.Time, walk));
+
+        var release = bot.RunAsync((context, token) => context.ReleaseHeldWalkAsync(token), TestContext.Current.CancellationToken);
+        var aside = Assert.IsType<MapMovementRequest>(await connection.SentAsync(2));
+        var from = aside.KeyMovements[0] & 0xFFF;
+        var to = aside.KeyMovements[^1] & 0xFFF;
+        Assert.True(CellPathfinder.TryFind(play.Maps.Get(TestPlay.MapId).Cells.Span, from, to, out var asidePath));
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { asidePath.Cells.ToArray() } });
+
+        Assert.Equal(WalkOutcome.NotConfirmed, await AdvanceUntilDoneAsync(play.Time, release));
+        Assert.Equal(CellProvenance.Estimated, bot.State.Provenance);
+        Assert.True(bot.State.IsWalkHeld);
+        Assert.False(bot.State.IsPositionTrusted);
+        Assert.Equal(2, connection.Sent.Count);
     }
 
     [Fact]
@@ -241,6 +290,19 @@ public sealed class MapWalkTests
         connection.Server(new MapCurrentEvent { MapId = TestPlay.MapId });
         connection.Server(TestPlay.Information(433));
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 433, 432 } });
+        await bot.ProcessedAsync();
+
+        Assert.Equal(WalkOutcome.Busy, await bot.WalkAsync(388, TestContext.Current.CancellationToken));
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task ADisconnectedWalkIsBusyAndSendsNothing()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(433);
+
+        connection.Close();
         await bot.ProcessedAsync();
 
         Assert.Equal(WalkOutcome.Busy, await bot.WalkAsync(388, TestContext.Current.CancellationToken));
