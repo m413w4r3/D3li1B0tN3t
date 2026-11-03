@@ -62,3 +62,21 @@ P1 changed no artifact formats. At the P1 baseline, the Linux schema did not yet
 | P2A audit | 222 messages, 492 fields, 29 enums, 206 values; 0 failures, 2 notes, 100 partial; translation creation succeeds |
 
 The produced offline mapping has the same 222 message pairs, 29 enum pairs, message field pairs, and enum value pairs as the public release mapping. The release mapping records capture evidence, but it does not record the capture platform. Windows schema generation for this version remains unverified; no direct Linux live capture exists. The `3.7.12.12` version string and byte-identical schema do not establish that the historical release capture was made on Linux. See [P2_AUTH_MAPPING](P2_AUTH_MAPPING.md) for the candidate analysis, tests, and supervised observation limits.
+
+## P2B staged runtime identity
+
+The offline runtime artifacts are staged privately under `/home/nill/.local/share/D3B/data/3.7.12.12`. The directories are owned by `nill` with mode `0700`; the files are owned by `nill` with mode `0600`.
+
+| Artifact | Size | SHA-256 | Runtime path |
+| --- | ---: | --- | --- |
+| Pack `data-8.pack` | 26,870,514 B | `fdd6e182a62308ef9d4d7d92a3a0e157c864d3c5784f85ebad64234bb5a1e175` | `/home/nill/.local/share/D3B/data/3.7.12.12/data-8.pack` |
+| Schema `schema-1.binpb` | 170,287 B | `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0` | `/home/nill/.local/share/D3B/data/3.7.12.12/schema-1.binpb` |
+| Mapping `mapping-15.binpb` | 14,687 B | `c3ec03cef5fd07aca4d0de601f7444bd66258032c82a050067b719a0dfddea7d` | `/home/nill/.local/share/D3B/data/3.7.12.12/mapping-15.binpb` |
+
+Offline validation opened the pack as client `3.7.12.12`, format 8, with 17,738 entries and 56,227 French text entries. `ProtocolSource.Load` and `ProtocolTranslation.Create` succeeded. `ContractAudit` reported 0 failures, 2 notes and 100 partial matches across 222 messages, 492 fields, 29 enums and 206 values. `d3b.game.AuthenticationRequest` maps to `knc` with `Pin` evidence. This does not establish live Linux compatibility.
+
+The staged mapping was produced with tool version `0.0.0-alpha.0.8+0dec0db`. Regenerating it from the integrated checkout with `alpha.0.9+9f1836d` produces SHA-256 `f253285eb61435b5b351a7f8b19c0fb01e4c7312316cab6922f62838de5e8ec6`; all pairs, values and audit results are identical. Mapping file hashes depend on the mapping tool version. When comparing regenerated mappings, compare message/enum/field/value pairs and the audit, not only the file hash. See [runtime artifact staging and regeneration](RUNTIME_ARTIFACTS.md).
+
+The dedicated host apphost is `/home/nill/.local/share/D3B/apphost/D3B.Host`: 78,192 bytes, SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`, x86-64 ELF PIE, owner `nill`, mode `0700`. No file capability is applied. The 443 fallback capability is documented but has not been applied.
+
+**Runtime identity limitation (R02):** `ClientInstall.ComputeFingerprint()` is not enforced by runtime artifact loading. `PackSource` checks the client and pack version; `ProtocolSource` loads and audits the versioned schema and mapping, but the host does not compare the installed executable, `GameAssembly.so`, `UnityPlayer.so`, or metadata hashes with a recorded fingerprint. The exact binary identity therefore remains a manual preflight gate. Follow [Linux acceptance](LINUX_ACCEPTANCE.md) before any supervised client attempt.

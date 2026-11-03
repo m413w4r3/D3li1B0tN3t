@@ -6618,6 +6618,25 @@ pulling them into its walls. On the owner's capture of 4 fights the AI played, 1
 - **Checked**: the regression test failed before the pin and passed after it. Synthetic tests cover ambiguity, capture anchoring and contradiction, shape-audit limits, translation refusal/acceptance, and offline `ProtocolSource.Load`. The produced mapping audits 222 messages, 492 fields, 29 enums and 206 values with no failures; its 222 message pairs and 29 enum pairs match the release pair sets.
 - **P2B**: preserve MANUAL/SUPERVISED boundaries; establish Linux capture provenance if required, resolve the actual client-facing port plan, then review any host/client acceptance separately. The mapping result does not establish live Linux compatibility.
 
+## D288: Use 5555 only for the first supervised Linux test
+
+*2026-11-03, P2B Linux readiness.*
+
+- **Decision**: start with the normal-user 5555-only connection listener on `127.0.13.59`, plus the game listener on 5556. The supervisor confirms in the Ankama/Zaap UI that the client will use connection port 5555; leave the launcher setting unchanged. Keep the client capture setting false and configure no bot activity.
+- **Why**: 5555 is available without privilege and is the launcher's default connection port. The client configuration still lists 5555 and 443, so the host may log the expected nonfatal `PortsNotListened` warning when it listens on 5555 alone.
+- **Fallback**: default ports `[5555,443]` require `cap_net_bind_service` on the dedicated `/home/nill/.local/share/D3B/apphost/D3B.Host`. That capability is not applied and remains blocked pending explicit owner authorization. Never apply it to shared `dotnet` or run the host as root.
+- **Boundary**: this records the technical first-test plan; it does not authorize starting the host or client. No live result is claimed.
+- **Supersedes**: the unresolved client-facing port-plan item in D287.
+
+## D289: Atomically replace the client version file and guard damaged restore
+
+*2026-11-03, P2B restore safety.*
+
+- **Decision**: update `ConfigUrl` by writing a same-directory staged file, flushing it, preserving Unix mode, replacing the destination with `File.Move(overwrite: true)`, and cleaning up the temporary file. Do not rewrite the original-URL recovery sidecar on a restart when the client version file already names D3B. Treat a missing `ConfigUrl` during restore as damaged input and exit 2 with launcher-repair guidance.
+- **Why**: atomic replacement reduces truncation risk after interruption; preserving the original sidecar avoids replacing recovery data with a D3B redirect during crash restart. A missing `ConfigUrl` cannot safely be restored by guessing.
+- **Checked**: `ClientVersionFileTests` and `ClientRedirectTests`; targeted `D3B.Network.Tests` 125/125; full suite 1,251/1,251; build 0 warnings and 0 errors; format verification exit 0. The fake-install CLI restore check for a version file without `ConfigUrl` printed the repair diagnostic and exited 2.
+- **Boundary**: these are automated and fake-install checks. No installed client, host, relay, or sniffer was run; real-client restoration remains MANUAL/SUPERVISED.
+
 ## Open questions
 
 Settled questions leave this table, and the decision that settles one says so.

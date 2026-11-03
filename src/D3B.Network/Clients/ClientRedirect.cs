@@ -182,7 +182,9 @@ internal sealed class ClientRedirect : IHostedService, IDisposable
 
             var configFile = Path.Combine(directory, ConfigFileName);
 
-            File.WriteAllText(Path.Combine(directory, OriginalUrlFileName), original);
+            if (current != ours)
+                File.WriteAllText(Path.Combine(directory, OriginalUrlFileName), original);
+
             File.WriteAllText(Path.Combine(directory, OriginalConfigFileName), json);
             File.WriteAllText(configFile, configuration.RedirectedTo(_settings.Address));
 

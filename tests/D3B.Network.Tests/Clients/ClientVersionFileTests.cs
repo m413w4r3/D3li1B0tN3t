@@ -45,6 +45,18 @@ public sealed class ClientVersionFileTests : IDisposable
     }
 
     [Fact]
+    public void AWritePreservesArbitraryLatin1BytesOutsideTheConfigUrlLine()
+    {
+        byte[] before = [.. "Version=3.7.12.12\nBuildDate=2026-10-19"u8, 0xE9, .. "\nConfigUrl=https://cdn.test/a.json\n"u8];
+        byte[] after = [.. "Version=3.7.12.12\nBuildDate=2026-10-19"u8, 0xE9, .. "\nConfigUrl=file:///C:/d3b/config.json\n"u8];
+        File.WriteAllBytes(Path, before);
+
+        ClientVersionFile.WriteConfigUrl(Path, "file:///C:/d3b/config.json");
+
+        Assert.Equal(after, File.ReadAllBytes(Path));
+    }
+
+    [Fact]
     public void AByteOrderMarkIsKept()
     {
         byte[] before = [0xEF, 0xBB, 0xBF, .. "Version=3.7.12.12\nConfigUrl=https://cdn.test/a.json\n"u8];
@@ -56,6 +68,81 @@ public sealed class ClientVersionFileTests : IDisposable
         ClientVersionFile.WriteConfigUrl(Path, "file:///C:/d3b/config.json");
 
         Assert.Equal([0xEF, 0xBB, 0xBF, .. "Version=3.7.12.12\nConfigUrl=file:///C:/d3b/config.json\n"u8], File.ReadAllBytes(Path));
+    }
+
+    [Fact]
+    public void AStagedWriteFailureLeavesTheOriginalFileAndRemovesItsTemporaryFile()
+    {
+        byte[] original = [0xEF, 0xBB, 0xBF, .. "Version=3.7.12.12\nConfigUrl=https://cdn.test/a.json\n"u8];
+        File.WriteAllBytes(Path, original);
+
+        // Injection covers the staging/commit boundary deterministically; the public success test below exercises the real File.Move replacement.
+        // Windows File.Move failure and ACL behavior remain unverified, as documented in RUNTIME_ARTIFACTS.md.
+        var exception = Assert.Throws<IOException>(() => ClientVersionFile.WriteConfigUrl(Path, "file:///C:/d3b/config.json", (temporaryPath, destinationPath) =>
+        {
+            Assert.NotEqual(destinationPath, temporaryPath);
+            Assert.Equal(System.IO.Path.GetDirectoryName(Path), System.IO.Path.GetDirectoryName(temporaryPath));
+            Assert.Equal(Path, destinationPath);
+            Assert.True(File.Exists(temporaryPath));
+            throw new IOException("Injected staged-write failure.");
+        }));
+
+        Assert.Equal("Injected staged-write failure.", exception.Message);
+        Assert.Equal(original, File.ReadAllBytes(Path));
+        Assert.Equal("https://cdn.test/a.json", ClientVersionFile.ReadConfigUrl(Path));
+        Assert.Equal(Path, Assert.Single(Directory.EnumerateFiles(_directory.Path)));
+    }
+
+    [Fact]
+    public void ACommitCallbackRunsOnceInTheDestinationDirectoryAndRemovesItsTemporaryFile()
+    {
+        File.WriteAllText(Path, "ConfigUrl=https://cdn.test/a.json\n");
+        var callbackCount = 0;
+        string? temporaryPath = null;
+
+        ClientVersionFile.WriteConfigUrl(Path, "file:///C:/d3b/config.json", (stagedPath, destinationPath) =>
+        {
+            callbackCount++;
+            temporaryPath = stagedPath;
+
+            Assert.NotEqual(destinationPath, stagedPath);
+            Assert.Equal(System.IO.Path.GetDirectoryName(Path), System.IO.Path.GetDirectoryName(stagedPath));
+            Assert.Equal(Path, destinationPath);
+            Assert.True(File.Exists(stagedPath));
+
+            File.Move(stagedPath, destinationPath, overwrite: true);
+        });
+
+        Assert.Equal(1, callbackCount);
+        Assert.NotNull(temporaryPath);
+        Assert.False(File.Exists(temporaryPath));
+        Assert.Equal("ConfigUrl=file:///C:/d3b/config.json\n", File.ReadAllText(Path));
+        Assert.Equal(Path, Assert.Single(Directory.EnumerateFiles(_directory.Path)));
+    }
+
+    [Fact]
+    public void ASuccessfulWriteRemovesItsTemporaryFile()
+    {
+        File.WriteAllText(Path, "ConfigUrl=https://cdn.test/a.json\n");
+
+        ClientVersionFile.WriteConfigUrl(Path, "file:///C:/d3b/config.json");
+
+        Assert.Equal(Path, Assert.Single(Directory.EnumerateFiles(_directory.Path)));
+    }
+
+    [Fact]
+    public void AWriteKeepsTheUnixFileMode()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        File.WriteAllText(Path, "ConfigUrl=https://cdn.test/a.json\n");
+        var mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
+        File.SetUnixFileMode(Path, mode);
+
+        ClientVersionFile.WriteConfigUrl(Path, "file:///C:/d3b/config.json");
+
+        Assert.Equal(mode, File.GetUnixFileMode(Path));
     }
 
     [Fact]
