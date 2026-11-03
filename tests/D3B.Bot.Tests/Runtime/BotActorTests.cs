@@ -49,6 +49,47 @@ public sealed class BotActorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ABehaviorCannotSendRawMovementFromATrustedPosition()
+    {
+        var (connection, bot) = await _play.EnterAsync(300);
+
+        var exception = await Record.ExceptionAsync(() => bot.RunAsync(
+            async (context, token) =>
+            {
+                await context.SendAsync(new MapMovementRequest { MapId = (int)TestPlay.MapId }, token);
+
+                return true;
+            },
+            TestContext.Current.CancellationToken));
+
+        var error = Assert.IsType<InvalidOperationException>(exception);
+        Assert.Contains("guarded movement actions", error.Message, StringComparison.Ordinal);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task ABehaviorCannotSendRawMovementFromAClientReportedPosition()
+    {
+        var (connection, bot) = await _play.EnterAsync(300);
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
+        connection.Client(new MapMovementCancelRequest { CellId = 300 });
+        await bot.ProcessedAsync();
+
+        var exception = await Record.ExceptionAsync(() => bot.RunAsync(
+            async (context, token) =>
+            {
+                await context.SendAsync(new MapMovementRequest { MapId = (int)TestPlay.MapId }, token);
+
+                return true;
+            },
+            TestContext.Current.CancellationToken));
+
+        var error = Assert.IsType<InvalidOperationException>(exception);
+        Assert.Contains("guarded movement actions", error.Message, StringComparison.Ordinal);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
     public async Task AnExpectationEndsAfterItsDelayByTheBotsClock()
     {
         var (_, bot) = await _play.EnterAsync(300);

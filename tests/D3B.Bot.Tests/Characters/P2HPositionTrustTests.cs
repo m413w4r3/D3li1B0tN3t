@@ -56,22 +56,48 @@ public sealed class P2HPositionTrustTests
     public void AValidRefusalTrustsTheServerNamedCell()
     {
         var point = MapGeometry.PointOf(311);
+        var requested = OnMap(300) with { PendingMovementMapId = TestPlay.MapId };
 
-        var refused = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapMovementRefusedEvent { X = point.X, Y = point.Y });
+        var refused = CharacterEvents.Apply(requested, RelayDirection.FromServer, new MapMovementRefusedEvent { X = point.X, Y = point.Y });
 
         Assert.Equal(311, refused.Cell);
         Assert.Equal(CellProvenance.ServerRefused, refused.Provenance);
         Assert.True(refused.IsPositionTrusted);
+        Assert.Null(refused.PendingMovementMapId);
     }
 
     [Fact]
     public void AnInvalidRefusalClearsTheCellAndItsTrust()
     {
-        var refused = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapMovementRefusedEvent { X = int.MaxValue, Y = int.MinValue });
+        var requested = OnMap(300) with { PendingMovementMapId = TestPlay.MapId };
+        var refused = CharacterEvents.Apply(requested, RelayDirection.FromServer, new MapMovementRefusedEvent { X = int.MaxValue, Y = int.MinValue });
 
         Assert.Null(refused.Cell);
         Assert.Equal(CellProvenance.Unknown, refused.Provenance);
         Assert.False(refused.IsPositionTrusted);
+        Assert.Null(refused.PendingMovementMapId);
+    }
+
+    [Fact]
+    public void ARefusalWithoutAPendingMovementRequestDoesNotChangeThePosition()
+    {
+        var placed = OnMap(300);
+        var point = MapGeometry.PointOf(311);
+
+        var refused = CharacterEvents.Apply(placed, RelayDirection.FromServer, new MapMovementRefusedEvent { X = point.X, Y = point.Y });
+
+        Assert.Same(placed, refused);
+        Assert.Equal(300, refused.Cell);
+        Assert.Equal(CellProvenance.ServerPlaced, refused.Provenance);
+        Assert.True(refused.IsPositionTrusted);
+    }
+
+    [Fact]
+    public void AClientMovementRequestMarksTheMapAwaitingItsAnswer()
+    {
+        var requested = CharacterEvents.Apply(OnMap(300), RelayDirection.FromClient, new MapMovementRequest { MapId = (int)TestPlay.MapId });
+
+        Assert.Equal(TestPlay.MapId, requested.PendingMovementMapId);
     }
 
     [Fact]
@@ -212,6 +238,15 @@ public sealed class P2HPositionTrustTests
         Assert.Null(confirmed.Cell);
         Assert.Equal(CellProvenance.Unknown, confirmed.Provenance);
         Assert.False(confirmed.IsPositionTrusted);
+
+        var placed = CharacterEvents.Apply(changed, RelayDirection.FromServer, TestPlay.Information(350, TestPlay.NorthMapId));
+        var point = MapGeometry.PointOf(311);
+        var delayedRefusal = CharacterEvents.Apply(placed, RelayDirection.FromServer, new MapMovementRefusedEvent { X = point.X, Y = point.Y });
+
+        Assert.Equal(350, delayedRefusal.Cell);
+        Assert.Equal(CellProvenance.ServerPlaced, delayedRefusal.Provenance);
+        Assert.True(delayedRefusal.IsPositionTrusted);
+        Assert.False(delayedRefusal.IsWalkHeld);
     }
 
     [Fact]

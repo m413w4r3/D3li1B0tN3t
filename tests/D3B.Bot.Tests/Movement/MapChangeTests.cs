@@ -178,6 +178,33 @@ public sealed class MapChangeTests
     }
 
     [Fact]
+    public async Task AHeldCharacterWithAStaleStepSourceDoesNotSendAReleaseWalk()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(48);
+        await LeaveHeldWalkAsync(play, connection, bot, 20);
+
+        var step = play.StepTo(bot, TestPlay.NorthMapId);
+        var vertices = play.World.Graph.Vertices.ToArray();
+        var wrongFrom = Array.FindIndex(vertices, vertex => vertex.MapId == TestPlay.NorthMapId);
+        Assert.True(wrongFrom >= 0);
+        Assert.NotEqual(step.From, wrongFrom);
+
+        var sentBefore = connection.Sent.Count;
+        var change = bot.ChangeMapAsync(step with { From = wrongFrom }, TestContext.Current.CancellationToken);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (!change.IsCompleted && connection.Sent.Count == sentBefore && DateTime.UtcNow < deadline)
+            await Task.Delay(5, TestContext.Current.CancellationToken);
+
+        if (connection.Sent.Count > sentBefore)
+            await TestWalks.WalkedAsync(play, connection, sentBefore + 1);
+
+        Assert.Equal(MapChangeOutcome.NoPath, await TestWalks.AdvanceUntilDoneAsync(play.Time, change));
+        Assert.Equal(sentBefore, connection.Sent.Count);
+    }
+
+    [Fact]
     public async Task AnArrivedReleaseWithoutAProvenPositionBlocksMapChange()
     {
         await using var play = new TestPlay();

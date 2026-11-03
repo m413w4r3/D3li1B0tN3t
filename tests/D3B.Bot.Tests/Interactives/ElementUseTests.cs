@@ -67,6 +67,28 @@ public sealed class ElementUseTests
     }
 
     [Fact]
+    public async Task ACharacterReportedCellCannotUseAnElementWithoutMovementTrust()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 190, 191 } });
+        connection.Client(new MapMovementCancelRequest { CellId = 190 });
+        await bot.ProcessedAsync();
+
+        var use = bot.UseAsync(TestPlay.TreeElementId, TestPlay.TreeSkillId, TestContext.Current.CancellationToken);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (!use.IsCompleted && connection.Sent.Count == 0 && DateTime.UtcNow < deadline)
+            await Task.Delay(5, TestContext.Current.CancellationToken);
+
+        if (connection.Sent.Count > 0)
+            connection.Server(new InteractiveUseErrorEvent { ElementId = TestPlay.TreeElementId, SkillInstanceId = TestPlay.TreeSkillId });
+
+        Assert.Equal(UseOutcome.Busy, await use);
+        Assert.DoesNotContain(connection.Sent, request => request is InteractiveUseRequest);
+    }
+
+    [Fact]
     public async Task AUseTheServerRefusesIsRefused()
     {
         await using var play = new TestPlay();

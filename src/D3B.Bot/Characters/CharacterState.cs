@@ -41,6 +41,9 @@ public sealed record CharacterState
     /// <summary>Gets the evidence for <see cref="Cell"/>.</summary>
     public CellProvenance Provenance { get; init; } = CellProvenance.Unknown;
 
+    /// <summary>Gets the map on which a movement request awaits the server's answer, or <see langword="null"/> when none does.</summary>
+    public long? PendingMovementMapId { get; init; }
+
     /// <summary>Gets whether a known map and cell have server-derived placement, confirmation or refusal evidence.</summary>
     public bool IsPositionTrusted => MapId is not null && Cell is not null && Provenance is (CellProvenance.ServerPlaced or CellProvenance.ServerConfirmed or CellProvenance.ServerRefused);
 
