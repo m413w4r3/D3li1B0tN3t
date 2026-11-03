@@ -38,6 +38,12 @@ public sealed record CharacterState
     /// <remarks>Known once the map's information placed the character, then after each walk, refusal or stop.</remarks>
     public int? Cell { get; init; }
 
+    /// <summary>Gets the evidence for <see cref="Cell"/>.</summary>
+    public CellProvenance Provenance { get; init; }
+
+    /// <summary>Gets whether the server derived the known cell from a placement, confirmation or refusal.</summary>
+    public bool IsPositionTrusted => MapId is not null && Cell is not null && Provenance is CellProvenance.ServerPlaced or CellProvenance.ServerConfirmed or CellProvenance.ServerRefused;
+
     /// <summary>Gets the path the character walks, every cell from the first, as the server showed it; empty when it stands still.</summary>
     public ImmutableArray<int> Path { get; init; } = [];
 
