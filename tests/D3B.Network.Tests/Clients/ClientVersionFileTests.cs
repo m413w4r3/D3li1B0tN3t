@@ -24,6 +24,38 @@ public sealed class ClientVersionFileTests : IDisposable
     }
 
     [Fact]
+    public void TheBuildIsReadFromItsVersionAndBuildDateLines()
+    {
+        File.WriteAllText(Path, "Version=3.7.13.17\nBuildDate=2026-11-03T14:11:23+00:00\nConfigUrl=https://cdn.test/a.json\n");
+
+        var build = ClientVersionFile.ReadBuild(Path);
+
+        Assert.NotNull(build);
+        Assert.Equal("3.7.13.17", build.Value.Version);
+        Assert.Equal(new DateTimeOffset(2026, 11, 3, 14, 11, 23, TimeSpan.Zero), build.Value.BuildDate);
+    }
+
+    [Fact]
+    public void AFileWithoutVersionHasNoBuild()
+    {
+        File.WriteAllText(Path, "BuildDate=2026-11-03T14:11:23+00:00\nConfigUrl=https://cdn.test/a.json\n");
+
+        Assert.Null(ClientVersionFile.ReadBuild(Path));
+    }
+
+    [Fact]
+    public void AMalformedBuildDateKeepsTheVersion()
+    {
+        File.WriteAllText(Path, "Version=3.7.13.17\nBuildDate=not-a-date\n");
+
+        var build = ClientVersionFile.ReadBuild(Path);
+
+        Assert.NotNull(build);
+        Assert.Equal("3.7.13.17", build.Value.Version);
+        Assert.Null(build.Value.BuildDate);
+    }
+
+    [Fact]
     public void AFileWithoutTheLineHasNoUrl()
     {
         File.WriteAllText(Path, "Version=3.7.12.12\n");

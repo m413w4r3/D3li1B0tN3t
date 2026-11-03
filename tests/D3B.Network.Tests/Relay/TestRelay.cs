@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Sockets;
+using D3B.Network.Clients;
 using D3B.Network.Relay;
+using D3B.Network.Tests.Clients;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 
@@ -69,7 +72,9 @@ internal sealed class TestRelay : IAsyncDisposable
         var log = new FakeLogCollector();
         var collection = new ServiceCollection()
             .AddLogging(logging => logging.AddProvider(new FakeLoggerProvider(log)))
-            .AddRelay(settings, _ => "3.7.12.12");
+            .AddRelay(settings, _ => new ClientBuildIdentity("3.7.12.12", null));
+
+        collection.AddSingleton<IHostApplicationLifetime>(new FakeHostApplicationLifetime());
 
         if (!findingGameServers)
             collection.AddSingleton<IUpstreamLocator>(new FixedUpstreamLocator(withServer ? new Upstream(Host, [upstreamEndPoint]) : null));

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace D3B.Network.Clients;
@@ -10,6 +11,8 @@ namespace D3B.Network.Clients;
 public static class ClientVersionFile
 {
     private const string ConfigUrlKey = "ConfigUrl";
+    private const string VersionKey = "Version";
+    private const string BuildDateKey = "BuildDate";
 
     /// <summary>Gets the version file of a client.</summary>
     /// <param name="clientDirectory">The client's installation directory.</param>
@@ -31,6 +34,37 @@ public static class ClientVersionFile
         }
 
         return null;
+    }
+
+    /// <summary>Reads the build the client's version file names.</summary>
+    /// <param name="path">The version file.</param>
+    /// <returns>The build, or null when the file has no <c>Version</c> line.</returns>
+    public static ClientBuildIdentity? ReadBuild(string path)
+    {
+        string? version = null;
+        DateTimeOffset? buildDate = null;
+
+        foreach (var line in Read(path).Split('\n'))
+        {
+            var separator = line.IndexOf('=', StringComparison.Ordinal);
+
+            if (separator < 0)
+                continue;
+
+            var key = line[..separator].Trim();
+            var value = line[(separator + 1)..].Trim();
+
+            if (key == VersionKey)
+            {
+                version = value;
+            }
+            else if (key == BuildDateKey && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date))
+            {
+                buildDate = date;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(version) ? null : new ClientBuildIdentity(version, buildDate);
     }
 
     /// <summary>Replaces the URL of the client's configuration.</summary>

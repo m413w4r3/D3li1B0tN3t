@@ -127,15 +127,18 @@ public sealed class GameSession : IConnectionInterceptor
     byte[]? IConnectionInterceptor.OnFrame(RelayDirection direction, ReadOnlySequence<byte> frame, bool held)
     {
         var decoded = _translation.DecodeGame(frame);
+        var side = direction is RelayDirection.FromClient ? "client" : "server";
+        var message = Describe(decoded);
 
         if (_log.IsEnabled(LogLevel.Debug))
         {
-            var side = direction is RelayDirection.FromClient ? "client" : "server";
             var state = decoded.IsUnderstood ? "understood" : decoded.IsRead ? "read" : "not read";
-            var message = Describe(decoded);
 
             GameLog.Decoded(_log, Id, side, message, frame.Length, state);
         }
+
+        if (decoded.Problem is { } problem)
+            GameLog.NotUnderstood(_log, Id, side, message, frame.Length, problem);
 
         if (direction is RelayDirection.FromClient && _account is null && decoded.Content is AuthenticationRequest authentication)
             _account = _accounts.Take(authentication.Ticket);

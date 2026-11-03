@@ -5,6 +5,7 @@ using D3B.Data.Interactives;
 using D3B.Data.Maps;
 using D3B.Data.Packs;
 using D3B.Data.Texts;
+using System.Globalization;
 using D3B.Data.World;
 using D3B.Protocol.Mapping;
 using D3B.Protocol.Tests.Mapping;
@@ -17,6 +18,7 @@ namespace D3B.Bot.Tests;
 internal sealed class TestInstall : IDisposable
 {
     public const string Version = "3.7.12.12";
+    public const string BuildDate = "2026-10-19T15:11:45+00:00";
     public const long MapId = 191_104_002;
     public const int AshNameId = 10;
 
@@ -58,14 +60,20 @@ internal sealed class TestInstall : IDisposable
         Root = Path.Combine(Path.GetTempPath(), "D3B.Tests", Guid.NewGuid().ToString("N"));
 
         Directory.CreateDirectory(Path.GetDirectoryName(VersionFile)!);
-        File.WriteAllText(VersionFile, $"Version={Version}\nBuildDate=2026-10-19T15:11:45+00:00\nConfigUrl={ConfigUrl}\n");
+        File.WriteAllText(VersionFile, $"Version={Version}\nBuildDate={BuildDate}\nConfigUrl={ConfigUrl}\n");
         File.WriteAllText(Path.Combine(Root, "ankama-config.json"), """{"connectionHosts":["Test:localhost:5555,443"]}""");
     }
 
     /// <summary>A pack holding a text, a map, a world of one vertex and the interactives, extracted from a client version.</summary>
-    public static byte[] Pack(string clientVersion = Version)
+    public static byte[] Pack(string clientVersion = Version, string buildDate = BuildDate)
     {
-        var info = new PackInfo { ClientVersion = clientVersion, Fingerprint = "0123456789abcdef", ExtractorVersion = "0.0.0-test" };
+        var info = new PackInfo
+        {
+            ClientVersion = clientVersion,
+            ClientBuildDate = DateTimeOffset.Parse(buildDate, CultureInfo.InvariantCulture),
+            Fingerprint = "0123456789abcdef",
+            ExtractorVersion = "0.0.0-test",
+        };
 
         using var stream = new MemoryStream();
 
@@ -105,12 +113,12 @@ internal sealed class TestInstall : IDisposable
     }
 
     /// <summary>Writes a pack where the extraction tool would, or among the app's own files when <paramref name="bundled"/>.</summary>
-    public void WritePack(string clientVersion = Version, bool bundled = false)
+    public void WritePack(string clientVersion = Version, bool bundled = false, string buildDate = BuildDate)
     {
         var path = bundled ? BundledPackPath : PackPath;
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllBytes(path, Pack(clientVersion));
+        File.WriteAllBytes(path, Pack(clientVersion, buildDate));
     }
 
     /// <summary>Writes a schema and mapping where the mapping tools would, or among the app's own files when <paramref name="bundled"/>.</summary>

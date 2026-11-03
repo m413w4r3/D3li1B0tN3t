@@ -75,14 +75,20 @@ public sealed class GameSessionTests : IDisposable
         Show(session, RelayDirection.FromClient, ticket);
         Show(session, RelayDirection.FromServer, unknown);
 
+        var records = _log.GetSnapshot();
+
         Assert.Equal(
             [
                 $"Connection g1: the client sent AuthenticationRequest, {ticket.Length} bytes, understood",
                 $"Connection g1: the server sent .zzz, {unknown.Length} bytes, not read",
             ],
-            _log.GetSnapshot().Select(record => record.Message));
-        Assert.All(_log.GetSnapshot(), record => Assert.Equal(LogLevel.Debug, record.Level));
-        Assert.DoesNotContain(_log.GetSnapshot(), record => record.Message.Contains(Secret, StringComparison.Ordinal));
+            records.Where(record => record.Level is LogLevel.Debug).Select(record => record.Message));
+
+        var warning = Assert.Single(records, record => record.Level is LogLevel.Warning);
+
+        Assert.Contains("not understood and relayed as it is", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("it carries .zzz, which the readable protocol lacks.", warning.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(records, record => record.Message.Contains(Secret, StringComparison.Ordinal));
     }
 
     [Fact]

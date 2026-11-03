@@ -58,4 +58,27 @@ public sealed class PackSourceTests : IDisposable
         Assert.Contains("extracted from client 3.7.11.1", exception.Message, StringComparison.Ordinal);
         Assert.Null(exception.MissingBuild);
     }
+
+    [Fact]
+    public void APackOfAnotherBuildWithTheSameVersionIsRefused()
+    {
+        _install.WritePack(buildDate: "2026-11-03T14:11:23+00:00");
+
+        var exception = Assert.Throws<DataUnavailableException>(() => new PackSource(_install.Settings).Open());
+
+        Assert.Contains($"extracted from client {TestInstall.Version}, built 2026-11-03", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("not from the installed build, built 2026-10-19", exception.Message, StringComparison.Ordinal);
+        Assert.Null(exception.MissingBuild);
+    }
+
+    [Fact]
+    public void APackOfAnotherVersionOnThisMachineIsRefused()
+    {
+        _install.WritePack("3.7.11.1");
+
+        var exception = Assert.Throws<DataUnavailableException>(() => new PackSource(_install.Settings).Open());
+
+        Assert.Contains("extracted from client 3.7.11.1", exception.Message, StringComparison.Ordinal);
+        Assert.Contains($"not from {TestInstall.Version}, the one installed", exception.Message, StringComparison.Ordinal);
+    }
 }

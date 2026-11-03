@@ -2,6 +2,7 @@ using D3B.Network.Clients;
 using Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace D3B.Network.Relay;
@@ -18,16 +19,20 @@ public static class RelayServiceCollectionExtensions
     /// </remarks>
     /// <param name="services">The host's services.</param>
     /// <param name="settings">Where the relay listens, where it keeps the client's configuration, and whether it records captures.</param>
-    /// <param name="clientVersion">Gets the installed client's version, which captures record, or null when unknown.</param>
+    /// <param name="clientBuild">Gets the installed client's build, which captures record and whose change stops the host, or null when unknown.</param>
     /// <returns>The services.</returns>
-    public static IServiceCollection AddRelay(this IServiceCollection services, RelaySettings settings, Func<IServiceProvider, string?>? clientVersion = null)
+    public static IServiceCollection AddRelay(this IServiceCollection services, RelaySettings settings, Func<IServiceProvider, ClientBuildIdentity?>? clientBuild = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(settings);
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton(settings);
-        services.AddSingleton<ClientRedirect>();
+        services.AddSingleton(provider => new ClientRedirect(
+            provider.GetRequiredService<RelaySettings>(),
+            provider.GetRequiredService<ILogger<ClientRedirect>>(),
+            clientBuild?.Invoke(provider),
+            provider.GetRequiredService<IHostApplicationLifetime>()));
         services.AddSingleton<GameServerSelections>();
         services.AddSingleton<IUpstreamLocator, UpstreamLocator>();
 
@@ -40,7 +45,7 @@ public static class RelayServiceCollectionExtensions
             provider.GetRequiredService<IUpstreamLocator>(),
             provider.GetRequiredService<SocketConnectionContextFactory>(),
             provider.GetRequiredService<TimeProvider>(),
-            () => clientVersion?.Invoke(provider),
+            () => clientBuild?.Invoke(provider)?.Version,
             provider.GetService<IRelayInterceptor>(),
             provider.GetRequiredService<ILogger<RelayConnectionHandler>>()));
         services.AddSingleton<RelayServer>();

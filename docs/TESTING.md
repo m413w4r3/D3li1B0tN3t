@@ -109,6 +109,23 @@ The following counts were recorded on the P2B branch based on integrated master 
 
 These checks cover offline restore safety. No installed client, host, relay, or sniffer was run. Re-record the build, suite, and format results after the final merge.
 
+## P2D client 3.7.13.17 migration and update guard
+
+- Targeted suites: `D3B.Network.Tests` 133/133, `D3B.Bot.Tests` 439/439, `D3B.Engine.Tests` 257/257.
+- Full solution serialized with `dotnet test --solution D3B.slnx --max-parallel-test-modules 1 --no-build`: 1,265/1,265.
+- `dotnet build D3B.slnx`: 0 warnings, 0 errors; `dotnet format --verify-no-changes`: exit 0.
+- New tests:
+  - `ClientVersionFileTests`: build parse, missing version, malformed build date.
+  - `ClientRedirectTests`: a changed build stops the host and keeps the launcher's new configuration; the same version with another build date stops it; a changed build at start leaves the version file untouched.
+  - `PackSourceTests`: a pack of another build with the same version is refused; a pack of another version on this machine is refused.
+  - `WorldPathfinderTests.AZaapOnAMapTheGraphDoesNotHoldIsIgnored`.
+  - `GameLogTests`: decoded game message fields; unknown/translation warning without the payload.
+  - `LoggingTests.TheSupervisedArgumentEnablesTheGameSessionAtDebug`.
+- `GameSessionTests.FramesAreLoggedAtTheDebugLevelByWhatTheyAreNeverByWhatTheyHold` now expects the new `GameLog.NotUnderstood` warning; `TestRelay` supplies a fake host lifetime for the new redirect dependency.
+- Offline mapping audit: 222 messages, 492 fields, 29 enums, 206 values; 0 failures, 2 notes, 100 partial; no renumbering; `ProtocolTranslation.Create` succeeds.
+- Offline runtime check of the installed `3.7.13.17` pack/schema/mapping: `pack_identity_ok=True`, `mapping_identity_ok=True`, `translation_ok=True`, `READY=True`.
+- No host, relay to Ankama, or Dofus client was started.
+
 ## Real-client procedures (manual/supervised)
 
 Use an installed Linux client at `/home/nill/.config/Ankama/Dofus-dofus3`. These procedures are not CI commands. They need a NuGet restore and client-file access. Keep build artifacts and results under `/tmp`.

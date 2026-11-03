@@ -1,6 +1,64 @@
 # Linux client acceptance runbook
 
-**Status: READY for a separately authorized MANUAL/SUPERVISED 5555-only test.** Technical preparation is complete, but a separate owner go is still required before starting the host or client. The 443 route is **BLOCKED** until explicit owner authorization for the dedicated apphost capability; no capability has been applied. No live client, host, relay, or sniffer result is claimed.
+**Status: the P2D artifact/data layer is READY for client `3.7.13.17`; a new real supervised session is BLOCKED until the verified P2D apphost is installed and verified.** The live apphost is still the P2B build and does not contain the P2D build-change guard. The 443 route is **BLOCKED** until explicit owner authorization for the dedicated apphost capability; no capability has been applied. No P2D host, relay, or client result is claimed.
+
+## P2D — current build 3.7.13.17
+
+The P2C supervised run on `3.7.12.12` worked at the TCP, connection-protocol and game-connection layers; the launcher then updated the client to `3.7.13.17`. Its evidence is preserved in [P2C_REPORT](P2C_REPORT.md); the P2D details and the remaining apphost gate are in [P2D_REPORT](P2D_REPORT.md). The values in sections A–E below are the historical P2C `3.7.12.12` run; use this section for the current build.
+
+### Identity
+
+| File | Size | SHA-256 |
+| --- | ---: | --- |
+| `Dofus.x64` | 4,472 B | `6d7b634873034db988b3eb0a3399e0effec7b491dd7c1fcd9efcd9f2c6d0baff` |
+| `GameAssembly.so` | 175,835,648 B | `f2aa597d4ca5550d4188d878f6dd577d79fbfc01615bc48f073a1c4d8d9c76a0` |
+| `UnityPlayer.so` | 41,372,064 B | `b01fc32db9ac268c6a99f5f105cfb5d52423b953030f17e8e106e7a23621649f` |
+| `global-metadata.dat` | 43,581,760 B | `dea17c3c465a1937737e848a290057db9812bc2e7f4f8176d8ae1bf2616cdc9d` |
+
+Version `3.7.13.17`, build date `2026-11-03T14:11:23+00:00`, Linux x86_64, Unity `6000.3.16f1`, IL2CPP metadata `39`. The `Dofus.x64` and `UnityPlayer.so` files are unchanged from `3.7.12.12`; `GameAssembly.so` and `global-metadata.dat` changed. The `version` file SHA-256 at the P2D audit is `796d68f12d5278d7253818d3d4ff52e08b731307769c64e3355cc7a4e16f3fae`; re-record it if the launcher rewrites it.
+
+### Runtime artifacts
+
+| File | Size | SHA-256 |
+| --- | ---: | --- |
+| `data-8.pack` | 26,890,912 B | `28db5da4893ef7599740fb9001d74451b774ef7bd446c35a5b18977a6a87c4d0` |
+| `schema-1.binpb` | 170,287 B | `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0` |
+| `mapping-15.binpb` | 14,688 B | `f42deadf5d5d84e4e8c2213f6dd730a66e8a9324bacac264bcad4c3805eea97e` |
+
+They are staged at `/home/nill/.local/share/D3B/data/3.7.13.17`, directories `0700`, files `0600`, owner `nill`. `data/3.7.12.12` remains intact and must not be used for `3.7.13.17`. The pack is 17,639 entries, 17,623 maps and 56,317 French texts; the graph has 11,331 vertices and 31,337 transitions; the atlas has 15,470 positions, 569 sub-areas, 70 areas and 63 zaaps. The new zaap 81 is on map 243140612, a real client map with an atlas position and sub-area but no graph vertex; the pathfinder ignores it, and the extraction reports it as a note. The protocol schema is byte-identical to `3.7.12.12`; the mapping pairs are identical. `ContractAudit` has **0 failures, 2 notes and 100 partial messages** across 222 messages, 492 fields, 29 enums and 206 values; no field or value is renumbered; `ProtocolTranslation.Create` succeeds. The pins are `src/D3B.Protocol/Pins/3.7.13.17.json`, derived from the `3.7.12.12` pins only after proving the schema and readable-digest identity.
+
+### Host command and supervised logging
+
+Use the P2D apphost after the gate below. The only change from the P2C settings is the targeted game-session logging:
+
+```sh
+/home/nill/.local/share/D3B/apphost/D3B.Host \
+  --Client:Directory /home/nill/.config/Ankama/Dofus-dofus3 \
+  --Data:Directory /home/nill/.local/share/D3B/data \
+  --Network:Redirect:Directory /home/nill/.local/share/D3B/client \
+  --Network:Captures:Enabled false \
+  --Fights:Alone false \
+  --Network:Address 127.0.13.59 \
+  --Network:Ports:0 5555 \
+  --Network:Game:Ports:0 5556 \
+  --Logging:LogLevel:D3B.Bot.Network.GameSession Debug
+```
+
+- `D3B.Bot.Network.ConnectionPhaseSession` stays at Information: local connection, message names, direction and length for the connection phase.
+- `D3B.Bot.Network.GameSession` at Debug: every decoded game message's name, client/server direction, length and state (`understood`, `read`, `not read`).
+- `GameLog.NotUnderstood` at Warning: a game message the readable protocol lacks or whose translation does not hold, with its message name, direction, length and problem. It never logs the payload.
+- `D3B.Bot.Runtime.BotActor` at Information: `Attached` (character state created), `ChangingMap`, `ChangedMap` and `Walking` (map/cell updates). These lines contain local connection/character identifiers; keep the log private and report only message names, directions and counts.
+- Captures stay disabled. No ticket, payload, account identifier or private message is logged or shared.
+
+Offline validation: `LoggingTests.TheSupervisedArgumentEnablesTheGameSessionAtDebug` and `GameLogTests` pass; the full suite is green.
+
+### Apphost gate
+
+The live apphost `/home/nill/.local/share/D3B/apphost` is still the P2B payload (`D3B.Host.dll` `0cc2a335…`, `D3B.Network.dll` `0ce58ee5…`, `D3B.Bot.dll` `65e446ed…`) and does not contain the P2D build-change guard. A verified P2D apphost is staged at `/tmp/p2d-3.7.13.17/apphost`: launcher 78,192 B `de956557…`, `D3B.Host.dll` 5,632 B `f3e1155d…`, `D3B.Network.dll` 112,640 B `fb341cd4…`, `D3B.Bot.dll` 650,240 B `238d5025…`, informational version `0.0.0-alpha.0.11+55b0df7…`, no capability. Do not start the host until this payload is installed as a set with the directory `0700`, the launcher `0700`, and every hash re-verified. This installation is a separate owner-authorized deployment step; the live apphost is not changed by P2D.
+
+### Restore rules for 3.7.13.17
+
+Before the redirect, create a new private byte-for-byte backup of the `3.7.13.17` `version` file and record its hash. **Do not apply the P2C `3.7.12.12` backup** (`28f3f4…`) to the updated client. If the launcher rewrites the version file during the session, the P2D host logs `The client's build changed from … to …`, stops instead of relaying a protocol it was not prepared for, and leaves the launcher's new Ankama configuration in place; the normal stop then preserves it. Do not relaunch, and do not reuse the `3.7.13.17` artifacts if the new build's version or build date changes again: repeat the P2D identity and regeneration procedure first.
 
 This runbook is a sequential procedure for one supervised connection-phase observation. Keep the client closed until section C. A human supervisor must remain present at the client and host. Stop at the first unexpected prompt, error, reconnect, or activity. Do not run as root, configure a bot activity, or enable captures.
 

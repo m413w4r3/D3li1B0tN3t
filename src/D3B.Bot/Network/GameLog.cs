@@ -8,6 +8,9 @@ internal static partial class GameLog
     [LoggerMessage(Level = LogLevel.Debug, Message = "Connection {ConnectionId}: the {Side} sent {Message}, {Length} bytes, {State}")]
     public static partial void Decoded(ILogger logger, string connectionId, string side, string message, long length, string state);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Connection {ConnectionId}: the {Side} sent {Message}, {Length} bytes, not understood and relayed as it is: {Problem}")]
+    public static partial void NotUnderstood(ILogger logger, string connectionId, string side, string message, long length, string problem);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Connection {ConnectionId}: D3B sent {Message}, {Length} bytes")]
     public static partial void Sent(ILogger logger, string connectionId, string message, int length);
 

@@ -13,6 +13,7 @@ internal sealed class TestWorld
 
     private readonly List<(long Map, int Zone, long ToMap, int ToZone, WorldTransition Transition)> _transitions = [];
     private readonly List<string> _criteria = [];
+    private readonly List<Waypoint> _waypoints = [];
     private readonly SortedDictionary<long, int> _subAreas = [];
     private readonly Dictionary<long, (short X, short Y, sbyte WorldMap, bool Teleport)> _places = [];
 
@@ -29,6 +30,14 @@ internal sealed class TestWorld
     {
         _subAreas.TryAdd(map, SubAreaId);
         _places[map] = (x, y, worldMap, teleport);
+
+        return this;
+    }
+
+    /// <summary>Adds a zaap, on a map the graph does not hold: the atlas places it, and the pathfinder ignores it.</summary>
+    public TestWorld Zaap(long map, int id)
+    {
+        _waypoints.Add(new Waypoint(id, map, SubAreaId, true));
 
         return this;
     }
@@ -79,7 +88,7 @@ internal sealed class TestWorld
 
     public WorldAtlas Atlas()
     {
-        var maps = Graph().Vertices.ToArray().Select(vertex => vertex.MapId).Distinct().Order();
+        var maps = Graph().Vertices.ToArray().Select(vertex => vertex.MapId).Concat(_waypoints.Select(waypoint => waypoint.MapId)).Distinct().Order();
         var positions = maps.Select(Position).ToArray();
         SubArea[] subAreas =
         [
@@ -87,7 +96,7 @@ internal sealed class TestWorld
             new(ClosedSubAreaId, 0, AreaId, 10, SubArea.NoZaap, false, 0, 0, 0, 0),
         ];
 
-        return new WorldAtlas(positions, subAreas, new[] { new Area(AreaId, 0, 0) }, Array.Empty<Waypoint>(), Array.Empty<int>(), Array.Empty<int>());
+        return new WorldAtlas(positions, subAreas, new[] { new Area(AreaId, 0, 0) }, _waypoints.ToArray(), Array.Empty<int>(), Array.Empty<int>());
     }
 
     public WorldPathfinder Pathfinder(params NpcWay[] npcWays)

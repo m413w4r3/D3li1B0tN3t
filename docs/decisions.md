@@ -6637,6 +6637,18 @@ pulling them into its walls. On the owner's capture of 4 fights the AI played, 1
 - **Checked**: `ClientVersionFileTests` and `ClientRedirectTests`; targeted `D3B.Network.Tests` 125/125; full suite 1,251/1,251; build 0 warnings and 0 errors; format verification exit 0. The fake-install CLI restore check for a version file without `ConfigUrl` printed the repair diagnostic and exited 2.
 - **Boundary**: these are automated and fake-install checks. No installed client, host, relay, or sniffer was run; real-client restoration remains MANUAL/SUPERVISED.
 
+## D290: Migrate to client 3.7.13.17 without reusing the old protocol blindly
+
+*2026-11-03, P2D offline migration.*
+
+- **Decision**: treat the launcher's `3.7.12.12` → `3.7.13.17` update as a new game-data identity. Regenerate the pack; regenerate the schema and mapping only after proving the identity; do not reuse the old pack or mapping for the new build. Accept a zaap outside the world graph as a note when its map is a real client map and its sub-area is in the atlas, because the pathfinder ignores such a zaap. The P2D runtime data is `data/3.7.13.17`; `data/3.7.12.12` remains for the P2C evidence.
+- **Why**: the game data changed (maps, texts, zaaps) but the protocol schema is byte-identical to `3.7.12.12` (`e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0`) and the readable digest is unchanged (`4e36426ac4d31cd517b8cb57d4b66d184f2ec9eaa85ed4ffc1448fb2d7c4cda9`). The mapping pairs are identical; re-versioning the pins after this proof is not a blind copy. The new zaap 81 is on map 243140612, a real map with an atlas position and sub-area but no graph vertex; `WorldPathfinder.ZaapsOf` ignores it.
+- **Evidence**: pack `28db5da4893ef7599740fb9001d74451b774ef7bd446c35a5b18977a6a87c4d0`, 17,639 entries, 17,623 maps, 56,317 French texts; schema `e383c947…`; mapping `f42deadf5d5d84e4e8c2213f6dd730a66e8a9324bacac264bcad4c3805eea97e`; `ContractAudit` 0 failures, 2 notes, 100 partial, 222 messages, 492 fields, 29 enums and 206 values; no renumbering; `ProtocolTranslation.Create` succeeds. Every mapping pair matches the `3.7.12.12` mapping. The map diff is 129 removed and 30 added, net -99; the graph and atlas diffs are in [P2D_REPORT](P2D_REPORT.md).
+- **Update protection**: `PackSource` refuses a pack whose build date differs from the installed client; `ClientRedirect` stops the host on a version/build-date change during a redirect and preserves the launcher's new Ankama configuration. There is no hot reload. The full binary fingerprint remains a manual preflight gate (R02).
+- **Logging**: the next supervised run sets `Logging:LogLevel:D3B.Bot.Network.GameSession=Debug`; `GameLog` logs the decoded message name, direction, length and state, and `GameLog.NotUnderstood` warns on unknown or untranslated messages without payloads. `BotLog` keeps the character state creation/update lines at information.
+- **Checked**: build 0 warnings/0 errors; targeted Network 133/133, Bot 439/439, Engine 257/257; full suite serialized 1,265/1,265; format verification exit 0; offline runtime check `READY=True`. No host, relay or client was run in P2D.
+- **Boundary**: the data/artifact layer is READY; the live apphost is still the P2B payload. A new real session is blocked until the staged P2D apphost (`/tmp/p2d-3.7.13.17/apphost`) is installed as a set and verified. The P2C transport/connection result is preserved in [P2C_REPORT](P2C_REPORT.md).
+
 ## Open questions
 
 Settled questions leave this table, and the decision that settles one says so.

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using D3B.Network.Relay;
 using Microsoft.Extensions.Hosting;
@@ -30,6 +31,8 @@ internal sealed class ClientRedirect : IHostedService, IDisposable
 
     private readonly RelaySettings _settings;
     private readonly ILogger _log;
+    private readonly ClientBuildIdentity? _expectedBuild;
+    private readonly IHostApplicationLifetime _lifetime;
     private readonly HttpClient _http = new() { Timeout = _downloadTimeout };
     private readonly SemaphoreSlim _applying = new(1, 1);
     private readonly CancellationTokenSource _stopping = new();
@@ -37,6 +40,7 @@ internal sealed class ClientRedirect : IHostedService, IDisposable
     private Timer? _settle;
     private volatile ConnectionHost? _connectionHost;
     private int _retries;
+    private volatile bool _buildChanged;
     private bool _stopped;
     private bool _disposed;
 
@@ -46,17 +50,19 @@ internal sealed class ClientRedirect : IHostedService, IDisposable
 
     private string VersionFile => ClientVersionFile.PathIn(_settings.ClientDirectory);
 
-    public ClientRedirect(RelaySettings settings, ILogger<ClientRedirect> log)
+    public ClientRedirect(RelaySettings settings, ILogger<ClientRedirect> log, ClientBuildIdentity? expectedBuild, IHostApplicationLifetime lifetime)
     {
         _settings = settings;
         _log = log;
+        _expectedBuild = expectedBuild;
+        _lifetime = lifetime;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await ApplyAsync(cancellationToken);
+            await ApplyAsync(cancellationToken, starting: true);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or HttpRequestException)
         {
@@ -145,24 +151,42 @@ internal sealed class ClientRedirect : IHostedService, IDisposable
         }
     }
 
-    private async Task ApplyAsync(CancellationToken cancellationToken)
+    private async Task ApplyAsync(CancellationToken cancellationToken, bool starting = false)
     {
         await _applying.WaitAsync(cancellationToken);
 
         try
         {
-            if (_stopping.IsCancellationRequested)
+            if (_buildChanged || _stopping.IsCancellationRequested)
                 return;
 
             var directory = _settings.RedirectDirectory;
             var versionFile = VersionFile;
+            var currentBuild = ClientVersionFile.ReadBuild(versionFile);
+
+            if (BuildChanged(currentBuild))
+            {
+                var expected = _expectedBuild!.Value;
+                var current = currentBuild!.Value;
+
+                ClientLog.BuildChanged(_log, expected.Version, Date(expected.BuildDate), current.Version, Date(current.BuildDate));
+
+                if (starting)
+                    throw new InvalidDataException($"The client's build changed to {current.Version} ({Date(current.BuildDate)}), and D3B was prepared for {expected.Version} ({Date(expected.BuildDate)}).");
+
+                _buildChanged = true;
+                _lifetime.StopApplication();
+
+                return;
+            }
+
             var ours = ConfigUrl(directory);
-            var current = ClientVersionFile.ReadConfigUrl(versionFile) ?? throw new InvalidDataException($"{versionFile} has no ConfigUrl line.");
+            var currentUrl = ClientVersionFile.ReadConfigUrl(versionFile) ?? throw new InvalidDataException($"{versionFile} has no ConfigUrl line.");
 
             // Ours already, as after a crash: Ankama's URL is the one kept when the client was first sent to D3B.
-            var original = current == ours
+            var original = currentUrl == ours
                 ? OriginalUrl(directory) ?? throw new InvalidDataException($"{versionFile} names D3B's configuration, and Ankama's URL is lost: repair the client from the launcher.")
-                : current;
+                : currentUrl;
 
             Directory.CreateDirectory(directory);
 
@@ -182,13 +206,13 @@ internal sealed class ClientRedirect : IHostedService, IDisposable
 
             var configFile = Path.Combine(directory, ConfigFileName);
 
-            if (current != ours)
+            if (currentUrl != ours)
                 File.WriteAllText(Path.Combine(directory, OriginalUrlFileName), original);
 
             File.WriteAllText(Path.Combine(directory, OriginalConfigFileName), json);
             File.WriteAllText(configFile, configuration.RedirectedTo(_settings.Address));
 
-            if (current != ours)
+            if (currentUrl != ours)
                 ClientVersionFile.WriteConfigUrl(versionFile, ours);
 
             var unheard = host.Ports.Except(_settings.Ports).ToList();
@@ -238,7 +262,7 @@ internal sealed class ClientRedirect : IHostedService, IDisposable
     {
         try
         {
-            if (_stopping.IsCancellationRequested || ClientVersionFile.ReadConfigUrl(VersionFile) == ConfigUrl(_settings.RedirectDirectory))
+            if (_buildChanged || _stopping.IsCancellationRequested || ClientVersionFile.ReadConfigUrl(VersionFile) == ConfigUrl(_settings.RedirectDirectory))
                 return;
 
             ClientLog.Rewritten(_log, VersionFile);
@@ -262,6 +286,22 @@ internal sealed class ClientRedirect : IHostedService, IDisposable
         {
             // The host is stopping: the restore takes over.
         }
+    }
+
+    private bool BuildChanged(ClientBuildIdentity? current)
+    {
+        if (_expectedBuild is not { } expected || current is not { } build)
+            return false;
+
+        if (!string.Equals(expected.Version, build.Version, StringComparison.Ordinal))
+            return true;
+
+        return expected.BuildDate is { } expectedDate && build.BuildDate is { } buildDate && expectedDate != buildDate;
+    }
+
+    private static string Date(DateTimeOffset? date)
+    {
+        return date?.ToString("u", CultureInfo.InvariantCulture) ?? "unknown";
     }
 
     private void Restore()

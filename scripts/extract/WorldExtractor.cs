@@ -243,13 +243,33 @@ internal static class WorldExtractor
                 throw new InvalidDataException($"The maps' information names map {position.MapId}, which the client does not hold.");
         }
 
+        var outsideGraph = 0;
+        var withoutPosition = 0;
+
         foreach (var waypoint in atlas.Waypoints.Span)
         {
+            if (!byId.ContainsKey(waypoint.MapId))
+                throw new InvalidDataException($"Zaap {waypoint.Id} stands on map {waypoint.MapId}, which the client does not hold.");
+
+            if (!atlas.TryGetSubArea(waypoint.SubAreaId, out _))
+                throw new InvalidDataException($"Zaap {waypoint.Id} names sub-area {waypoint.SubAreaId}, which the atlas does not hold.");
+
+            // The graph is the walking network: the pathfinder ignores a zaap whose map it does not hold, as it ignores one
+            // without a position (WorldPathfinder.ZaapsOf). A client may add such a zaap, as 3.7.13.17 does, so it is a note.
             if (!graph.Contains(waypoint.MapId))
-                throw new InvalidDataException($"Zaap {waypoint.Id} stands on map {waypoint.MapId}, which the world graph does not hold.");
+            {
+                outsideGraph++;
+                Console.WriteLine($"Note: zaap {waypoint.Id} stands on map {waypoint.MapId}, which the world graph does not hold: the pathfinder ignores it.");
+            }
+
+            if (!atlas.TryGetPosition(waypoint.MapId, out _))
+            {
+                withoutPosition++;
+                Console.WriteLine($"Note: zaap {waypoint.Id} stands on map {waypoint.MapId}, which the atlas does not place: the pathfinder ignores it.");
+            }
         }
 
-        Console.WriteLine($"Checked: every vertex's zone is on its map; {interactives:N0} interactive transitions use an element of their map, {elsewhere:N0} from another cell than the element's");
+        Console.WriteLine($"Checked: every vertex's zone is on its map; {interactives:N0} interactive transitions use an element of their map, {elsewhere:N0} from another cell than the element's; {outsideGraph:N0} zaaps outside the graph and {withoutPosition:N0} without a position, which the pathfinder ignores");
     }
 
     private static bool ZoneIsOn(MapData map, int zone)

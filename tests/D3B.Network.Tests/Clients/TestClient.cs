@@ -1,6 +1,7 @@
 using D3B.Data.Tests;
 using D3B.Network.Clients;
 using D3B.Network.Relay;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Testing;
 
 namespace D3B.Network.Tests.Clients;
@@ -13,6 +14,8 @@ internal sealed class TestClient : IDisposable
     private readonly TemporaryDirectory _directory = new();
 
     public FakeLogCollector Log { get; } = new();
+
+    public FakeHostApplicationLifetime Lifetime { get; } = new();
 
     public string ClientDirectory => _directory.Combine("client");
 
@@ -45,9 +48,9 @@ internal sealed class TestClient : IDisposable
         File.WriteAllText(AnkamaConfig, $$"""{"gameAppId":1,"connectionHosts":[{{connectionHosts}}],"chatServerPort":6337}""");
     }
 
-    public ClientRedirect Redirect()
+    public ClientRedirect Redirect(ClientBuildIdentity? expectedBuild = null, IHostApplicationLifetime? lifetime = null)
     {
-        return new ClientRedirect(Settings(), new FakeLogger<ClientRedirect>(Log));
+        return new ClientRedirect(Settings(), new FakeLogger<ClientRedirect>(Log), expectedBuild, lifetime ?? Lifetime);
     }
 
     /// <summary>The relay's way to its servers, through a redirect.</summary>
@@ -70,6 +73,7 @@ internal sealed class TestClient : IDisposable
 
     public void Dispose()
     {
+        Lifetime.Dispose();
         _directory.Dispose();
     }
 }

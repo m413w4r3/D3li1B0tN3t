@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <Compile Include="..\D3B.Data.Tests\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
+    <Compile Include="..\D3B.Network.Tests\Clients\FakeHostApplicationLifetime.cs" Link="Network\FakeHostApplicationLifetime.cs" />
     <Compile Include="..\D3B.Network.Tests\Relay\FixedUpstreamLocator.cs" Link="Network\FixedUpstreamLocator.cs" />
     <Compile Include="..\D3B.Network.Tests\Relay\TestRelay.cs" Link="Network\TestRelay.cs" />
     <Compile Include="..\D3B.Protocol.Tests\Mapping\Obfuscation.cs" Link="Protocol\Obfuscation.cs" />

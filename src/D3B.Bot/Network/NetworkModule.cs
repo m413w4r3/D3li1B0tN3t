@@ -2,6 +2,7 @@ using D3B.Bot.Data;
 using D3B.Bot.Protocol;
 using D3B.Core.Modules;
 using D3B.Data;
+using D3B.Network.Clients;
 using D3B.Network.Relay;
 using D3B.Protocol.Translation;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,6 +52,6 @@ public sealed class NetworkModule : IModule
             services.GetRequiredService<GameAccounts>(),
             services.GetServices<IGameObserver>(),
             services.GetRequiredService<ILoggerFactory>()));
-        bot.Services.AddRelay(settings, services => services.GetService<ClientBuild>()?.Version);
+        bot.Services.AddRelay(settings, services => services.GetService<ClientBuild>() is { } build ? new ClientBuildIdentity(build.Version, build.BuildDate) : null);
     }
 }

@@ -41,6 +41,8 @@ git rev-parse HEAD
 
 `PackInfo.Fingerprint` is embedded in the pack. There is no read-only CLI command in this checkout that prints it: `scripts/release.cs` reads it but also writes checksum sidecars. Use the recorded fingerprint above for this Phase 0 pack; do not call the release tool when a read-only audit is required. If a mapping is later produced, record its SHA-256 with `sha256sum <mapping-file>` and its `ToolVersion` from the mapping/release diagnostic.
 
+**P2D supersedes the runtime limitation below:** `PackSource` now compares the installed client's build date with the pack, `ClientRedirect` stops the host on a version/build-date change while it runs, and the full binary fingerprint remains a manual preflight gate. See the P2D identity section at the end of this document.
+
 ## P1 and later gates
 
 - **Offline P1 capture diagnostics:** protocol-independent replay/capture work is not blocked by mapping. Record the identity fields above alongside the offline evidence.
@@ -80,3 +82,31 @@ The staged mapping was produced with tool version `0.0.0-alpha.0.8+0dec0db`. Reg
 The dedicated host apphost was republished from integrated P2B master `0b84ba47f60631f6443f5b4301f1c3751f617beb`. `/home/nill/.local/share/D3B/apphost/D3B.Host` is 78,192 bytes, SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`, x86-64 ELF PIE, owner `nill`, mode `0700`. Its informational version is `0.0.0-alpha.0.10+0b84ba47f60631f6443f5b4301f1c3751f617beb`. The managed payload is `D3B.Host.dll`, 5,632 bytes, SHA-256 `0cc2a33565e8a2539c625eb9cd81b144e360bdc926e939f2f239edb364792f87`, and `D3B.Network.dll`, 108,544 bytes, SHA-256 `0ce58ee5db62ff3d295ab7e75984a3993c4fc95e8990907a57759c9ba975d432`. The launcher hash is stable across this republish and does not identify the managed code by itself; the payload hashes and informational version establish that identity. No file capability is applied. The 443 fallback capability is documented but has not been applied. See [runtime artifact publishing and verification](RUNTIME_ARTIFACTS.md#publish-the-apphost).
 
 **Runtime identity limitation (R02):** `ClientInstall.ComputeFingerprint()` is not enforced by runtime artifact loading. `PackSource` checks the client and pack version; `ProtocolSource` loads and audits the versioned schema and mapping, but the host does not compare the installed executable, `GameAssembly.so`, `UnityPlayer.so`, or metadata hashes with a recorded fingerprint. The exact binary identity therefore remains a manual preflight gate. Follow [Linux acceptance](LINUX_ACCEPTANCE.md) before any supervised client attempt.
+
+## P2D client 3.7.13.17 identity (2026-11-03)
+
+The launcher updated the client from `3.7.12.12` to `3.7.13.17` during the P2C supervised session. The measured identity is:
+
+| File | Size | SHA-256 |
+| --- | ---: | --- |
+| `Dofus.x64` | 4,472 B | `6d7b634873034db988b3eb0a3399e0effec7b491dd7c1fcd9efcd9f2c6d0baff` (unchanged) |
+| `GameAssembly.so` | 175,835,648 B | `f2aa597d4ca5550d4188d878f6dd577d79fbfc01615bc48f073a1c4d8d9c76a0` |
+| `UnityPlayer.so` | 41,372,064 B | `b01fc32db9ac268c6a99f5f105cfb5d52423b953030f17e8e106e7a23621649f` (unchanged) |
+| `Dofus_Data/il2cpp_data/Metadata/global-metadata.dat` | 43,581,760 B | `dea17c3c465a1937737e848a290057db9812bc2e7f4f8176d8ae1bf2616cdc9d` |
+
+Version `3.7.13.17`, build date `2026-11-03T14:11:23+00:00`, Linux x86_64, Unity `6000.3.16f1`, metadata `39`. The `version` file SHA-256 is `796d68f12d5278d7253818d3d4ff52e08b731307769c64e3355cc7a4e16f3fae`. The `ClientInstall.ComputeFingerprint()` value is `6accb105954a5eeacb15bd9737e607705102fe5bbc919a8d59ffa1dd6e0329b3`.
+
+The P2D staged runtime is:
+
+| Artifact | Size | SHA-256 |
+| --- | ---: | --- |
+| Pack `data-8.pack` | 26,890,912 B | `28db5da4893ef7599740fb9001d74451b774ef7bd446c35a5b18977a6a87c4d0` |
+| Schema `schema-1.binpb` | 170,287 B | `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0` |
+| Mapping `mapping-15.binpb` | 14,688 B | `f42deadf5d5d84e4e8c2213f6dd730a66e8a9324bacac264bcad4c3805eea97e` |
+| Pins `3.7.13.17.json` | same pairs as `3.7.12.12.json` | only `clientVersion` differs |
+
+The protocol schema is byte-identical to `3.7.12.12` (`e383c947…`), and the readable digest is unchanged (`4e36426…`). The mapping pairs are identical: 222 messages, 492 fields, 29 enums and 206 values; 0 failures, 2 notes and 100 partial messages; no renumbering. The new pins were accepted only after this identity proof, not copied blindly.
+
+The staged P2D apphost is `/tmp/p2d-3.7.13.17/apphost`; it is not installed over the live P2B apphost. Its launcher is the same `de956557…`; `D3B.Host.dll` is 5,632 B `f3e1155d…`, `D3B.Network.dll` 112,640 B `fb341cd4…`, `D3B.Bot.dll` 650,240 B `238d5025…`; informational version `0.0.0-alpha.0.11+55b0df7…`; no capability.
+
+**P2D update to R02:** `PackSource` now refuses a pack whose `ClientBuildDate` differs from the installed client's build date, even when the version string matches. `ClientRedirect` now compares the version file's version and build date with the installed build and calls `IHostApplicationLifetime.StopApplication()` on a change, so the host stops instead of relaying a protocol it was not prepared for; the normal stop preserves the launcher's new Ankama configuration. The full binary SHA-256 fingerprint is still not enforced at runtime, and `PackInfo.Fingerprint` is the extractor input fingerprint, not the binary identity. A same-version, same-build-date, different-binary build remains a manual preflight gate.

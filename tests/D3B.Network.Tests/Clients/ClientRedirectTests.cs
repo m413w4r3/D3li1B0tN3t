@@ -327,6 +327,72 @@ public sealed class ClientRedirectTests : IDisposable
         await Assert.ThrowsAsync<UpstreamUnavailableException>(() => _client.Locator(redirect).LocateAsync(RelayRoute.Connection, new IPEndPoint(RelaySettings.DefaultAddress, 443), ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task AChangedBuildStopsTheHostAndKeepsTheLaunchersNewConfiguration()
+    {
+        using var lifetime = new FakeHostApplicationLifetime();
+        using var redirect = _client.Redirect(new ClientBuildIdentity("3.7.12.12", new DateTimeOffset(2026, 10, 19, 15, 11, 45, TimeSpan.Zero)), lifetime);
+
+        await redirect.StartAsync(TestContext.Current.CancellationToken);
+
+        var updated = Path.Combine(Path.GetDirectoryName(_client.AnkamaConfig)!, "updated.json");
+        File.WriteAllText(updated, """{"connectionHosts":["Test:127.0.0.1:5555,443"]}""");
+        var newVersion = $"Version=3.7.13.17\nBuildDate=2026-11-03T14:11:23+00:00\nConfigUrl={new Uri(updated).AbsoluteUri}\n";
+
+        await File.WriteAllTextAsync(_client.VersionFile, newVersion, TestContext.Current.CancellationToken);
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(_timeout);
+
+        while (!lifetime.StopApplicationCalled)
+            await Task.Delay(50, timeout.Token);
+
+        Assert.Equal(newVersion, await File.ReadAllTextAsync(_client.VersionFile, TestContext.Current.CancellationToken));
+
+        await redirect.StopAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(newVersion, await File.ReadAllTextAsync(_client.VersionFile, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ASameVersionWithAnotherBuildDateStopsTheHost()
+    {
+        using var lifetime = new FakeHostApplicationLifetime();
+        using var redirect = _client.Redirect(new ClientBuildIdentity("3.7.12.12", new DateTimeOffset(2026, 10, 19, 15, 11, 45, TimeSpan.Zero)), lifetime);
+
+        await redirect.StartAsync(TestContext.Current.CancellationToken);
+
+        var updated = Path.Combine(Path.GetDirectoryName(_client.AnkamaConfig)!, "updated.json");
+        File.WriteAllText(updated, """{"connectionHosts":["Test:127.0.0.1:5555,443"]}""");
+        var newVersion = $"Version=3.7.12.12\nBuildDate=2026-11-03T14:11:23+00:00\nConfigUrl={new Uri(updated).AbsoluteUri}\n";
+
+        await File.WriteAllTextAsync(_client.VersionFile, newVersion, TestContext.Current.CancellationToken);
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(_timeout);
+
+        while (!lifetime.StopApplicationCalled)
+            await Task.Delay(50, timeout.Token);
+
+        await redirect.StopAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(newVersion, await File.ReadAllTextAsync(_client.VersionFile, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task AChangedBuildAtStartLeavesTheVersionFileUntouched()
+    {
+        var original = await File.ReadAllTextAsync(_client.VersionFile, TestContext.Current.CancellationToken);
+        using var lifetime = new FakeHostApplicationLifetime();
+        using var redirect = _client.Redirect(new ClientBuildIdentity("3.7.13.17", new DateTimeOffset(2026, 11, 3, 14, 11, 23, TimeSpan.Zero)), lifetime);
+
+        var exception = await Assert.ThrowsAsync<RelayUnavailableException>(() => redirect.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("D3B was prepared for", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(original, await File.ReadAllTextAsync(_client.VersionFile, TestContext.Current.CancellationToken));
+        Assert.False(lifetime.StopApplicationCalled);
+    }
+
     private sealed class FailingHostedService : IHostedService
     {
         public Task StartAsync(CancellationToken cancellationToken)

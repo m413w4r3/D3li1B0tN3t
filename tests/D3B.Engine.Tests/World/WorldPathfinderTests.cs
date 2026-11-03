@@ -549,6 +549,19 @@ public sealed class WorldPathfinderTests
     }
 
     [Fact]
+    public void AZaapOnAMapTheGraphDoesNotHoldIsIgnored()
+    {
+        var world = Grid().Zaap(10, 81);
+        var pathfinder = world.Pathfinder();
+
+        Assert.True(pathfinder.Atlas.TryGetWaypoint(81, out var waypoint));
+        Assert.Equal(10, waypoint.MapId);
+        Assert.False(pathfinder.Graph.Contains(10));
+        Assert.True(pathfinder.TryFind(Vertex(pathfinder, 1), new HashSet<long> { 9 }, Teleporting(0, 10), out var path));
+        Assert.DoesNotContain(path.Steps, step => step.IsTeleport);
+    }
+
+    [Fact]
     public void AZaapsMapWithSeveralZonesIsNotTeleportedTo()
     {
         // Where the character lands on such a map is not measured.

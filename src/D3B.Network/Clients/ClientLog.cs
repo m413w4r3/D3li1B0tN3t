@@ -18,6 +18,9 @@ internal static partial class ClientLog
     [LoggerMessage(Level = LogLevel.Information, Message = "The launcher rewrote {Path}: sending clients to D3B again")]
     public static partial void Rewritten(ILogger logger, string path);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The client's build changed from {ExpectedVersion} ({ExpectedBuildDate}) to {CurrentVersion} ({CurrentBuildDate}): D3B stops instead of relaying a protocol it was not prepared for")]
+    public static partial void BuildChanged(ILogger logger, string expectedVersion, string expectedBuildDate, string currentVersion, string currentBuildDate);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "The client's configuration could not be sent to D3B again: clients may connect straight to Ankama. {Reason}")]
     public static partial void RedirectFailed(ILogger logger, string reason);
 

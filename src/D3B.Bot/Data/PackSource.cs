@@ -74,6 +74,13 @@ public sealed class PackSource
             throw new DataUnavailableException($"The pack in {path} was extracted from client {other}, not from {build.Version}, the one installed. {ExtractHint(true)}");
         }
 
+        if (pack.Info.ClientBuildDate is { } packedDate && build.BuildDate is { } installedDate && packedDate != installedDate)
+        {
+            pack.Dispose();
+
+            throw new DataUnavailableException($"The pack in {path} was extracted from client {build.Version}, built {packedDate:u}, not from the installed build, built {installedDate:u}. {ExtractHint(true)}");
+        }
+
         return pack;
     }
 
