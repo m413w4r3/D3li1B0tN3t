@@ -424,9 +424,18 @@ public sealed class BotActor : IAsyncDisposable
                 OnStopping();
                 break;
             case Settling settling:
-                _state = CharacterEvents.NotConfirmed(_state);
-                settling.Settled.TrySetResult();
-                break;
+                {
+                    var before = _state;
+                    var settled = CharacterEvents.NotConfirmed(before);
+
+                    _state = settled;
+
+                    if (before.IsWalking && settled.MapId is { } map && settled.Cell is { } cell)
+                        BotLog.WalkSettled(_log, Key.CharacterId, map, cell);
+
+                    settling.Settled.TrySetResult();
+                    break;
+                }
             case Processing processing:
                 processing.Processed.TrySetResult();
                 break;
@@ -442,6 +451,8 @@ public sealed class BotActor : IAsyncDisposable
         var state = CharacterEvents.Apply(before, side, message);
 
         _state = state;
+
+        LogPositionTransition(before, state, side, message);
 
         if (before.Use is not null && state.Use is null && message is InteractiveUseEndedEvent)
             Volatile.Write(ref _useEndedAt, Time.GetUtcNow().UtcTicks);
@@ -489,6 +500,114 @@ public sealed class BotActor : IAsyncDisposable
             expectation.TryMatch(side, message, state);
 
         _expectations.RemoveAll(expectation => expectation.IsDone);
+    }
+
+    private void LogPositionTransition(CharacterState before, CharacterState state, RelayDirection side, IMessage message)
+    {
+        if (side is RelayDirection.FromServer)
+        {
+            switch (message)
+            {
+                case MapCurrentEvent current when state.MapId == current.MapId:
+                    if (before.MapId is null)
+                        BotLog.MapKnown(_log, Key.CharacterId, current.MapId);
+                    else if (before.MapId == state.MapId && PositionChanged(before, state))
+                        BotLog.MapRepeated(_log, Key.CharacterId, current.MapId);
+                    else if (before.MapId != state.MapId && state.MapId is { } changedTo)
+                        BotLog.MapChanged(_log, Key.CharacterId, before.MapId.Value, changedTo);
+
+                    LogPositionUnknownIfCleared(before, state);
+                    return;
+
+                case MapInformationEvent information when state.MapId == information.MapId:
+                    if (state.Cell is { } placed && before.Cell != placed)
+                        BotLog.Placed(_log, Key.CharacterId, information.MapId, placed);
+                    else
+                        LogPositionUnknownIfCleared(before, state);
+
+                    return;
+
+                case MapMovementEvent movement when movement.ActorId == Key.CharacterId:
+                    LogSelfWalk(before, state, movement);
+                    return;
+
+                case MapMovementConfirmResponse when before.IsWalking && !state.IsWalking && state.MapId is { } confirmedMap && state.Cell is { } confirmedCell:
+                    BotLog.WalkConfirmed(_log, Key.CharacterId, confirmedMap, confirmedCell);
+                    return;
+
+                case MapMovementRefusedEvent when before.Cell is not null && before.MapId is { } refusedMap:
+                    if (state.Cell is { } refusedCell)
+                        BotLog.WalkRefused(_log, Key.CharacterId, refusedMap, refusedCell);
+                    else
+                        BotLog.WalkRefusedUnknown(_log, Key.CharacterId, refusedMap);
+
+                    return;
+            }
+        }
+        else if (side is RelayDirection.FromClient && message is MapMovementCancelRequest)
+        {
+            if (!before.IsWalking)
+                BotLog.WalkCancelIgnored(_log, Key.CharacterId);
+            else if (state.MapId is { } map && state.Cell is { } cell && !state.IsWalking)
+                BotLog.WalkCancelled(_log, Key.CharacterId, map, cell);
+            else
+                BotLog.WalkCancelInvalid(_log, Key.CharacterId);
+        }
+    }
+
+    private void LogSelfWalk(CharacterState before, CharacterState state, MapMovementEvent movement)
+    {
+        if (before.Cell is { } from
+            && movement.Cells.Count > 0
+            && movement.Cells.All(cell => cell >= 0 && cell < MapData.CellCount)
+            && movement.Cells[0] == from
+            && state.Path.SequenceEqual(movement.Cells))
+        {
+            if (!before.Path.SequenceEqual(state.Path) && state.MapId is { } map)
+                BotLog.WalkShown(_log, Key.CharacterId, map, from, state.Path[^1], state.Path.Length - 1);
+
+            return;
+        }
+
+        if (before.MapId is not { } knownMap)
+        {
+            BotLog.WalkIgnoredUnplaced(_log, Key.CharacterId);
+            return;
+        }
+
+        if (before.Cell is null)
+        {
+            BotLog.WalkIgnoredUnplacedOnMap(_log, Key.CharacterId, knownMap);
+            return;
+        }
+
+        if (movement.Cells.Count is 0 || movement.Cells.Any(cell => cell < 0 || cell >= MapData.CellCount))
+        {
+            BotLog.WalkIgnoredInvalid(_log, Key.CharacterId, knownMap);
+            return;
+        }
+
+        if (movement.Cells[0] != before.Cell)
+        {
+            BotLog.WalkIgnoredStartMismatch(_log, Key.CharacterId, knownMap);
+            return;
+        }
+
+        BotLog.WalkIgnoredInvalid(_log, Key.CharacterId, knownMap);
+    }
+
+    private void LogPositionUnknownIfCleared(CharacterState before, CharacterState state)
+    {
+        if (before.Cell is not null && state.Cell is null && state.MapId is { } map)
+            BotLog.PositionUnknown(_log, Key.CharacterId, map);
+    }
+
+    private static bool PositionChanged(CharacterState before, CharacterState state)
+    {
+        return before.MapId != state.MapId
+            || before.Cell != state.Cell
+            || before.IsWalkHeld != state.IsWalkHeld
+            || !before.Path.SequenceEqual(state.Path);
     }
 
     private void OnExpecting(GameExpectation expectation)
@@ -615,7 +734,14 @@ public sealed class BotActor : IAsyncDisposable
         _session = session;
         _state = state;
         _connected = true;
-        BotLog.Attached(_log, Key.CharacterId, session.Id);
+
+        if (state.MapId is { } map && state.Cell is { } cell)
+            BotLog.AttachedAt(_log, Key.CharacterId, session.Id, map, cell);
+        else if (state.MapId is { } knownMap)
+            BotLog.AttachedOnMap(_log, Key.CharacterId, session.Id, knownMap);
+        else
+            BotLog.AttachedUnknown(_log, Key.CharacterId, session.Id);
+
         Write(BotEvent.Connected);
     }
 
@@ -629,7 +755,14 @@ public sealed class BotActor : IAsyncDisposable
 
         _session = null;
         _connected = false;
-        BotLog.Detached(_log, Key.CharacterId, session.Id);
+
+        if (_state.MapId is { } map && _state.Cell is { } cell)
+            BotLog.DetachedAt(_log, Key.CharacterId, session.Id, map, cell);
+        else if (_state.MapId is { } knownMap)
+            BotLog.DetachedOnMap(_log, Key.CharacterId, session.Id, knownMap);
+        else
+            BotLog.DetachedUnknown(_log, Key.CharacterId, session.Id);
+
         Write(BotEvent.Disconnected);
     }
 

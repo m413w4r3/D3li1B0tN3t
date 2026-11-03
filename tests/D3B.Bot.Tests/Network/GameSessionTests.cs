@@ -48,6 +48,32 @@ public sealed class GameSessionTests : IDisposable
         Assert.Null(session.OnFrame(direction, new ReadOnlySequence<byte>(frame), session.Holds(direction)));
     }
 
+    private static byte[] UnknownFrame(string carriedType, string payload)
+    {
+        return new GameMessage
+        {
+            Event = new GameEvent
+            {
+                Content = new Google.Protobuf.WellKnownTypes.Any
+                {
+                    TypeUrl = "type.ankama.com/" + carriedType,
+                    Value = ByteString.CopyFromUtf8(payload),
+                },
+            },
+        }.ToByteArray();
+    }
+
+    private static byte[] PartialMapInformationFrame()
+    {
+        var envelope = GameMessage.Parser.ParseFrom(TestGame.Event(new MapInformationEvent { MapId = 188744706 }));
+        var original = envelope.Event.Content.Value.ToByteArray();
+
+        // Field 20 is present in this build's partial message and is intentionally absent from the readable contract.
+        envelope.Event.Content.Value = ByteString.CopyFrom([.. original, 0xA0, 0x01, 0x01]);
+
+        return envelope.ToByteArray();
+    }
+
     [Fact]
     public void EachFrameIsShownToTheObserversDecoded()
     {
@@ -70,7 +96,7 @@ public sealed class GameSessionTests : IDisposable
     {
         var session = Start();
         var ticket = TestGame.Request(new AuthenticationRequest { Ticket = Secret, Language = "fr" });
-        var unknown = new GameMessage { Event = new GameEvent { Content = new Google.Protobuf.WellKnownTypes.Any { TypeUrl = "type.ankama.com/zzz", Value = ByteString.CopyFromUtf8(Secret) } } }.ToByteArray();
+        var unknown = UnknownFrame("zzz", Secret);
 
         Show(session, RelayDirection.FromClient, ticket);
         Show(session, RelayDirection.FromServer, unknown);
@@ -87,7 +113,59 @@ public sealed class GameSessionTests : IDisposable
         var warning = Assert.Single(records, record => record.Level is LogLevel.Warning);
 
         Assert.Contains("not understood and relayed as it is", warning.Message, StringComparison.Ordinal);
-        Assert.Contains("it carries .zzz, which the readable protocol lacks.", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("readable protocol lacks the carried type", warning.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(records, record => record.Message.Contains(Secret, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ARepeatedPartialFrameLogsInformationOnceAndThenACountedDebug()
+    {
+        var session = Start();
+        var partial = PartialMapInformationFrame();
+
+        Show(session, RelayDirection.FromServer, partial);
+        Show(session, RelayDirection.FromServer, partial);
+
+        var records = _log.GetSnapshot();
+        var diagnostics = records.Where(record => record.Message.Contains("partial readable", StringComparison.Ordinal)).ToArray();
+
+        Assert.Equal([LogLevel.Information, LogLevel.Debug], diagnostics.Select(record => record.Level));
+        Assert.Contains("seen 2 times", diagnostics[1].Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(records, record => record.Level is LogLevel.Warning);
+    }
+
+    [Fact]
+    public void ARepeatedUnknownFrameWarnsOnceAndThenLogsACountedDebugWithoutItsPayload()
+    {
+        var session = Start();
+        var unknown = UnknownFrame("zzz", Secret);
+
+        Show(session, RelayDirection.FromServer, unknown);
+        Show(session, RelayDirection.FromServer, unknown);
+
+        var records = _log.GetSnapshot();
+        var diagnostics = records.Where(record => record.Message.Contains("not understood and relayed as it is", StringComparison.Ordinal)
+            || record.Message.Contains("repeated unread translation problem", StringComparison.Ordinal)).ToArray();
+
+        Assert.Equal([LogLevel.Warning, LogLevel.Debug], diagnostics.Select(record => record.Level));
+        Assert.Contains("seen 2 times", diagnostics[1].Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(records, record => record.Message.Contains(Secret, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DistinctUnknownTranslationProblemsEachWarnOnce()
+    {
+        var session = Start();
+
+        Show(session, RelayDirection.FromServer, UnknownFrame("zzz", Secret));
+        Show(session, RelayDirection.FromServer, UnknownFrame("yyy", Secret));
+
+        var records = _log.GetSnapshot();
+        var warnings = records.Where(record => record.Level is LogLevel.Warning).ToArray();
+
+        Assert.Equal(2, warnings.Length);
+        Assert.Contains(warnings, record => record.Message.Contains(".zzz", StringComparison.Ordinal));
+        Assert.Contains(warnings, record => record.Message.Contains(".yyy", StringComparison.Ordinal));
         Assert.DoesNotContain(records, record => record.Message.Contains(Secret, StringComparison.Ordinal));
     }
 
