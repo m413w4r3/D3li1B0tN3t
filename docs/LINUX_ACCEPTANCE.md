@@ -78,17 +78,19 @@ chmod 700 "$XDG_RUNTIME_DIR"
 
    Require exit 0, zero audit failures, 222 message pairs and 29 enum pairs. A regenerated mapping hash can differ with the tool version; compare pairs and audit counts as described in [runtime artifacts](RUNTIME_ARTIFACTS.md).
 
-4. **Verify the dedicated apphost and its capability state.** The apphost must be the dedicated file, owned by `nill`, mode `700`, 78,192 bytes, SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`, x86-64 ELF PIE, with no file capability applied.
+4. **Verify the dedicated apphost payload and capability state.** The apphost directory must be owned by `nill`, mode `700`. The launcher must be 78,192 bytes, x86-64 ELF PIE, with SHA-256 `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`. Its informational version must be `0.0.0-alpha.0.10+0b84ba47f60631f6443f5b4301f1c3751f617beb`. `D3B.Host.dll` must be 5,632 bytes with SHA-256 `0cc2a33565e8a2539c625eb9cd81b144e360bdc926e939f2f239edb364792f87`; `D3B.Network.dll` must be 108,544 bytes with SHA-256 `0ce58ee5db62ff3d295ab7e75984a3993c4fc95e8990907a57759c9ba975d432`. Require the launcher and both payload hashes to match; the stable launcher hash alone does not prove the managed code identity. No capability must be present on the launcher.
 
    ```sh
-   APPHOST=/home/nill/.local/share/D3B/apphost/D3B.Host
+   APPHOST_DIR=/home/nill/.local/share/D3B/apphost
+   APPHOST="$APPHOST_DIR/D3B.Host"
+   stat -c '%a %U %n' "$APPHOST_DIR"
    stat -c '%s %a %U %n' "$APPHOST"
    file "$APPHOST"
-   sha256sum "$APPHOST"
+   sha256sum "$APPHOST" "$APPHOST_DIR/D3B.Host.dll" "$APPHOST_DIR/D3B.Network.dll"
    getcap "$APPHOST"
    ```
 
-   `getcap` must show no capability. If the binary identity differs, stop and review it before use.
+   `getcap` must show no capability. Confirm the informational version against the expected value above. If the launcher or either payload identity differs, stop and review it before use.
 
 5. **Record and verify a private, byte-for-byte version-file backup.** Do not copy the original URL into the shared report. The reference version-file SHA-256 at this audit is `28f3f473c932b36bd3a1d9f71cd4dc5327165a72dcf8fed410222dc73fc3d6d7`; re-record it if the current file differs.
 
