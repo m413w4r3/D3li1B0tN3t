@@ -2,6 +2,7 @@ using D3B.Protocol.Connection;
 using D3B.Protocol.Game;
 using D3B.Protocol.Mapping;
 using Google.Protobuf;
+using Google.Protobuf.Reflection;
 using Google.Protobuf.WellKnownTypes;
 
 namespace D3B.Protocol.Tests.Mapping;
@@ -78,6 +79,24 @@ public sealed class CaptureAnchorsTests
         return CaptureAnchors.Measure(connections, _schema.FindFile(ReadableProtocol.GameSchemaFile)!, ReadableProtocol.GameAnchors);
     }
 
+    private static AnchorMeasurement MeasureGame(ProtocolSchema schema, params CapturedConnection[] connections)
+    {
+        return CaptureAnchors.Measure(connections, schema.FindFile(ReadableProtocol.GameSchemaFile)!, ReadableProtocol.GameAnchors);
+    }
+
+    private static void AddAuthenticationCandidate(Obfuscation obfuscation, string name)
+    {
+        obfuscation.Files.Single(file => file.Name == ReadableProtocol.GameSchemaFile).MessageType.Add(new DescriptorProto
+        {
+            Name = name,
+            Field =
+            {
+                new FieldDescriptorProto { Name = "ticket", Number = 1, Type = FieldDescriptorProto.Types.Type.String, Label = FieldDescriptorProto.Types.Label.Optional },
+                new FieldDescriptorProto { Name = "language", Number = 2, Type = FieldDescriptorProto.Types.Type.String, Label = FieldDescriptorProto.Types.Label.Optional },
+            },
+        });
+    }
+
     /// <summary>Carries a readable message as the build's frames do: its type URL names the obfuscated message.</summary>
     private static Any Carry(IMessage content, string? typeName = null)
     {
@@ -98,7 +117,7 @@ public sealed class CaptureAnchorsTests
     {
         return new CapturedConnection(
             [
-                GameRequestFrame(first ?? Carry(new AuthenticationRequest { Ticket = new string('t', 32), Language = "fr" })),
+                GameRequestFrame(first ?? Carry(new AuthenticationRequest { Ticket = "synthetic", Language = "fr" })),
                 GameRequestFrame(Carry(new CharacterListRequest())),
                 GameRequestFrame(Carry(new CharacterSelectionRequest { CharacterId = 7 })),
             ],
@@ -197,6 +216,44 @@ public sealed class CaptureAnchorsTests
         Assert.Equal(expected.Select(message => message.FullName).Order(), measurement.Anchors.Select(anchor => anchor.Readable.FullName).Order());
         Assert.All(measurement.Anchors, anchor => Assert.Equal(_obfuscation.Of(anchor.Readable.FullName), anchor.Obfuscated.FullName));
         Assert.Equal([(GameRequest.ContentFieldNumber, GameRequest.ContentFieldNumber)], measurement.Anchors.Single(anchor => anchor.Readable == GameRequest.Descriptor).Fields);
+    }
+
+    [Fact]
+    public void AFirstSyntheticGameRequestAnchorsAuthenticationRequestAndAudits()
+    {
+        var request = new AuthenticationRequest { Ticket = "synthetic", Language = "fr" };
+        var measurement = MeasureGame(GameConnection(Carry(request)));
+
+        Assert.Empty(measurement.Problems);
+        Assert.Contains(measurement.Payloads, payload => payload.Message.FullName == _obfuscation.Of(AuthenticationRequest.Descriptor.FullName));
+
+        var pins = _obfuscation.Pins(Obfuscation.GamePayloads().Where(message => message != AuthenticationRequest.Descriptor));
+        var result = new ProtocolMatcher(ReadableProtocol.Files, _schema, ReadableProtocol.Scopes).Match(pins, measurement.Anchors);
+        var authentication = result.Messages.Single(match => match.Readable == AuthenticationRequest.Descriptor);
+
+        Assert.Empty(result.Conflicts);
+        Assert.Equal(MatchEvidence.Capture, authentication.Evidence);
+        Assert.Equal(_obfuscation.Of(AuthenticationRequest.Descriptor.FullName), authentication.Obfuscated.FullName);
+
+        var mapping = result.ToMapping("3.7.12.12", _schema.Sha256, ReadableProtocol.Digest, "test");
+        var audit = ContractAudit.Audit(ReadableProtocol.Files, _schema, mapping);
+
+        Assert.True(audit.Passed, string.Join('\n', audit.Failures));
+    }
+
+    [Fact]
+    public void GameConnectionsDisagreeingOnTheFirstAnyLeaveAuthenticationRequestUnanchored()
+    {
+        var obfuscation = new Obfuscation(ReadableProtocol.Files);
+        AddAuthenticationCandidate(obfuscation, "authdecoy");
+
+        var schema = obfuscation.Schema();
+        var request = new AuthenticationRequest { Ticket = "synthetic", Language = "fr" };
+        var decoy = new Any { TypeUrl = "type.ankama.com/authdecoy", Value = request.ToByteString() };
+        var measurement = MeasureGame(schema, GameConnection(Carry(request)), GameConnection(decoy));
+
+        Assert.Contains(measurement.Problems, problem => problem.Contains("d3b.game.AuthenticationRequest as both", StringComparison.Ordinal));
+        Assert.DoesNotContain(measurement.Anchors, anchor => anchor.Readable == AuthenticationRequest.Descriptor);
     }
 
     [Fact]

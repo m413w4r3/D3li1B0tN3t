@@ -1,12 +1,12 @@
 # Linux client acceptance runbook
 
-**Status: MANUAL/SUPERVISED; execution is currently BLOCKED by the mapping prerequisite.** This runbook describes a first, attended check that the native Linux client accepts D3B's redirect and relay. It records the gate and evidence needed for a later run; it does not claim live compatibility.
+**Status: MANUAL/SUPERVISED; no host or live-client attempt has been made.** The mapping audit now passes offline for Linux build `3.7.12.12` through the evidenced pin. The client-facing port plan remains unresolved, and this runbook does not claim live compatibility.
 
 ## 1. Scope and supervision boundary
 
 **Action:** Treat this as a short, human-supervised connection check. A human must be present at the client and host for the entire run. Do not run unattended, as root, or with a bot activity enabled. Stop immediately on an unexpected account prompt, repeated reconnect, unexplained host error, missing restoration pointer, or any sign of character activity. Do not proceed past a failed prerequisite.
 
-**Command:** None. Live execution is blocked until the mapping gate in section 2 passes, or a separately reviewed relay-only composition is deliberately implemented. No relay-only option exists today.
+**Command:** None. This work updated the offline mapping gate only. A future live attempt still requires a resolved port plan, verified client restoration, and a present supervisor. No relay-only option exists today.
 
 **Expected observable / oracle:** No live compatibility result is claimed. A run is acceptable only when every gate is satisfied and the client is restored afterward.
 
@@ -24,11 +24,11 @@ Use the integrated repository's [build identity record](BUILD_IDENTITY.md), incl
 | --- | --- | --- |
 | Redirect mechanism | READY; verified offline | ConfigUrl redirect, pointer and restore behavior characterized; this is not live-client acceptance. |
 | Relay simulated | PASS | Simulation only; not a native client result. |
-| Mapping audit | **FAIL** | `d3b.game.AuthenticationRequest has no counterpart`; audit has 1 failure, 2 notes, 100 partial. No mapping was written. |
-| Host start | **BLOCKED** | Protocol preparation stops on `ProtocolUnavailableException` before hosted services start. |
+| Mapping audit | **PASS offline** | Build `3.7.12.12` schema SHA-256 `e383c947…be7e0b0`; the evidenced `AuthenticationRequest` → `knc` pin audits 222 messages, 492 fields, 29 enums and 206 values with 0 failures, 2 notes and 100 partial. See [P2_AUTH_MAPPING](P2_AUTH_MAPPING.md). |
+| Host start | **UNVERIFIED; unattempted** | `ProtocolSource.Load` succeeds offline in tests. The production host was not started; the client-facing port plan is unresolved. |
 | Live client | **UNVERIFIED** | No real-client compatibility claim. |
 
-The audit examined 222 messages, 490 fields, 29 enums and 206 values; 221 messages paired and 29 enums paired. `D3B.Host` uses DefaultModules → ProtocolModule; NetworkModule also adds ProtocolModule and the relay decoder requires ProtocolTranslation. Path A is a P2 mapping fix followed by a passing audit. Path B would require a deliberate minimal relay-only composition using existing `AddRelay` without an interceptor; it could validate only the connection phase, not the D3B game route. Neither path is currently complete.
+The audit examined 222 messages, 492 fields, 29 enums and 206 values; all message and enum pairs are present. `D3B.Host` uses DefaultModules → ProtocolModule; NetworkModule also adds ProtocolModule and the relay decoder requires ProtocolTranslation. P2A completed the offline mapping fix and audit. The production host and relay remain unstarted; the port plan and live acceptance are still open.
 
 Port plan: defaults are `Network:Address=127.0.13.59`, `Network:Ports=[5555,443]`, and `Network:Game:Ports=[5556]`. Redirect preserves `connectionHosts` ports and changes only the host; a high `Network:Ports` override alone may not match the client. No setting rewrites `connectionHosts` ports today. Least privilege is high relay ports plus a matching supported client rewrite (not currently available), or a narrowly scoped `cap_net_bind_service` on a dedicated D3B executable/apphost run as the normal user. Do not set that capability on shared `dotnet`; do not run the bot or client as root. A reverse proxy still binds 443 and adds a component. Do not apply capabilities in this task.
 
@@ -97,11 +97,11 @@ The verified pointer check is `/home/nill/.dotnet/dotnet run --file scripts/clie
 
 **Record:** `ss -ltnp` output before/after, user identity, selected address/ports, and evidence that each port matches the client's `connectionHosts`.
 
-## 7. Controlled relay/host start — FUTURE / BLOCKED
+## 7. Controlled relay/host start — FUTURE / UNVERIFIED
 
-**Action:** **Do not start the host with current artifacts.** `D3B.Host` cannot reach relay start because protocol preparation throws `ProtocolUnavailableException` before hosted services start. Proceed only after a P2 mapping fix and passing audit, or after a reviewed relay-only composition is implemented for connection-phase-only validation.
+**Action:** **No host start was performed for P2A.** Offline protocol preparation now passes, but the client-facing port plan remains unresolved. Proceed only in a separately supervised session after the port plan, identity record, redirect/restore plan, and all section 2 gates are reviewed. This runbook is not authorization to start the host.
 
-**Command (FUTURE/BLOCKED; do not run until the mapping gate passes):**
+**Command (FUTURE; not run in P2A):**
 
 ```sh
 /home/nill/.dotnet/dotnet run --project src/D3B.Host -- --Client:Directory "$CLIENT" --Fights:Alone false

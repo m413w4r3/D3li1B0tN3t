@@ -6608,6 +6608,16 @@ pulling them into its walls. On the owner's capture of 4 fights the AI played, 1
   is foreseen to last, as a buff is, the enemy kept there as likely as the measures say, and measures it on the Roublard's
   captures and in game against big enemies, before the Féca's glyphs, which it serves too.
 
+## D287: Pin the 3.7.12.12 authentication request from release evidence
+
+*2026-11-02, P2A mapping diagnosis.*
+
+- **Cause**: without captures, `d3b.game.AuthenticationRequest` has 20 matcher-eligible candidates scoring 1.0, with row margin 0 below the existing 0.1 requirement. The Linux schema has no demonstrated difference from the release schema, and no matcher defect or conflict was found.
+- **Evidence**: the Linux schema and public release `schema-1.binpb` are byte-identical at SHA-256 `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0`. Public release `mapping-15.binpb` pairs `d3b.game.AuthenticationRequest` with `knc`, fields 1→1 and 2→2, with `Capture` evidence and the same readable digest as this checkout. The capture platform is not recorded; no direct Linux capture is claimed.
+- **Pinned**: `d3b.game.AuthenticationRequest` → `knc` in `src/D3B.Protocol/Pins/3.7.12.12.json`, after `AuthenticationAcceptedEvent`. No threshold or `.proto` change.
+- **Checked**: the regression test failed before the pin and passed after it. Synthetic tests cover ambiguity, capture anchoring and contradiction, shape-audit limits, translation refusal/acceptance, and offline `ProtocolSource.Load`. The produced mapping audits 222 messages, 492 fields, 29 enums and 206 values with no failures; its 222 message pairs and 29 enum pairs match the release pair sets.
+- **P2B**: preserve MANUAL/SUPERVISED boundaries; establish Linux capture provenance if required, resolve the actual client-facing port plan, then review any host/client acceptance separately. The mapping result does not establish live Linux compatibility.
+
 ## Open questions
 
 Settled questions leave this table, and the decision that settles one says so.

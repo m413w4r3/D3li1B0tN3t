@@ -2,6 +2,7 @@
   "clientVersion": "3.7.12.12",
   "messages": [
     { "readable": "d3b.game.AuthenticationAcceptedEvent", "obfuscated": "knh" },
+    { "readable": "d3b.game.AuthenticationRequest", "obfuscated": "knc" },
     { "readable": "d3b.game.CharacterListRequest", "obfuscated": "ksj" },
     { "readable": "d3b.game.CharacterListEvent", "obfuscated": "ksc" },
     { "readable": "d3b.game.CharacterSelectionRequest", "obfuscated": "kta" },

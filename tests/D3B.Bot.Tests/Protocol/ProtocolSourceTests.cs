@@ -26,6 +26,19 @@ public sealed class ProtocolSourceTests : IDisposable
     }
 
     [Fact]
+    public void ACompleteMappingWithAuthenticationRequestLoadsForOfflineProtocolPreparation()
+    {
+        _install.WriteProtocol();
+
+        var source = Source();
+        var translation = source.Load();
+
+        Assert.Equal(TestInstall.Version, translation.ClientVersion);
+        Assert.True(translation.Audit.Passed, string.Join('\n', translation.Audit.Failures));
+        Assert.Equal(_install.MappingPath, source.MappingPath);
+    }
+
+    [Fact]
     public void AMappingMadeOnThisMachineWinsOverTheAppsOwn()
     {
         _install.WriteProtocol();
@@ -58,6 +71,17 @@ public sealed class ProtocolSourceTests : IDisposable
         Assert.StartsWith($"The mapping of client {TestInstall.Version} does not hold: ", exception.Message, StringComparison.Ordinal);
         Assert.Contains("d3b.connection.Ping has no counterpart.", Assert.IsType<ProtocolMismatchException>(exception.InnerException).Failures);
         Assert.Contains("dotnet run --file scripts/mapping.cs", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnAuthenticationRequestMappingWithoutACounterpartIsRefusedOffline()
+    {
+        _install.WriteProtocol(edit: mapping => mapping.Messages.Remove(mapping.Messages.Single(pair => pair.Readable == "d3b.game.AuthenticationRequest")));
+
+        var exception = Assert.Throws<ProtocolUnavailableException>(() => Source().Load());
+        var mismatch = Assert.IsType<ProtocolMismatchException>(exception.InnerException);
+
+        Assert.Contains("d3b.game.AuthenticationRequest has no counterpart.", mismatch.Failures);
     }
 
     [Fact]

@@ -64,4 +64,13 @@ public sealed class PinnedPairsFileTests
         Assert.Equal(7, Assert.Single(pins.Messages[0].Fields).Obfuscated);
         Assert.Equal("abd", Assert.Single(pins.Enums).Obfuscated);
     }
+
+    [Fact]
+    public void TheBuildPinsAuthenticationRequestToKnc()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Pins", "3.7.12.12.json");
+        var pins = PinnedPairsFile.Read(path, "3.7.12.12");
+
+        Assert.Contains(pins.Messages, pin => pin.Readable == "d3b.game.AuthenticationRequest" && pin.Obfuscated == "knc");
+    }
 }

@@ -42,6 +42,19 @@ public sealed class ContractAuditTests
         return obfuscation.Message(message.FullName).Field.Single(field => field.Number == number);
     }
 
+    private static void AddAuthenticationCandidate(Obfuscation obfuscation, string name, FieldDescriptorProto.Types.Type ticketType)
+    {
+        obfuscation.Files.Single(file => file.Name == ReadableProtocol.GameSchemaFile).MessageType.Add(new DescriptorProto
+        {
+            Name = name,
+            Field =
+            {
+                new FieldDescriptorProto { Name = "ticket", Number = 1, Type = ticketType, Label = FieldDescriptorProto.Types.Label.Optional },
+                new FieldDescriptorProto { Name = "language", Number = 2, Type = FieldDescriptorProto.Types.Type.String, Label = FieldDescriptorProto.Types.Label.Optional },
+            },
+        });
+    }
+
     [Fact]
     public void TheMappingOfTheReadableProtocolHolds()
     {
@@ -51,6 +64,45 @@ public sealed class ContractAuditTests
         Assert.Empty(report.Notes);
         Assert.Empty(report.Unread);
         Assert.Equal((ReadableMessages, ReadableFields, ReadableEnums, ReadableValues), (report.Messages, report.Fields, report.Enums, report.Values));
+    }
+
+    [Fact]
+    public void ACompleteMappingAuditsAuthenticationRequestAndItsFields()
+    {
+        var obfuscation = new Obfuscation(ReadableProtocol.Files);
+        var schema = obfuscation.Schema();
+        var matched = new ProtocolMatcher(ReadableProtocol.Files, schema, ReadableProtocol.Scopes)
+            .Match(obfuscation.Pins(Obfuscation.GamePayloads()), []);
+        var mapping = matched.ToMapping("3.7.12.12", schema.Sha256, ReadableProtocol.Digest, "test");
+        var report = ContractAudit.Audit(ReadableProtocol.Files, schema, mapping);
+        var authentication = mapping.Messages.Single(pair => pair.Readable == AuthenticationRequest.Descriptor.FullName);
+
+        Assert.True(report.Passed, string.Join('\n', report.Failures));
+        Assert.Equal(obfuscation.Of(AuthenticationRequest.Descriptor.FullName), authentication.Obfuscated);
+        Assert.Equal([(1, 1), (2, 2)], authentication.Fields.Select(field => (field.Readable, field.Obfuscated)));
+    }
+
+    [Fact]
+    public void AWrongAuthenticationRequestPinWithAnObservableShapeMismatchFailsAudit()
+    {
+        var report = Audit(
+            obfuscation => AddAuthenticationCandidate(obfuscation, "wrongauth", FieldDescriptorProto.Types.Type.Int32),
+            mapping => mapping.Messages.Single(pair => pair.Readable == AuthenticationRequest.Descriptor.FullName).Obfuscated = "wrongauth");
+
+        Assert.Contains(report.Failures, failure =>
+            failure.StartsWith("Field 1 of d3b.game.AuthenticationRequest", StringComparison.Ordinal)
+            && failure.Contains("does not have the type", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AContractAuditCannotDistinguishASameShapeWrongAuthenticationRequestPin()
+    {
+        var report = Audit(
+            obfuscation => AddAuthenticationCandidate(obfuscation, "sameauthshape", FieldDescriptorProto.Types.Type.String),
+            mapping => mapping.Messages.Single(pair => pair.Readable == AuthenticationRequest.Descriptor.FullName).Obfuscated = "sameauthshape");
+
+        // A same-shape wrong name is not detectable by structural audit without independent evidence such as a capture.
+        Assert.True(report.Passed, string.Join('\n', report.Failures));
     }
 
     [Fact]

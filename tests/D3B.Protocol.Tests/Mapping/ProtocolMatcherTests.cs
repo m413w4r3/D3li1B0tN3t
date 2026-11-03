@@ -20,9 +20,22 @@ public sealed class ProtocolMatcherTests
         return new ProtocolMatcher(_connection, obfuscation.Schema(), ReadableProtocol.Scopes).Match(null, []);
     }
 
-    private static MatchResult MatchReadable(Obfuscation obfuscation, PinnedPairs? pins = null)
+    private static MatchResult MatchReadable(Obfuscation obfuscation, PinnedPairs? pins = null, IReadOnlyList<Anchor>? anchors = null)
     {
-        return new ProtocolMatcher(ReadableProtocol.Files, obfuscation.Schema(), ReadableProtocol.Scopes).Match(pins, []);
+        return new ProtocolMatcher(ReadableProtocol.Files, obfuscation.Schema(), ReadableProtocol.Scopes).Match(pins, anchors ?? []);
+    }
+
+    private static DescriptorProto AuthenticationCandidate(string name)
+    {
+        return new DescriptorProto
+        {
+            Name = name,
+            Field =
+            {
+                new FieldDescriptorProto { Name = "ticket", Number = 1, Type = FieldDescriptorProto.Types.Type.String, Label = FieldDescriptorProto.Types.Label.Optional },
+                new FieldDescriptorProto { Name = "language", Number = 2, Type = FieldDescriptorProto.Types.Type.String, Label = FieldDescriptorProto.Types.Label.Optional },
+            },
+        };
     }
 
     private static MatchResult MatchFixture(Obfuscation obfuscation, PinnedPairs? pins = null)
@@ -71,6 +84,49 @@ public sealed class ProtocolMatcherTests
         Assert.Empty(result.Conflicts);
         Assert.Contains(ContextDestroyEvent.Descriptor.FullName, result.Unpaired);
         Assert.Contains(CharacterListRequest.Descriptor.FullName, result.Unpaired);
+    }
+
+    [Fact]
+    public void AuthenticationRequestStaysUnpairedAmongSeveralIdenticalCandidates()
+    {
+        var obfuscation = new Obfuscation(ReadableProtocol.Files);
+        var game = obfuscation.Files.Single(file => file.Name == ReadableProtocol.GameSchemaFile);
+        game.MessageType.Add(AuthenticationCandidate("authdecoyone"));
+        game.MessageType.Add(AuthenticationCandidate("authdecoytwo"));
+        game.MessageType.Add(AuthenticationCandidate("authdecoythree"));
+
+        var schema = obfuscation.Schema();
+        var gameSchema = schema.FindFile(ReadableProtocol.GameSchemaFile)!;
+        var candidates = gameSchema.MessageTypes.Where(message =>
+            message.Fields.InFieldNumberOrder().Select(field => field.FieldNumber).SequenceEqual([1, 2])
+            && message.Fields.InFieldNumberOrder().All(field => field.FieldType is FieldType.String && !field.IsRepeated && field.ContainingOneof is null)).ToList();
+        var result = new ProtocolMatcher(ReadableProtocol.Files, schema, ReadableProtocol.Scopes)
+            .Match(obfuscation.Pins(Obfuscation.GamePayloads().Where(message => message != AuthenticationRequest.Descriptor)), []);
+
+        // The readable request and each decoy have the same two string fields, so each scores 1.0 and the row margin is zero.
+        Assert.True(candidates.Count >= 4);
+        Assert.Contains("authdecoyone", candidates.Select(message => message.Name));
+        Assert.Contains(AuthenticationRequest.Descriptor.FullName, result.Unpaired);
+        Assert.Empty(result.Conflicts);
+    }
+
+    [Fact]
+    public void APinOfAuthenticationRequestContradictingACaptureAnchorIsAConflict()
+    {
+        var obfuscation = new Obfuscation(ReadableProtocol.Files);
+        var game = obfuscation.Files.Single(file => file.Name == ReadableProtocol.GameSchemaFile);
+
+        game.MessageType.Add(AuthenticationCandidate("authdecoy"));
+
+        var schema = obfuscation.Schema();
+        var anchor = new Anchor(AuthenticationRequest.Descriptor, schema.FindMessage("authdecoy")!, [(1, 1), (2, 2)]);
+        var result = new ProtocolMatcher(ReadableProtocol.Files, schema, ReadableProtocol.Scopes)
+            .Match(obfuscation.Pins(Obfuscation.GamePayloads()), [anchor]);
+
+        Assert.Contains(result.Conflicts, conflict =>
+            conflict.Contains(AuthenticationRequest.Descriptor.FullName, StringComparison.Ordinal)
+            && conflict.Contains("by a pin", StringComparison.Ordinal)
+            && conflict.Contains("by the captures", StringComparison.Ordinal));
     }
 
     [Fact]
