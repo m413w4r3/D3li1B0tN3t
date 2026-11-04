@@ -6998,3 +6998,12 @@ Settled questions leave this table, and the decision that settles one says so.
   passed. Details are in [P2J_REPORT.md](P2J_REPORT.md).
 - **Boundary**: No live client, host, relay, Ankama connection, activity, or movement was run, and nothing was pushed.
   READY FOR GO 1 (passive observation) only; GO 2 remains conditional on GO 1 PASS and a separate owner GO.
+
+## D306: GO 1 P2J found a closed translation latch; keep it fail-closed
+
+*2026-11-04, P2J GO 1 live passive session.*
+
+- **Observation**: The supervised P2J session on `3.7.13.17` lasted `07:33.2400841` and decoded 418 game frames (70 server + 12 client understood, 163 server read/partial, 173 unread: 136 server + 37 client, across 89 types). The first unread frame was server `.lok`, identified by exact schema field names and external BillBot evidence as `basic.TimeEvent` (`timestamp`, `timezone_offset`), before the first placement. The P2I latch therefore closed before placement (`translation_blocked=true`, `translation_blocked_at_first_placement=true`), while the position itself was server-placed and trusted (`guard=None`, map `191105028` cell `260`, later manual move to map `191105026` cell `552`).
+- **Decision**: Keep the latch fail-closed. Do not allow unknown messages globally and do not weaken the P2I predicate. No movement was attempted; the relay summary reports 0 frames from D3B. The minimal TDD follow-up is a build-scoped non-position type classification (unlisted types still latch) or, preferably over time, readable descriptors and pins for each identified non-position type, starting with `TimeEvent`.
+- **Evidence**: `p2j readiness` returned `can_move=false reason=TRANSLATION_LATCH_CLOSED`; the session stopped with the client `version` file restored to SHA-256 `796d68f1…`, `ConfigUrl` back to Ankama, ports `5555`/`5556` free, no host or Dofus process. The full sanitized result is in [P2J_GO1_REPORT.md](P2J_GO1_REPORT.md).
+- **Boundary**: No hot fix, no mapping change during the session, no movement, no push. GO 2 remains forbidden until a new passive GO 1 shows `translation_blocked=false`, followed by a distinct explicit GO 2 with source and target.

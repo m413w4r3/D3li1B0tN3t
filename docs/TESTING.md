@@ -181,6 +181,10 @@ The P2J preparation added 32 movement tests and 2 module tests. The focused clas
 `D3B.Bot.Tests.Hosting.SupervisedMoveModuleTests`; they drive the real `TestPlay` bots and
 `TestConnection` relay surface and assert the requests actually recorded in `connection.Sent`.
 
+GO 1 was subsequently executed on the real client: observation PASS, movement **BLOCKED** because
+the translation latch closed before first placement. The relay sent 0 frames from D3B. The session,
+aggregates and proposed TDD correction are recorded in [P2J_GO1_REPORT.md](P2J_GO1_REPORT.md).
+
 | Check | Result |
 | --- | --- |
 | `/home/nill/.dotnet/dotnet build D3B.slnx` | PASS, 0 warnings, 0 errors |

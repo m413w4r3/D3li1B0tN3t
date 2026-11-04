@@ -1,8 +1,9 @@
-# P2J — one supervised map transition, prepared but not executed
+# P2J — one supervised map transition, prepared and observed
 
-**Status: PREPARED / NOT EXECUTED.** No Dofus client, host, relay, or movement was run for this
-report. The single movement authorization was not used. GO 1 (observation) and GO 2 (one move)
-remain separate owner gates.
+**Status: PREPARED; GO 1 executed on 2026-11-04 — observation PASS, movement BLOCKED.** No
+movement was executed. The single movement authorization was not used. GO 1 (observation) and GO 2
+(one move) remain separate owner gates. The live passive result is recorded in
+[P2J_GO1_REPORT.md](P2J_GO1_REPORT.md); this report keeps the preparation evidence.
 
 ## A. Git and build identity
 
@@ -245,9 +246,15 @@ GO 2 is conditional on GO 1 showing:
 If GO 1 reports `translation_blocked=true`, P2J is **BLOCKED** on the current mapping: the 210 P2E
 unread frames would have latched the session, and the fail-closed behaviour must not be relaxed.
 
+**GO 1 result (2026-11-04):** the live passive session did report `translation_blocked=true` and
+`translation_blocked_at_first_placement=true`; no movement was attempted and the relay sent 0
+frames from D3B. The verdict is **BLOCKED for GO 2**; see [P2J_GO1_REPORT](P2J_GO1_REPORT.md) for
+the first message type, aggregates, restoration and the proposed TDD correction.
+
 ## Limits
 
-- No live execution, no movement, no push.
+- The preparation itself ran no live execution; GO 1 later ran a live **passive** session (see
+  [P2J_GO1_REPORT](P2J_GO1_REPORT.md)). No movement and no push occurred.
 - The `SupervisedMove` engine and its readiness/plan/result records are internal to `D3B.Bot`; the
   only production entry point is the internal session behind the console. No host or app service
   can bypass the one-shot consumption. No other production caller exists.

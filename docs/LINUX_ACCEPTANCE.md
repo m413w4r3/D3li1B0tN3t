@@ -13,10 +13,12 @@ has been applied.
 
 ## P2J — one supervised map transition (prepared, not executed)
 
-**Status: PREPARED / NOT EXECUTED.** P2J added a disabled-by-default, single-use trigger for one
-map transition to a direct neighbour, plus a passive readiness check that distinguishes the P2I
-translation latch from `MovementGuard`. No live session, no movement and no push occurred during
-P2J preparation. The P2J apphost identity is recorded in [P2J_REPORT.md](P2J_REPORT.md).
+**Status: GO 1 executed on 2026-11-04 — observation PASS, movement BLOCKED.** P2J added a
+disabled-by-default, single-use trigger for one map transition to a direct neighbour, plus a
+passive readiness check that distinguishes the P2I translation latch from `MovementGuard`. The
+live passive session found the latch closed before first placement; no movement and no push
+occurred. See [P2J_GO1_REPORT.md](P2J_GO1_REPORT.md). The P2J apphost identity is recorded in
+[P2J_REPORT.md](P2J_REPORT.md).
 
 The P2E aggregate recorded **210 not read** frames out of 848. The P2I latch condition
 (`!IsRead && !IsUnderstood`) is exactly the condition that produced that bucket, so all 210 would
