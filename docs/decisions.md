@@ -6857,3 +6857,25 @@ Settled questions leave this table, and the decision that settles one says so.
   `git diff --check` passed. No live client, host, relay, game, or capture was used.
 - **Residual**: Relay-level inbound ordering and same-map movement-refusal correlation remain accepted follow-ups. The
   bot boundary is closed for tested paths; strict end-to-end current-position ordering still needs the relay follow-up.
+
+## D300: Fence movement authorization behind relay read observation
+
+*2026-11-04, P2I C1.*
+
+- **Relay admission**: Each connection shares one ticket watermark across the client-to-server and server-to-client
+  pumps. A non-empty pipe read is admitted immediately after `ReadAsync` returns, before the client pump can wait for
+  injected frames. Movement waits cover every ticket up to their snapshot; reads after it do not extend the wait.
+- **Authorization order**: Movement-capable session sends wait for relay observation, then the bot inbox `Processing`
+  marker, then the send gate and transport injection. Guarded sends wait in the same order after their display delay.
+  The inbox marker is the bot-side linearization point. A frame admitted after that marker is concurrent with the send.
+- **Failure handling**: Connection/pump end, host stop, an unframed stream, or failed observation closes the relay wait.
+  A failed bot inbox handler faults later movement barriers for that actor's lifetime. Caller cancellation only cancels
+  that caller's relay wait.
+- **RED/GREEN evidence**: `e2a2b29` recorded 3/4 bot failures and 2/2 network failures before the fix. GREEN commit
+  `3f0f23c5cc01ed6db528c76a68eb58c6f9a2f8a1` passed the nine serial project suites at 1,378/1,378, +21 from D299;
+  the build, format check, and `git diff --check` passed. Exact commands, counts, limits, and runner constraints are in
+  [P2I_REPORT.md](P2I_REPORT.md).
+- **Boundary**: Bytes still in the socket, transport, or unread pipe are outside the admission snapshot. A fragmented
+  frame is covered only when its completing read is admitted. This lot did not change same-map
+  `MapMovementRefusedEvent` correlation, `CharacterEvents`, `MovementGuard`, or `MapWalk`; that work remains for the
+  next prompt. No live client, production host, Ankama relay, activity, or movement was used.
