@@ -60,6 +60,32 @@ public sealed class P2HSendBarrierTests
     }
 
     [Fact]
+    public async Task AStoppingSignalRejectsMovementBeforeTheCurrentSessionClears()
+    {
+        var observer = new RecordingObserver();
+        await using var play = new TestPlay([observer]);
+        var (connection, bot) = await play.EnterAsync(300);
+        var session = connection.Session;
+        var state = bot.State;
+        var request = new ObjectUseRequest { Uid = 50 };
+
+        Assert.True(bot.IsConnected);
+        Assert.True(state.IsPositionTrusted);
+        Assert.True(bot.CanSendRawRequest(session, request));
+
+        bot.BeginStopping();
+
+        Assert.True(bot.IsConnected);
+        Assert.Same(state, bot.State);
+        Assert.True(bot.State.IsPositionTrusted);
+
+        var exception = await Record.ExceptionAsync(() => session.SendAsync(request, TestContext.Current.CancellationToken));
+
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
     public async Task StoppingClosesMovementAuthorizationBeforeTheInboxDrains()
     {
         var observer = new RecordingObserver();

@@ -319,11 +319,16 @@ public sealed class BotActor : IAsyncDisposable
         return waiter.Task;
     }
 
+    internal void BeginStopping()
+    {
+        _stopping = true;
+    }
+
     /// <summary>Stops the bot: its behavior is interrupted, and its inbox read to the end.</summary>
     /// <returns>A task that completes once the bot's loop is over.</returns>
     public async ValueTask DisposeAsync()
     {
-        _stopping = true;
+        BeginStopping();
         _session = null;
         _connected = false;
         Post(new Stopping());
