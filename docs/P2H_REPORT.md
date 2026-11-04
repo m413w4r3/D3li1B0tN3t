@@ -325,6 +325,11 @@ GREEN evidence with SDK 10.0.403:
   literal `/home/nill/.dotnet/dotnet build D3B.slnx` also exited without project output or reported errors here.
 - `/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore` and `git diff --check` passed.
 
+The parent reproduced the merged result with the default `/home/nill/.dotnet/dotnet build D3B.slnx` (0 warnings,
+0 errors), the targeted set **228/228**, `D3B.Bot.Tests` **528/528**, and the nine projects serially **1,354/1,354**,
+0 failed, 0 skipped. The parent also reproduced the RED commit `6e9fc8d` at **3 total, 3 failed**; formatting and
+`git diff --check` passed.
+
 The bot boundary is closed for the tested paths. The strict end-to-end current-position criterion still needs a
 relay-level inbound ordering barrier: a frame still in the relay read loop may be posted after `ProcessedAsync` returns.
 The protocol also gives movement refusals neither a map id nor request correlation, so a same-map refusal crossing a
