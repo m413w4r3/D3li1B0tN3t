@@ -6879,3 +6879,23 @@ Settled questions leave this table, and the decision that settles one says so.
   frame is covered only when its completing read is admitted. This lot did not change same-map
   `MapMovementRefusedEvent` correlation, `CharacterEvents`, `MovementGuard`, or `MapWalk`; that work remains for the
   next prompt. No live client, production host, Ankama relay, activity, or movement was used.
+
+## D301: Treat refused movement coordinates as ambiguous
+
+*2026-11-04, P2I C2, superseding the P2H implementation assumption that a refused cell is actionable position evidence.*
+
+- **Wire contract**: `MapMovementRefusedEvent` carries only x/y coordinates. It has no request id, map id, cell id, or
+  actor id. A late refusal for an earlier bot walk, a current walk, or a client movement cannot be distinguished.
+- **Policy**: Keep a valid refused coordinate in `CharacterState.Cell` with `CellProvenance.ServerRefused` for diagnosis,
+  and keep `CharacterEvents` clearing `Path`, `IsWalkHeld`, and `PendingMovementMapId`. This provenance is not trusted;
+  `MovementGuard` returns `AmbiguousPosition`. Server placement and confirmation remain actionable.
+- **Resumption**: A fresh same-map `MapInformationEvent` placing the character restores `ServerPlaced` trust. A map change
+  still clears the position. No timeout or automatic resynchronization is introduced; a new session also needs a fresh
+  placement observation.
+- **Evidence**: RED commit `2c160e8` failed 3/23 focused tests, including the controlled-clock A `NoAnswer` / B late-refusal
+  case and the old trusted-position assertions. GREEN commit `9553ff8` passed the focused set 25/25, `D3B.Bot.Tests`
+  542/542, and the serial solution suite 1,381/1,381 (+3 from C1); build, format, and `git diff --check` passed. Details
+  are in [P2I_REPORT.md](P2I_REPORT.md#section-f--same-map-movement-refusals-c2).
+- **Limit**: A refusal can still arrive arbitrarily late, including while a later same-map movement is pending. Without
+  wire correlation this cannot be proven stale or assigned to a request. After it is observed, position-dependent
+  automated actions remain blocked until fresh placement; no live behavior is claimed.

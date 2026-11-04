@@ -92,3 +92,73 @@ An inbox handler failure latches movement barriers closed for the lifetime of th
 behavior when a state update may have been lost. No changes were made to movement-refusal correlation, `CharacterEvents`,
 `MovementGuard`, or `MapWalk`; the same-map `MapMovementRefusedEvent` correlation is reserved for the next prompt. No live
 Dofus client, production host, Ankama relay, activity, or movement was run.
+
+## Section F — Same-map movement refusals (C2)
+
+*2026-11-04 — based on C1 `3d8190621abd8fa140bb9c7644252fe3fb1e22a9`.*
+
+Commits: RED `2c160e8`; GREEN `9553ff8`.
+
+### Finding and policy
+
+`MapMovementRefusedEvent` contains only x/y coordinates (`src/D3B.Protocol/Game/movement.proto:29`). It has no request
+id, map id, cell id, or actor id, and unknown fields are discarded by translation (`game.proto:14,42`,
+`ProtocolTranslation.cs:84,142`), so a refusal cannot be correlated formally to the movement whose behavior is waiting.
+`CharacterEvents` still applies a refusal only when a movement is pending on the current map; it retains a mapped cell for
+diagnostics, clears the path and pending marker, and clears `IsWalkHeld`.
+
+The policy treats `CellProvenance.ServerRefused` as diagnostic evidence only. It no longer makes
+`CharacterState.IsPositionTrusted` true, and `MovementGuard` reports `MovementRefusal.AmbiguousPosition`. Server placement
+and confirmation remain actionable. A fresh `MapInformationEvent` that places the character on the current map restores
+trust as `ServerPlaced`; `MapCurrentEvent` clears the position as before. There is no timeout or automatic resync.
+
+### RED evidence
+
+The focused RED command was:
+
+```sh
+/home/nill/.dotnet/dotnet test tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj --filter 'FullyQualifiedName~P2HPositionTrustTests|FullyQualifiedName~MovementGuardTests|FullyQualifiedName~P2IRefusalCorrelationTests' --max-parallel-test-modules 1
+```
+
+It failed **3/23** tests (20 passed):
+
+- `MovementGuardTests.ARefusedPositionHasAnAmbiguousGuardReason`: expected `AmbiguousPosition`, actual `None`.
+- `P2IRefusalCorrelationTests.ALateSameMapRefusalLeavesThePositionAmbiguousUntilFreshPlacement`: `Assert.False()` expected
+  `False`, actual `True` after walk A timed out, walk B was emitted, and its waiter received the late refusal.
+- `P2HPositionTrustTests.ARefusalNamesTheCellForDiagnosticsButDoesNotRestoreTrust`: `Assert.False()` expected `False`,
+  actual `True` for the refusal-named cell.
+
+The characterization had already asserted that walk B ended as `Refused` and retained the server-named cell before it
+failed on the old trusted-position result. `FreshMapInformationRestoresTrustAfterARefusal` passed before the fix.
+
+### GREEN verification
+
+- Focused trust/guard/refusal/travel tests: **25/25 passed** with:
+
+  ```sh
+  /home/nill/.dotnet/dotnet test tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj --filter 'FullyQualifiedName~P2HPositionTrustTests|FullyQualifiedName~MovementGuardTests|FullyQualifiedName~P2IRefusalCorrelationTests|FullyQualifiedName~WorldTravelSimulationTests' --max-parallel-test-modules 1
+  ```
+
+- `/home/nill/.dotnet/dotnet test tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj --no-build --max-parallel-test-modules 1`:
+  **542/542 passed**.
+- `/home/nill/.dotnet/dotnet test --solution D3B.slnx --no-build --max-parallel-test-modules 1`:
+  **1,381/1,381 passed**, 0 failed, 0 skipped; +3 from C1.
+- `/home/nill/.dotnet/dotnet build D3B.slnx`: passed, 0 warnings, 0 errors.
+- `/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore` and `git diff --check`: passed.
+
+The deterministic `TestPlay` case advances its fake clock until A returns `NoAnswer`, sends B on the same map, then
+delivers a refusal while B is pending. It proves B returns `Refused`, the named cell remains for diagnostics but is not
+trusted, a third walk returns `Busy` without another request reaching the connection, and fresh map information restores
+`ServerPlaced` trust. The updated world-travel test now expects the journey to stop as `Failed` instead of trying to
+plan again from an untrusted refused cell.
+
+### Limits and resumption
+
+The server does not distinguish a late refusal for A from a refusal for B or for a client-issued movement. Refusal
+coordinates cannot establish which map or request they refer to. A refusal may arrive arbitrarily late, including while a
+later same-map request is pending; there is no timeout that can prove it stale and no formal wire-level correlation.
+When a refusal leaves `ServerRefused`, automated position-dependent actions stay blocked until a fresh placement on the
+current map, or a new session followed by that placement observation. This policy limits further actions after the
+refusal; it cannot prevent a still-later refusal from being mistaken for another request. No protocol, framing, relay,
+or movement-refusal correlation semantics were added. No live client, production host, Ankama relay, activity, or
+movement was run.
