@@ -68,12 +68,14 @@ public sealed class PositionLoggingTests
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(433);
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 433, 432, 431, 416, 388 } });
         await bot.ProcessedAsync();
 
         connection.Server(new MapMovementConfirmResponse());
         await bot.ProcessedAsync();
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 400, 401 } });
         await bot.ProcessedAsync();
 
@@ -92,12 +94,14 @@ public sealed class PositionLoggingTests
         Assert.True(play.Bots.TryGet(TestPlay.Key, out var bot));
         await bot.ProcessedAsync();
 
+        connection.Server(new MapCurrentEvent { MapId = TestPlay.MapId });
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 433, 432 } });
         await bot.ProcessedAsync();
 
         var rejection = Assert.Single(PositionMessages(play), message => message.Contains("ignored self walk", StringComparison.Ordinal));
 
-        Assert.Equal($"Bot {TestPlay.CharacterId}: ignored self walk because the character is not placed on a map", rejection);
+        Assert.Equal($"Bot {TestPlay.CharacterId}: ignored self walk on map {TestPlay.MapId} because the character is not placed", rejection);
         Assert.DoesNotContain("from cell", rejection, StringComparison.Ordinal);
         Assert.DoesNotContain("to cell", rejection, StringComparison.Ordinal);
     }
@@ -129,6 +133,7 @@ public sealed class PositionLoggingTests
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(433);
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 433, 432, 431 } });
         await bot.ProcessedAsync();
 
@@ -152,6 +157,7 @@ public sealed class PositionLoggingTests
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(433);
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 433, 432, 431 } });
         await bot.ProcessedAsync();
         await bot.SettleWalkAsync();
@@ -207,6 +213,7 @@ public sealed class PositionLoggingTests
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(368);
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 368, 369 } });
         connection.Client(new MapMovementCancelRequest { CellId = 368 });
         await bot.ProcessedAsync();

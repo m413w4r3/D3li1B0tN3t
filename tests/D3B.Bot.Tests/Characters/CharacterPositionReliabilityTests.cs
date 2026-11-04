@@ -100,7 +100,7 @@ public sealed class CharacterPositionReliabilityTests
     [Fact]
     public void ADelayedCancelAfterMapChangeCannotPlaceTheCharacter()
     {
-        var walking = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
+        var walking = CharacterEvents.Apply(OnMap(300) with { PendingMovementMapId = TestPlay.MapId }, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
         var current = CharacterEvents.Apply(walking, RelayDirection.FromServer, new MapCurrentEvent { MapId = TestPlay.NorthMapId });
 
         var canceled = CharacterEvents.Apply(current, RelayDirection.FromClient, new MapMovementCancelRequest { CellId = 301 });
@@ -112,7 +112,7 @@ public sealed class CharacterPositionReliabilityTests
     [Fact]
     public void ADelayedRefusalAfterMapChangeCannotPlaceTheCharacter()
     {
-        var walking = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
+        var walking = CharacterEvents.Apply(OnMap(300) with { PendingMovementMapId = TestPlay.MapId }, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
         var current = CharacterEvents.Apply(walking, RelayDirection.FromServer, new MapCurrentEvent { MapId = TestPlay.NorthMapId });
         var point = MapGeometry.PointOf(301);
 
@@ -126,7 +126,7 @@ public sealed class CharacterPositionReliabilityTests
     public void MovementCannotBeAcceptedUntilTheCurrentMapPlacesTheCharacter()
     {
         var current = CharacterEvents.Apply(Chosen(), RelayDirection.FromServer, new MapCurrentEvent { MapId = TestPlay.NorthMapId });
-        var announced = CharacterEvents.Apply(current, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } });
+        var announced = CharacterEvents.Apply(current with { PendingMovementMapId = TestPlay.NorthMapId }, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } });
         var confirmed = CharacterEvents.Apply(announced, RelayDirection.FromServer, new MapMovementConfirmResponse());
 
         Assert.Null(announced.Cell);
@@ -149,11 +149,11 @@ public sealed class CharacterPositionReliabilityTests
     [Fact]
     public void OldMapInformationMovementAndConfirmationCannotRestoreItsCell()
     {
-        var standing = OnMap(300);
+        var standing = OnMap(300) with { PendingMovementMapId = TestPlay.MapId };
         var walking = CharacterEvents.Apply(standing, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 302 } });
         var changed = CharacterEvents.Apply(walking, RelayDirection.FromServer, new MapCurrentEvent { MapId = TestPlay.NorthMapId });
         var oldInformation = CharacterEvents.Apply(changed, RelayDirection.FromServer, TestPlay.Information(300, TestPlay.MapId));
-        var oldMovement = CharacterEvents.Apply(oldInformation, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 302 } });
+        var oldMovement = CharacterEvents.Apply(oldInformation with { PendingMovementMapId = TestPlay.NorthMapId }, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 302 } });
         var confirmed = CharacterEvents.Apply(oldMovement, RelayDirection.FromServer, new MapMovementConfirmResponse());
 
         Assert.Same(changed, oldInformation);
@@ -168,7 +168,7 @@ public sealed class CharacterPositionReliabilityTests
     {
         var changed = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapCurrentEvent { MapId = TestPlay.NorthMapId });
         var placed = CharacterEvents.Apply(changed, RelayDirection.FromServer, TestPlay.Information(350, TestPlay.NorthMapId));
-        var staleMovement = CharacterEvents.Apply(placed, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 302 } });
+        var staleMovement = CharacterEvents.Apply(placed with { PendingMovementMapId = TestPlay.NorthMapId }, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 302 } });
         var confirmed = CharacterEvents.Apply(staleMovement, RelayDirection.FromServer, new MapMovementConfirmResponse());
 
         Assert.Equal(350, staleMovement.Cell);

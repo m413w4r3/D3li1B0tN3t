@@ -235,7 +235,8 @@ public sealed class CharacterEventsTests
     public void AWalkEndsOnItsLastCellOnceTheServerAnsweredTheConfirmation()
     {
         var standing = Apply(_chosen, EnteringTheGame());
-        var walking = Apply(standing, Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } }));
+        var requested = Apply(standing, Client(new MapMovementRequest { MapId = (int)TestPlay.MapId }));
+        var walking = Apply(requested, Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } }));
 
         Assert.True(walking.IsWalking);
         Assert.Equal(300, walking.Cell);
@@ -273,7 +274,7 @@ public sealed class CharacterEventsTests
     [Fact]
     public void AWalkThePlayerStopsLeavesTheCharacterOnTheCellTheClientNames()
     {
-        var walking = Apply(_chosen, [.. EnteringTheGame(), Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302, 303 } })]);
+        var walking = Apply(_chosen, [.. EnteringTheGame(), Client(new MapMovementRequest { MapId = (int)TestPlay.MapId }), Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302, 303 } })]);
         var stopped = Apply(walking, Client(new MapMovementCancelRequest { CellId = 301 }));
 
         Assert.Equal(301, stopped.Cell);
@@ -545,9 +546,10 @@ public sealed class CharacterEventsTests
     public void ACellOffTheMapIsNotTaken()
     {
         var standing = Apply(_chosen, EnteringTheGame());
+        var requested = Apply(standing, Client(new MapMovementRequest { MapId = (int)TestPlay.MapId }));
 
         Assert.Same(standing, Apply(standing, Client(new MapMovementCancelRequest { CellId = 560 })));
-        Assert.Same(standing, Apply(standing, Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 900 } })));
+        Assert.Same(requested, Apply(requested, Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 900 } })));
     }
 
     [Fact]
@@ -597,7 +599,7 @@ public sealed class CharacterEventsTests
     [Fact]
     public void AWalkTheClientDidNotConfirmLeavesTheCharacterOnItsLastCell()
     {
-        var walking = Apply(_chosen, [.. EnteringTheGame(), Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } })]);
+        var walking = Apply(_chosen, [.. EnteringTheGame(), Client(new MapMovementRequest { MapId = (int)TestPlay.MapId }), Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } })]);
         var settled = CharacterEvents.NotConfirmed(walking);
 
         Assert.False(settled.IsWalking);
@@ -608,12 +610,13 @@ public sealed class CharacterEventsTests
     [Fact]
     public void TheServerHoldsAWalkTheClientDidNotConfirmUntilTheNextWalkRefusalOrMap()
     {
-        var walking = Apply(_chosen, [.. EnteringTheGame(), Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } })]);
+        var walking = Apply(_chosen, [.. EnteringTheGame(), Client(new MapMovementRequest { MapId = (int)TestPlay.MapId }), Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } })]);
         var held = CharacterEvents.NotConfirmed(walking);
 
         Assert.True(held.IsWalkHeld);
         Assert.False(held.IsBusy);
-        Assert.False(Apply(held, Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 302, 303 } })).IsWalkHeld);
+        var nextWalk = held with { PendingMovementMapId = TestPlay.MapId };
+        Assert.False(Apply(nextWalk, Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 302, 303 } })).IsWalkHeld);
         Assert.True(Apply(held, Server(new MapMovementRefusedEvent { X = 18, Y = -3 })).IsWalkHeld);
         var requested = held with { PendingMovementMapId = TestPlay.MapId };
         Assert.False(Apply(requested, Server(new MapMovementRefusedEvent { X = 18, Y = -3 })).IsWalkHeld);

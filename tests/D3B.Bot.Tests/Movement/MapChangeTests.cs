@@ -56,9 +56,11 @@ public sealed class MapChangeTests
         var (connection, bot) = await play.EnterAsync(433);
 
         // The previous walk ended on cell 27, the edge's nearest from 433, as on the map before of a journey straight north.
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 461, 433 } });
         connection.Client(new MapMovementConfirmRequest());
         connection.Response(new MapMovementConfirmResponse());
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         await bot.ProcessedAsync();
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 433, 27 } });
         await bot.ProcessedAsync();
@@ -390,6 +392,7 @@ public sealed class MapChangeTests
         var (connection, bot) = await play.EnterAsync(433);
         var step = play.StepTo(bot, TestPlay.NorthMapId);
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 433, 405 } });
         await bot.ProcessedAsync();
 

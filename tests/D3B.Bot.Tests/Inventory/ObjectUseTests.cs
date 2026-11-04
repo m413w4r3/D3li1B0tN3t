@@ -108,10 +108,6 @@ public sealed class ObjectUseTests
 
         var use = bot.RunAsync((context, token) => context.UseObjectAsync(50, token), TestContext.Current.CancellationToken);
 
-        await connection.SentAsync(1);
-        connection.Server(new ObjectQuantityEvent { Object = new ObjectQuantity { Uid = 50, Quantity = 0 } });
-        connection.Server(new InventoryWeightEvent { Weight = 100, MaxWeight = 1_000 });
-
         Assert.Equal(CellProvenance.ClientReported, bot.State.Provenance);
         Assert.Equal(ObjectUseOutcome.Busy, await use);
         Assert.Empty(connection.Sent);

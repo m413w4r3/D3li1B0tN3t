@@ -135,7 +135,7 @@ public static class CharacterEvents
             },
             InteractiveUsedEvent used when used.ActorId == self && used.Duration > 0 => state with { Use = new CurrentUse(used.ElementId, used.SkillId) },
             InteractiveUseEndedEvent ended when state.Use == new CurrentUse(ended.ElementId, ended.SkillId) => state with { Use = null },
-            MapMovementEvent movement when movement.ActorId == self && state.MapId is not null && state.Cell is { } cell && movement.Cells.Count > 0 && movement.Cells.All(IsCell) && movement.Cells[0] == cell => state with { Path = [.. movement.Cells], IsWalkHeld = false, LastWalkEnd = movement.Cells[^1], PendingMovementMapId = null },
+            MapMovementEvent movement when movement.ActorId == self && state.MapId is not null && state.PendingMovementMapId == state.MapId && state.Cell is { } cell && movement.Cells.Count > 0 && movement.Cells.All(IsCell) && movement.Cells[0] == cell => state with { Path = [.. movement.Cells], IsWalkHeld = false, LastWalkEnd = movement.Cells[^1], PendingMovementMapId = null },
             // A group's walk names only its first and last cells, and the client attacks it where it stops.
             MapMovementEvent movement when movement.Cells.Count > 0 && IsCell(movement.Cells[^1]) && state.MonsterGroups.TryGetValue(movement.ActorId, out var walker) => state with
             {

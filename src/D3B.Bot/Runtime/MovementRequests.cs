@@ -13,6 +13,8 @@ internal static class MovementRequests
             or HavenBagEnterRequest
             or InteractiveUseRequest
             or NpcActionRequest
-            or NpcDialogReplyRequest;
+            or NpcDialogReplyRequest
+            or ObjectUseRequest
+            or ObjectUseMultipleRequest;
     }
 }

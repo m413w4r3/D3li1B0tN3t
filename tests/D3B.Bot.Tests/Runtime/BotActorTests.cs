@@ -72,6 +72,7 @@ public sealed class BotActorTests : IAsyncDisposable
     public async Task ABehaviorCannotSendRawMovementFromAClientReportedPosition()
     {
         var (connection, bot) = await _play.EnterAsync(300);
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
         connection.Client(new MapMovementCancelRequest { CellId = 300 });
         await bot.ProcessedAsync();
@@ -290,6 +291,7 @@ public sealed class BotActorTests : IAsyncDisposable
         var observer = new RecordingObserver();
         await using var play = new TestPlay([observer]);
         var (connection, bot) = await play.EnterAsync(300);
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
         connection.Client(new MapMovementCancelRequest { CellId = 300 });
         connection.Server(new NpcDialogCreationEvent { MapId = TestPlay.MapId, NpcActorId = TestPlay.WayActorId });

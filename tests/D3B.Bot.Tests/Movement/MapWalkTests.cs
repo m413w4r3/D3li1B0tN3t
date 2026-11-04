@@ -73,6 +73,7 @@ public sealed class MapWalkTests
         var previous = PathOn(play, 433, 388);
 
         // A walk the client followed to cell 388, then the character placed on 433 again, as on the next map of a journey.
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { previous.Cells.ToArray() } });
         connection.Client(new MapMovementConfirmRequest());
         connection.Response(new MapMovementConfirmResponse());
@@ -292,6 +293,7 @@ public sealed class MapWalkTests
 
         connection.Server(new MapCurrentEvent { MapId = TestPlay.MapId });
         connection.Server(TestPlay.Information(433));
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 433, 432 } });
         await bot.ProcessedAsync();
 

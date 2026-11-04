@@ -33,7 +33,7 @@ public sealed class P2HPositionTrustTests
     [Fact]
     public void AnAnnouncedMovementDoesNotConfirmItsDestination()
     {
-        var placed = OnMap(300);
+        var placed = OnMap(300) with { PendingMovementMapId = TestPlay.MapId };
         var announced = CharacterEvents.Apply(placed, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } });
 
         Assert.Equal(300, announced.Cell);
@@ -44,7 +44,7 @@ public sealed class P2HPositionTrustTests
     [Fact]
     public void AServerConfirmationTrustsTheWalkDestination()
     {
-        var announced = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } });
+        var announced = CharacterEvents.Apply(OnMap(300) with { PendingMovementMapId = TestPlay.MapId }, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } });
         var confirmed = CharacterEvents.Apply(announced, RelayDirection.FromServer, new MapMovementConfirmResponse());
 
         Assert.Equal(302, confirmed.Cell);
@@ -130,6 +130,7 @@ public sealed class P2HPositionTrustTests
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(368);
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 368, 369 } });
         connection.Client(new MapMovementCancelRequest { CellId = 368 });
         await bot.ProcessedAsync();
@@ -143,7 +144,7 @@ public sealed class P2HPositionTrustTests
     [Fact]
     public void ASettledWalkIsEstimatedHeldAndUntrusted()
     {
-        var announced = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } });
+        var announced = CharacterEvents.Apply(OnMap(300) with { PendingMovementMapId = TestPlay.MapId }, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } });
 
         var settled = CharacterEvents.NotConfirmed(announced);
 
@@ -208,7 +209,7 @@ public sealed class P2HPositionTrustTests
     [Fact]
     public void ALateConfirmationOnlyTrustsAnEstimatedHeldCell()
     {
-        var announced = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } });
+        var announced = CharacterEvents.Apply(OnMap(300) with { PendingMovementMapId = TestPlay.MapId }, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } });
         var held = CharacterEvents.NotConfirmed(announced);
         var late = CharacterEvents.Apply(held, RelayDirection.FromServer, new MapMovementConfirmResponse());
         var standing = OnMap(350);
@@ -229,7 +230,7 @@ public sealed class P2HPositionTrustTests
     public void MovementMessagesWithoutAMapCannotChangeTheKnownCellOrRestoreTrust()
     {
         var unpositioned = Chosen() with { Cell = 300, Path = [300, 301], Provenance = CellProvenance.Unknown };
-        var announced = CharacterEvents.Apply(unpositioned, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 302 } });
+        var announced = CharacterEvents.Apply(unpositioned with { PendingMovementMapId = TestPlay.MapId }, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 302 } });
         var cancelled = CharacterEvents.Apply(announced, RelayDirection.FromClient, new MapMovementCancelRequest { CellId = 302 });
         var confirmed = CharacterEvents.Apply(cancelled, RelayDirection.FromServer, new MapMovementConfirmResponse());
         var refused = CharacterEvents.Apply(confirmed, RelayDirection.FromServer, new MapMovementRefusedEvent { X = 0, Y = 0 });
@@ -251,7 +252,7 @@ public sealed class P2HPositionTrustTests
     {
         var changed = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapCurrentEvent { MapId = TestPlay.NorthMapId });
         var oldInformation = CharacterEvents.Apply(changed, RelayDirection.FromServer, TestPlay.Information(300, TestPlay.MapId));
-        var oldMovement = CharacterEvents.Apply(oldInformation, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 302 } });
+        var oldMovement = CharacterEvents.Apply(oldInformation with { PendingMovementMapId = TestPlay.NorthMapId }, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 302 } });
         var confirmed = CharacterEvents.Apply(oldMovement, RelayDirection.FromServer, new MapMovementConfirmResponse());
 
         Assert.Null(changed.Cell);
@@ -279,6 +280,7 @@ public sealed class P2HPositionTrustTests
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(368);
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 368, 369 } });
         connection.Client(new MapMovementCancelRequest { CellId = 368 });
         await bot.ProcessedAsync();
@@ -289,6 +291,7 @@ public sealed class P2HPositionTrustTests
         Assert.Empty(connection.Sent);
 
         Assert.True(CellPathfinder.TryFind(play.Maps.Get(TestPlay.MapId).Cells.Span, 368, 434, out var manualPath));
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { manualPath.Cells.ToArray() } });
         connection.Response(new MapMovementConfirmResponse());
         await bot.ProcessedAsync();

@@ -5,6 +5,7 @@ using D3B.Bot.Banks;
 using D3B.Bot.Characters;
 using D3B.Bot.Fights;
 using D3B.Bot.Journal;
+using D3B.Bot.Movement;
 using D3B.Bot.Network;
 using D3B.Data.Maps;
 using D3B.Engine.World;
@@ -156,6 +157,7 @@ public sealed class BotActor : IAsyncDisposable
         return request switch
         {
             MapMovementRequest => CanSendRawMovementRequest(),
+            ObjectUseRequest or ObjectUseMultipleRequest => MovementGuard.Refuse(State, _connected) is MovementRefusal.None,
             NpcDialogReplyRequest => _connected
                 && State.IsInDialog
                 && State.IsPositionTrusted
@@ -319,6 +321,8 @@ public sealed class BotActor : IAsyncDisposable
     /// <returns>A task that completes once the bot's loop is over.</returns>
     public async ValueTask DisposeAsync()
     {
+        _session = null;
+        _connected = false;
         Post(new Stopping());
         _inbox.Writer.TryComplete();
         await _loop.ConfigureAwait(false);

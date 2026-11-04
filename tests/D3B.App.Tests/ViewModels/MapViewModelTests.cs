@@ -148,6 +148,7 @@ public sealed class MapViewModelTests : IAsyncDisposable
         var page = Page(_french);
         var first = page.Scene;
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301, 302 } });
         connection.Server(new InteractiveElementUpdatedEvent { Element = TestPlay.Tree(enabled: false) });
         await bot.ProcessedAsync();

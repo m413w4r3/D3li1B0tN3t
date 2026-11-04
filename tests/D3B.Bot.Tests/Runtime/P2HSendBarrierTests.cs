@@ -1,4 +1,5 @@
 using D3B.Bot.Movement;
+using D3B.Bot.Runtime;
 using D3B.Bot.Tests.Network;
 using D3B.Protocol.Game;
 
@@ -53,6 +54,56 @@ public sealed class P2HSendBarrierTests
         var send = session.SendAsync(new ObjectUseRequest { Uid = 50 }, TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => send);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task StoppingClosesMovementAuthorizationBeforeTheInboxDrains()
+    {
+        var observer = new RecordingObserver();
+        await using var play = new TestPlay([observer]);
+        var (connection, bot) = await play.EnterAsync(300);
+        var expectationRegistered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var expectationEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseExpectation = new ManualResetEventSlim();
+
+        var behavior = bot.RunAsync(
+            async (context, token) =>
+            {
+                context.Expect((_, message, _) =>
+                {
+                    if (message is KamasUpdateEvent)
+                    {
+                        expectationEntered.TrySetResult();
+
+                        if (!releaseExpectation.Wait(TimeSpan.FromSeconds(10)))
+                            throw new TimeoutException("The test did not release the actor's inbox.");
+                    }
+
+                    return false;
+                });
+                expectationRegistered.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+
+                return true;
+            },
+            TestContext.Current.CancellationToken);
+
+        await expectationRegistered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await bot.ProcessedAsync();
+        connection.Server(new KamasUpdateEvent { Kamas = 1 });
+        await expectationEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        var stopping = bot.DisposeAsync();
+        var session = Assert.Single(observer.Sessions);
+        var send = session.SendAsync(new ObjectUseRequest { Uid = 50 }, TestContext.Current.CancellationToken);
+        var exception = await Record.ExceptionAsync(() => send);
+
+        releaseExpectation.Set();
+        await stopping;
+        await Assert.ThrowsAsync<BotInterruptedException>(() => behavior);
+
+        Assert.IsType<InvalidOperationException>(exception);
         Assert.Empty(connection.Sent);
     }
 

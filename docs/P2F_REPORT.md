@@ -227,6 +227,14 @@ third follow-up's focused tests pass 221/221, `D3B.Bot.Tests` passes 524/524, an
 passes 1,350/1,350. The remaining same-map refusal correlation and mapless movement-announcement risks are unchanged.
 The next live action still requires a **NEW OWNER GO** and publication and review of the build for that action.
 
+P2H's fourth audit follow-up closes the tested bot-boundary paths for generic object use, mapless self movement
+announcements, and the actor stop window. Object-use requests now pass the same trusted-position check as other
+movement-capable actions. Self announcements require a pending movement marker for the current map, and disposal clears
+the live session gate before closing the inbox. Its focused filter passed 228/228, `D3B.Bot.Tests` passed 528/528, and
+the nine projects passed serially 1,354/1,354. The strict end-to-end current-position criterion still needs a relay-level
+inbound ordering barrier for frames not yet posted to the actor inbox. Same-map refusal correlation remains ambiguous
+because the protocol has no request identifier. No live client, host, relay, or game was run.
+
 ## F. Supervised visual test and reproducible procedure
 
 **Not run during P2F.** The described observation-only visual validation was subsequently executed

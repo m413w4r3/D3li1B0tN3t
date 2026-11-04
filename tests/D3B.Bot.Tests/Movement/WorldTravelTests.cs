@@ -145,6 +145,7 @@ public sealed class WorldTravelTests
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(433);
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 433, 405 } });
         await bot.ProcessedAsync();
 
@@ -158,6 +159,7 @@ public sealed class WorldTravelTests
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(368);
 
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 368, 369 } });
         connection.Client(new MapMovementCancelRequest { CellId = 368 });
         await bot.ProcessedAsync();
@@ -216,6 +218,7 @@ public sealed class WorldTravelTests
         var (connection, bot) = await play.EnterAsync(300, TestPlay.NorthMapId);
 
         Assert.True(CellPathfinder.TryFind(play.Maps.Get(TestPlay.NorthMapId).Cells.Span, 300, 301, out var manualPath));
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.NorthMapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { manualPath.Cells.ToArray() } });
         connection.Response(new MapMovementConfirmResponse());
         await bot.ProcessedAsync();

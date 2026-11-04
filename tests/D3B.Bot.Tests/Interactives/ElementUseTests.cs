@@ -71,6 +71,7 @@ public sealed class ElementUseTests
     {
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(190);
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
         connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 190, 191 } });
         connection.Client(new MapMovementCancelRequest { CellId = 190 });
         await bot.ProcessedAsync();

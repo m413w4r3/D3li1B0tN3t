@@ -292,3 +292,42 @@ The barrier covers every frame already posted to the bot inbox. A frame still he
 reached the inbox and can arrive after the barrier; the gate therefore cannot guarantee synchronization with an
 in-flight relay frame. The older same-map refusal-correlation and mapless movement-announcement risks remain. The next
 live action still requires a **NEW OWNER GO** and publication and review of the build for that action.
+
+## Fourth audit follow-up: object use, self-walk requests, and stop lifecycle
+
+The fourth independent audit found three remaining first-party gaps. This bounded lot closes each:
+
+1. **Generic object use.** `ObjectUseRequest` and `ObjectUseMultipleRequest` are movement-capable. `UseObjectsAsync`
+   checks `MovementGuard` after inventory and busy checks, and the bound session gate permits these requests only for a
+   connected, trusted, idle roleplay position. The local check logs refusal and returns `Busy`; the session gate remains
+   the send-time backstop. This covers map-transition items such as teleportation potions.
+2. **Self movement announcement.** `CharacterEvents` accepts a self `MapMovementEvent` only when the current map is
+   known, the marker from a client `MapMovementRequest` or guarded send names that current map, and the path starts at the
+   current cell. Acceptance clears the marker. A delayed mapless announcement after map change and new placement cannot
+   create a path or be promoted by a following confirmation. Group and other-actor paths are unchanged.
+3. **Stop lifecycle.** `DisposeAsync` clears `_session` and `_connected` before it posts `Stopping` and completes the
+   inbox. `OnStopping` remains idempotent. A deterministic regression holds the actor loop while disposal closes the
+   inbox, then verifies a concurrent movement-capable session send is rejected before the stop message is processed.
+
+The test-only commit `6e9fc8d` compiled and ran RED: **3/3 failed**. The behavior-level object use returned `Used` instead
+of `Busy`; direct session `SendAsync` did not reject object use from a client-reported cell; and a delayed mapless walk
+created a path. The test-only commit changed no production behavior.
+
+GREEN evidence with SDK 10.0.403:
+
+- The focused P2H/movement/runtime/element-use/banking/fight/session/inventory filter passed **228/228**.
+- `D3B.Bot.Tests` passed **528/528**, up four tests from the 524 baseline.
+- The nine test projects passed serially: App 142, Bot 528, Core 11, Data 133, Engine 257, Network 133, Protocol 88,
+  Scripts 35, and Storage 27 — **1,354/1,354**, 0 failed, 0 skipped.
+- `/home/nill/.dotnet/dotnet restore D3B.slnx --source /tmp/p2h-empty-nuget-source --verbosity minimal -m:1 -p:NuGetAudit=false`
+  restored from the local package cache, and `/home/nill/.dotnet/dotnet build D3B.slnx --no-restore -m:1` passed with 0
+  warnings and 0 errors. Restoring builds attempted NuGet vulnerability metadata and failed offline with NU1900; the
+  literal `/home/nill/.dotnet/dotnet build D3B.slnx` also exited without project output or reported errors here.
+- `/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore` and `git diff --check` passed.
+
+The bot boundary is closed for the tested paths. The strict end-to-end current-position criterion still needs a
+relay-level inbound ordering barrier: a frame still in the relay read loop may be posted after `ProcessedAsync` returns.
+The protocol also gives movement refusals neither a map id nor request correlation, so a same-map refusal crossing a
+newer request remains ambiguous. These are the explicit remaining follow-ups; this lot does not attempt either. No live
+client, host, relay, game, or capture was run. The next live action still requires a **NEW OWNER GO** and publication and
+review of the build for that action.

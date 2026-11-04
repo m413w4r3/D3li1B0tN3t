@@ -1,4 +1,5 @@
 using D3B.Bot.Journal;
+using D3B.Bot.Movement;
 using D3B.Bot.Runtime;
 using D3B.Network.Relay;
 using D3B.Protocol.Game;
@@ -45,6 +46,9 @@ public static class ObjectUse
             return ObjectUseOutcome.NotCarried;
 
         if (state.IsBusy)
+            return ObjectUseOutcome.Busy;
+
+        if (!MovementGuard.IsAllowed(context))
             return ObjectUseOutcome.Busy;
 
         using var action = context.BeginAction();

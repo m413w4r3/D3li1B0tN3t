@@ -6792,3 +6792,27 @@ Settled questions leave this table, and the decision that settles one says so.
   outcomes.
 - **Boundary**: The next live action still requires a NEW OWNER GO and publication and review of the build for that
   action.
+
+## D297: Guard generic object use and require pending self walks
+
+*2026-11-04, P2H fourth audit-fix lot.*
+
+- **Object use**: `ObjectUseRequest` and `ObjectUseMultipleRequest` are movement-capable because items such as
+  teleportation potions can change maps. `ObjectUse.UseObjectsAsync` checks `MovementGuard` before creating answer
+  expectations or sending. The current session gate permits object use only when the connection and server-derived
+  position are trusted and the character is idle; a non-current session is denied.
+- **Self movement announcements**: `CharacterEvents` accepts a self `MapMovementEvent` only when
+  `PendingMovementMapId` matches the current `MapId`, the cell is known, and the path starts at that cell. A valid client
+  request or guarded send sets the marker. The accepted announcement clears it. Group and other-actor movement are
+  unchanged.
+- **Stop lifecycle**: `BotActor.DisposeAsync` clears `_session` and `_connected` before posting `Stopping` and completing
+  the inbox. `OnStopping` remains idempotent. A held-inbox regression proves a concurrent session send is denied after
+  disposal starts.
+- **Evidence**: Test commit `6e9fc8d` compiled and ran RED at 3/3 failures: local object use returned `Used`, the session
+  gate allowed object use from a client-reported position, and a delayed mapless event created a path. GREEN focused
+  coverage passed 228/228; `D3B.Bot.Tests` passed 528/528; all nine projects passed serially 1,354/1,354. Serial build,
+  format verification, and `git diff --check` passed with SDK 10.0.403. No live client, host, relay, game, or capture was
+  used.
+- **Residual**: Tested bot-boundary paths are closed. Strict end-to-end current-position ordering still needs a relay-level
+  inbound barrier for frames not yet posted to the actor inbox. Same-map movement refusal correlation remains ambiguous
+  because the protocol carries neither a map id nor request id. No live run is claimed.
