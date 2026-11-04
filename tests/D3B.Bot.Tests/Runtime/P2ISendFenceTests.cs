@@ -397,6 +397,140 @@ public sealed class P2ISendFenceTests
     }
 
     [Fact]
+    public async Task AnUnknownEnvelopeFieldLatchesTranslationFailureForMovement()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(300);
+        connection.Session.SendBarrier = () => Task.CompletedTask;
+        connection.Session.SendGate = _ => true;
+        var frame = TestGame.Event(new MapInformationEvent { MapId = (int)TestPlay.MapId });
+        connection.ServerRaw([.. frame, 0xA0, 0x01, 0x01]);
+
+        await Assert.ThrowsAsync<RelayInjectionException>(() => connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task CancellingWhileTheSessionInboxBarrierIsBlockedStopsPromptly()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(300);
+        var barrierEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseBarrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        connection.Session.SendBarrier = async () =>
+        {
+            barrierEntered.TrySetResult();
+            await releaseBarrier.Task;
+        };
+        connection.Session.SendGate = _ => true;
+
+        var sending = connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            cancellation.Token);
+
+        try
+        {
+            await barrierEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sending.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            releaseBarrier.TrySetResult();
+            cancellation.Cancel();
+
+            if (!sending.IsCompleted)
+            {
+                try
+                {
+                    await sending.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+        }
+
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task CancellingWhileAGuardedSendWaitsForTheInboxStopsPromptly()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(300);
+        var inboxEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var relayWaitEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseInbox = new ManualResetEventSlim();
+        using var waiterCancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var blockInbox = 0;
+        var waiter = bot.WaitUntilAsync(
+            _ =>
+            {
+                if (Volatile.Read(ref blockInbox) is not 0)
+                {
+                    inboxEntered.TrySetResult();
+
+                    if (!releaseInbox.Wait(TimeSpan.FromSeconds(10)))
+                        throw new TimeoutException("The test did not release the actor's inbox.");
+                }
+
+                return false;
+            },
+            waiterCancellation.Token);
+        await bot.ProcessedAsync();
+        Volatile.Write(ref blockInbox, 1);
+        connection.Relay.ObservationWait = _ =>
+        {
+            relayWaitEntered.TrySetResult();
+
+            return Task.CompletedTask;
+        };
+
+        var sending = bot.RunAsync(
+            async (context, _) => await context.SendGuardedAsync(
+                new MapMovementRequest { MapId = (int)TestPlay.MapId },
+                () => true,
+                cancellation.Token),
+            cancellation.Token);
+
+        try
+        {
+            await Task.WhenAll(inboxEntered.Task, relayWaitEntered.Task).WaitAsync(TestContext.Current.CancellationToken);
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sending.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            releaseInbox.Set();
+            cancellation.Cancel();
+            waiterCancellation.Cancel();
+
+            if (!sending.IsCompleted)
+            {
+                try
+                {
+                    await sending.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+        }
+
+        await bot.ProcessedAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiter);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
     public async Task NonMovementSendsDoNotWaitForRelayObservation()
     {
         await using var play = new TestPlay();

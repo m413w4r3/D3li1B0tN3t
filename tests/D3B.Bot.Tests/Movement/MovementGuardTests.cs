@@ -55,6 +55,7 @@ public sealed class MovementGuardTests
     {
         Assert.Equal(MovementRefusal.AmbiguousPosition, MovementGuard.Refuse(Trusted() with { MovementAnswerAmbiguous = true }, connected: true));
         Assert.Equal(MovementRefusal.AmbiguousPosition, MovementGuard.Refuse(Trusted() with { Provenance = CellProvenance.ServerConfirmed, MovementAnswerAmbiguous = true }, connected: true));
+        Assert.Equal(MovementRefusal.AmbiguousPosition, MovementGuard.Refuse(Trusted() with { MapId = null, Cell = null, MovementAnswerAmbiguous = true }, connected: true));
     }
 
     [Fact]

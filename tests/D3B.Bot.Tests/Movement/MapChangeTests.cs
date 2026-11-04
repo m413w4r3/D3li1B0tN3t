@@ -461,4 +461,41 @@ public sealed class MapChangeTests
         Assert.Equal(MapChangeOutcome.NoPath, await bot.ChangeMapAsync(step, TestContext.Current.CancellationToken));
         Assert.Empty(connection.Sent);
     }
+
+    [Fact]
+    public async Task ARefusalWithoutPendingMovementBlocksHeldWalkRecovery()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(48);
+
+        await LeaveHeldWalkAsync(play, connection, bot, 20);
+        var point = MapGeometry.PointOf(bot.State.Cell!.Value);
+        connection.Server(new MapMovementRefusedEvent { X = point.X, Y = point.Y });
+        await bot.ProcessedAsync();
+
+        Assert.True(bot.State.IsWalkHeld);
+        Assert.True(bot.State.MovementAnswerAmbiguous);
+        Assert.Equal(CellProvenance.Estimated, bot.State.Provenance);
+
+        var secondFrameSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Relay.FrameSent += count =>
+        {
+            if (count == 2)
+                secondFrameSent.TrySetResult();
+        };
+
+        var release = bot.RunAsync(
+            (context, cancellationToken) => context.ReleaseHeldWalkAsync(cancellationToken),
+            TestContext.Current.CancellationToken);
+        var first = await Task.WhenAny(release, secondFrameSent.Task).WaitAsync(TestContext.Current.CancellationToken);
+
+        if (first == secondFrameSent.Task)
+            connection.Server(new MapMovementRefusedEvent { X = point.X, Y = point.Y });
+
+        var outcome = await release.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        Assert.Equal(WalkOutcome.Busy, outcome);
+        Assert.True(bot.State.MovementAnswerAmbiguous);
+        Assert.Single(connection.Sent);
+    }
 }

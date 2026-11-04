@@ -14,6 +14,8 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
 
     public Func<CancellationToken, Task> ObservationWait { get; set; } = _ => Task.CompletedTask;
 
+    public event Action<int>? FrameSent;
+
     public string Id { get; }
 
     public RelayRoute Route { get; }
@@ -34,6 +36,8 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        int sentCount;
+
         lock (_sendGate)
         {
             if (_closed.IsCancellationRequested)
@@ -43,7 +47,10 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
                 return Task.FromException(new RelayInjectionException("The frame did not go: the connection's frames are no longer observable."));
 
             _sent.Enqueue(frame.ToArray());
+            sentCount = _sent.Count;
         }
+
+        FrameSent?.Invoke(sentCount);
 
         return Task.CompletedTask;
     }
