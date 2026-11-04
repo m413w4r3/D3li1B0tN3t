@@ -173,7 +173,8 @@ public sealed class BotContext
 
         await WaitUntilDrawnAsync(cancellationToken).ConfigureAwait(false);
         await _behavior.Session.WaitForObservedFramesAsync(cancellationToken).ConfigureAwait(false);
-        await _bot.ProcessedAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _bot.ProcessedAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
 
         if (!canSend())
         {

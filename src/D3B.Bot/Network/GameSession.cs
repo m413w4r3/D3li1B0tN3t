@@ -143,7 +143,10 @@ public sealed class GameSession : IConnectionInterceptor
             await WaitForObservedFramesAsync(cancellationToken).ConfigureAwait(false);
 
             if (SendBarrier is { } barrier)
-                await barrier().ConfigureAwait(false);
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await barrier().WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
 
         if (SendGate is { } gate && !gate(request))
@@ -189,7 +192,7 @@ public sealed class GameSession : IConnectionInterceptor
     byte[]? IConnectionInterceptor.OnFrame(RelayDirection direction, ReadOnlySequence<byte> frame, bool held)
     {
         var decoded = _translation.DecodeGame(frame);
-        if (decoded.Envelope is null || (decoded.CarriedType is not null && !decoded.IsRead))
+        if (!decoded.IsRead && !decoded.IsUnderstood)
         {
             var failure = new RelayInjectionException("The frame could not be read as a game message; movement is not authorized for this session.");
             Interlocked.CompareExchange(ref _translationFailure, failure, null);

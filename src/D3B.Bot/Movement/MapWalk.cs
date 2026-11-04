@@ -95,10 +95,10 @@ public static class MapWalk
     /// measured a step aside to let the held walk go.
     /// </para>
     /// <para>
-    /// Preconditions: a live connection, known map and estimated cell, no active walk, fight, use or dialog. It sends at
-    /// most one reachable aside walk. It reports Arrived only after that walk's Arrived outcome and a trusted, confirmed
-    /// cell on the same map with neither walking nor held state. WorldTravel and ordinary MapWalk do not invoke this
-    /// exception; MapChange and explicit callers may.
+    /// Preconditions: a live connection, known map and estimated cell, no ambiguous movement answer and no active walk,
+    /// fight, use or dialog. It sends at most one reachable aside walk. It reports Arrived only after that walk's Arrived
+    /// outcome and a trusted, confirmed cell on the same map with neither walking nor held state. WorldTravel and
+    /// ordinary MapWalk do not invoke this exception; MapChange and explicit callers may.
     /// </para>
     /// </remarks>
     public static async Task<WalkOutcome> ReleaseHeldWalkAsync(this BotContext context, CancellationToken cancellationToken)
@@ -111,6 +111,7 @@ public static class MapWalk
             return WalkOutcome.Arrived;
 
         if (!context.IsConnected
+            || state.MovementAnswerAmbiguous
             || state.MapId is not { } mapId
             || state.Cell is not { } from
             || state.IsWalking
@@ -251,6 +252,7 @@ public static class MapWalk
 
         if (heldWalkRelease
             && context.IsConnected
+            && !state.MovementAnswerAmbiguous
             && state.MapId == mapId
             && state.Cell == from
             && state.IsWalkHeld

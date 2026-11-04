@@ -17,14 +17,14 @@ internal static class MovementGuard
         if (!connected)
             return MovementRefusal.Disconnected;
 
+        if (state.MovementAnswerAmbiguous)
+            return MovementRefusal.AmbiguousPosition;
+
         if (state.MapId is null)
             return MovementRefusal.MapUnknown;
 
         if (state.Cell is null)
             return MovementRefusal.CellUnknown;
-
-        if (state.MovementAnswerAmbiguous)
-            return MovementRefusal.AmbiguousPosition;
 
         if (state.IsWalking)
             return MovementRefusal.Walking;
