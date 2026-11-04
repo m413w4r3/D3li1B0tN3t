@@ -232,11 +232,12 @@ P2H's fourth audit follow-up closes the tested bot-boundary paths for generic ob
 announcements, and the actor stop window. Object-use requests now pass the same trusted-position check as other
 movement-capable actions. Self announcements require a pending movement marker for the current map. A closing audit
 follow-up sets a stopping flag before clearing the session, ignores queued attachment and frame inputs, and rejects queued
-behavior starts; it also restores the no-map ignored-self-walk log assertion. The resulting focused filter passed 230/230,
-`D3B.Bot.Tests` passed 530/530, and the nine projects passed serially 1,356/1,356. The strict end-to-end current-position
-criterion still needs a relay-level inbound ordering barrier for frames not yet posted to the actor inbox. Same-map
-refusal correlation remains ambiguous because the protocol has no request identifier. No live client, host, relay, or game
-was run.
+behavior starts; it also restores the no-map ignored-self-walk log assertion. A final interval regression verifies that
+movement sends are denied immediately after `BeginStopping`, while the trusted session remains current. The resulting
+focused filter passed 231/231, `D3B.Bot.Tests` passed 531/531, and the nine projects passed serially 1,357/1,357. The
+strict end-to-end current-position criterion still needs a relay-level inbound ordering barrier for frames not yet posted
+to the actor inbox. Same-map refusal correlation remains ambiguous because the protocol has no request identifier. No live
+client, host, relay, or game was run.
 
 ## F. Supervised visual test and reproducible procedure
 

@@ -6838,3 +6838,22 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Residual**: The relay-level inbound ordering barrier and same-map refusal correlation remain accepted follow-ups.
   The bot boundary is closed for tested paths, while strict end-to-end current-position ordering still depends on the
   relay-level follow-up. No live run is claimed.
+
+## D299: Deny movement sends as soon as stopping begins
+
+*2026-11-04, P2H final stopping-gate correction.*
+
+- **Stopping gate**: `BeginStopping()` only sets `_stopping`, and `DisposeAsync` calls it before clearing `_session` and
+  `_connected`. `CanSendRawRequest` checks `_stopping` first and permits only non-movement-capable requests once the
+  signal is set. This closes the interval when the session and trusted state have not yet been cleared.
+- **RED/GREEN regression**: Test commit `41249f7` added the `BeginStopping` hook and interval test without the gate
+  check. The focused test compiled and ran RED at 1/1 failed: object-use `SendAsync` returned successfully while the
+  connection and trusted state remained current. After the gate check, the same test passed and confirmed no request
+  reached the connection.
+- **Verification**: With SDK 10.0.403, the targeted P2H/movement/runtime/element-use/banking/fight/session/inventory
+  filter passed 231/231; `D3B.Bot.Tests` passed 531/531; all nine projects passed serially: App 142, Bot 531, Core 11,
+  Data 133, Engine 257, Network 133, Protocol 88, Scripts 35, Storage 27 — 1,357/1,357, 0 failed, 0 skipped (1,356
+  baseline + 1). `/home/nill/.dotnet/dotnet build D3B.slnx` passed with 0 warnings and errors; format verification and
+  `git diff --check` passed. No live client, host, relay, game, or capture was used.
+- **Residual**: Relay-level inbound ordering and same-map movement-refusal correlation remain accepted follow-ups. The
+  bot boundary is closed for tested paths; strict end-to-end current-position ordering still needs the relay follow-up.

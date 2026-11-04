@@ -349,3 +349,5 @@ passed; `git diff --check` passed. The parent reproduced the merged result with 
 `/home/nill/.dotnet/dotnet build D3B.slnx` (0 warnings, 0 errors), the targeted 230/230, `D3B.Bot.Tests` 530/530, the
 nine projects serially 1,356/1,356, and the RED commit `85144b1` at 2 total, 1 failed, 1 passed. No live run was
 performed. The relay-level inbound ordering barrier and same-map refusal correlation remain accepted follow-ups.
+A final interval regression calls `BeginStopping` while the trusted session remains current and verifies movement-capable
+sends are denied; verification now passes 231 targeted tests, 531 Bot tests, and 1,357 tests across all projects.

@@ -150,6 +150,9 @@ public sealed class BotActor : IAsyncDisposable
 
     internal bool CanSendRawRequest(GameSession session, IMessage request)
     {
+        if (_stopping)
+            return !MovementRequests.IsMovementCapable(request);
+
         if (!ReferenceEquals(session, _session))
             return !MovementRequests.IsMovementCapable(request);
 
