@@ -1,3 +1,4 @@
+using D3B.Bot.Characters;
 using D3B.Bot.Movement;
 using D3B.Bot.Tests.Runtime;
 using D3B.Engine.Maps;
@@ -79,7 +80,7 @@ public sealed class WorldTravelSimulationTests
     }
 
     [Fact]
-    public async Task ARefusedWalkLeavesTheJourneyOnTheServerNamedCellAndEndsWithoutAPath()
+    public async Task ARefusedWalkKeepsItsNamedCellForDiagnosticsAndStopsTheJourney()
     {
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(TestPlay.ActionCell + 1);
@@ -93,9 +94,11 @@ public sealed class WorldTravelSimulationTests
         connection.Server(new MapMovementRefusedEvent { X = stood.X, Y = stood.Y });
         await bot.ProcessedAsync();
 
-        Assert.Equal(TravelOutcome.NoPath, await TestWalks.AdvanceUntilDoneAsync(play.Time, journey));
+        Assert.Equal(TravelOutcome.Failed, await TestWalks.AdvanceUntilDoneAsync(play.Time, journey));
         Assert.Equal(TestPlay.MapId, bot.State.MapId);
         Assert.Equal(start, bot.State.Cell);
+        Assert.Equal(CellProvenance.ServerRefused, bot.State.Provenance);
+        Assert.False(bot.State.IsPositionTrusted);
         Assert.Empty(bot.State.Path);
         Assert.False(bot.State.IsWalking);
         Assert.Single(connection.Sent);

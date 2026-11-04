@@ -30,7 +30,7 @@ internal enum MovementRefusal
     /// <summary>The character is using an element or in a dialog.</summary>
     Busy,
 
-    /// <summary>The server named a cell in a refusal without identifying the movement request, so the position is ambiguous.</summary>
+    /// <summary>The server named a cell in a refusal without identifying the movement request; wait for fresh placement before acting.</summary>
     AmbiguousPosition,
 
     /// <summary>The cell came from the client's cancellation report.</summary>

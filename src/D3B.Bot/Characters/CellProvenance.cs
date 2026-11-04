@@ -18,6 +18,6 @@ public enum CellProvenance
     /// <summary>The server confirmed the character on this cell.</summary>
     ServerConfirmed,
 
-    /// <summary>The server named this cell while refusing a movement.</summary>
+    /// <summary>The server named this cell while refusing a movement; without a request id, it is diagnostic, not actionable position evidence.</summary>
     ServerRefused,
 }

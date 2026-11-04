@@ -37,7 +37,8 @@ internal static class MovementGuard
 
         return state.Provenance switch
         {
-            CellProvenance.ServerPlaced or CellProvenance.ServerConfirmed or CellProvenance.ServerRefused => MovementRefusal.None,
+            CellProvenance.ServerPlaced or CellProvenance.ServerConfirmed => MovementRefusal.None,
+            CellProvenance.ServerRefused => MovementRefusal.AmbiguousPosition,
             CellProvenance.ClientReported => MovementRefusal.ClientReported,
             CellProvenance.Estimated => MovementRefusal.Estimated,
             _ => MovementRefusal.ProvenanceUnknown,
