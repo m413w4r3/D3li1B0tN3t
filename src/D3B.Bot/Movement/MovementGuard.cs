@@ -23,6 +23,9 @@ internal static class MovementGuard
         if (state.Cell is null)
             return MovementRefusal.CellUnknown;
 
+        if (state.MovementAnswerAmbiguous)
+            return MovementRefusal.AmbiguousPosition;
+
         if (state.IsWalking)
             return MovementRefusal.Walking;
 

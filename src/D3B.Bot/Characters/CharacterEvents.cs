@@ -122,6 +122,7 @@ public static class CharacterEvents
                 IsWalkHeld = false,
                 Provenance = CellProvenance.Unknown,
                 PendingMovementMapId = null,
+                MovementAnswerAmbiguous = false,
             },
             ContextCreationEvent created => Context(state, created),
             MapInformationEvent information when information.MapId == state.MapId => Placed(state, information),
@@ -149,7 +150,7 @@ public static class CharacterEvents
             MapMovementConfirmResponse when state.MapId is not null && state.Cell is not null && state.IsWalking => state with { Cell = state.Path[^1], Path = [], IsWalkHeld = false, Provenance = CellProvenance.ServerConfirmed, PendingMovementMapId = null },
             MapMovementConfirmResponse when state.MapId is not null && state.Cell is not null && state.IsWalkHeld && state.Provenance is CellProvenance.Estimated => state with { IsWalkHeld = false, Provenance = CellProvenance.ServerConfirmed, PendingMovementMapId = null },
             MapMovementConfirmResponse => state with { IsWalkHeld = false, PendingMovementMapId = null },
-            MapMovementRefusedEvent refused when state.MapId is { } map && state.Cell is not null && state.PendingMovementMapId == map => Refused(state, refused),
+            MapMovementRefusedEvent refused => Refused(state, refused),
             NpcDialogCreationEvent creation when creation.MapId == state.MapId => state with { Dialog = new NpcDialog(creation.NpcActorId) },
             NpcDialogQuestionEvent question when state.Dialog is { } dialog => state with
             {
@@ -201,6 +202,9 @@ public static class CharacterEvents
 
     private static CharacterState Refused(CharacterState state, MapMovementRefusedEvent refused)
     {
+        if (state.MapId is not { } map || state.PendingMovementMapId != map)
+            return state with { MovementAnswerAmbiguous = true };
+
         var mapped = MapGeometry.TryGetCell(new MapPoint(refused.X, refused.Y), out var cell);
 
         return state with
@@ -210,6 +214,7 @@ public static class CharacterEvents
             IsWalkHeld = false,
             Provenance = mapped ? CellProvenance.ServerRefused : CellProvenance.Unknown,
             PendingMovementMapId = null,
+            MovementAnswerAmbiguous = true,
         };
     }
 
@@ -242,6 +247,7 @@ public static class CharacterEvents
             SubAreaId = information.SubAreaId,
             Cell = cell,
             Provenance = cell is null ? CellProvenance.Unknown : CellProvenance.ServerPlaced,
+            MovementAnswerAmbiguous = cell is null && state.MovementAnswerAmbiguous,
             Elements = elements,
             Npcs = npcs,
             MonsterGroups = groups,
