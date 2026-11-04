@@ -77,17 +77,33 @@ public sealed class P2HPositionTrustTests
     }
 
     [Fact]
-    public void AValidRefusalTrustsTheServerNamedCell()
+    public void ARefusalNamesTheCellForDiagnosticsButDoesNotRestoreTrust()
     {
         var point = MapGeometry.PointOf(311);
-        var requested = OnMap(300) with { PendingMovementMapId = TestPlay.MapId };
+        var requested = OnMap(300) with { PendingMovementMapId = TestPlay.MapId, Path = [300, 301], IsWalkHeld = true };
 
         var refused = CharacterEvents.Apply(requested, RelayDirection.FromServer, new MapMovementRefusedEvent { X = point.X, Y = point.Y });
 
         Assert.Equal(311, refused.Cell);
         Assert.Equal(CellProvenance.ServerRefused, refused.Provenance);
-        Assert.True(refused.IsPositionTrusted);
+        Assert.Empty(refused.Path);
+        Assert.False(refused.IsWalkHeld);
         Assert.Null(refused.PendingMovementMapId);
+        Assert.False(refused.IsPositionTrusted);
+    }
+
+    [Fact]
+    public void FreshMapInformationRestoresTrustAfterARefusal()
+    {
+        var point = MapGeometry.PointOf(311);
+        var requested = OnMap(300) with { PendingMovementMapId = TestPlay.MapId };
+        var refused = CharacterEvents.Apply(requested, RelayDirection.FromServer, new MapMovementRefusedEvent { X = point.X, Y = point.Y });
+
+        var placed = CharacterEvents.Apply(refused, RelayDirection.FromServer, TestPlay.Information(312));
+
+        Assert.Equal(312, placed.Cell);
+        Assert.Equal(CellProvenance.ServerPlaced, placed.Provenance);
+        Assert.True(placed.IsPositionTrusted);
     }
 
     [Fact]

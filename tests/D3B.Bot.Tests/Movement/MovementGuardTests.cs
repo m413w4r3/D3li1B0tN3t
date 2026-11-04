@@ -38,11 +38,16 @@ public sealed class MovementGuardTests
     }
 
     [Fact]
-    public void EveryServerDerivedPositionPassesTheGuard()
+    public void ServerPlacementAndConfirmationPassTheGuard()
     {
         Assert.Equal(MovementRefusal.None, MovementGuard.Refuse(Trusted(), connected: true));
         Assert.Equal(MovementRefusal.None, MovementGuard.Refuse(Trusted() with { Provenance = CellProvenance.ServerConfirmed }, connected: true));
-        Assert.Equal(MovementRefusal.None, MovementGuard.Refuse(Trusted() with { Provenance = CellProvenance.ServerRefused }, connected: true));
+    }
+
+    [Fact]
+    public void ARefusedPositionHasAnAmbiguousGuardReason()
+    {
+        Assert.Equal(MovementRefusal.AmbiguousPosition, MovementGuard.Refuse(Trusted() with { Provenance = CellProvenance.ServerRefused }, connected: true));
     }
 
     [Fact]
