@@ -6942,3 +6942,25 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Limit**: The event has no request or map identifier. A refusal may still arrive arbitrarily late and cannot be
   formally assigned to a movement. Once observed, position-dependent automated actions stay blocked until a fresh
   self-placement or a new session followed by one. No live client, host, relay, activity, or movement was run.
+
+## D304: Keep held-walk recovery behind ambiguity, translation, and cancellation barriers
+
+*2026-11-04, P2I C5, completing D301-D303 after the final independent review.*
+
+- **Held-walk recovery**: A no-pending refusal can leave the diagnostic estimate held while revoking position trust.
+  `ReleaseHeldWalkAsync` now rejects that latch before pathfinding, and its `CanSendWalk` branch rechecks it before the
+  request. The common release path covers MapChange, Recovery, ElementUse, Banking, and GuildChest.
+- **Unread envelopes**: Movement is latched closed for `!IsRead && !IsUnderstood`, including discarded unknown envelope
+  fields. Understood empty envelopes and partial messages whose content was read remain allowed. The latch is per
+  `GameSession`; reconnecting does not itself restore trusted position.
+- **Cancellation**: The session barrier and guarded actor `Processing` barrier are awaited with the sender's cancellation
+  token. A canceled sender exits promptly even when the inbox marker remains queued, and does not inject a request.
+- **RED/GREEN evidence**: RED `4785466` failed all five focused regression assertions: wrong `MapUnknown` reason, a
+  second held-walk request ending `Refused`, no translation exception for an unknown envelope field, and two inbox
+  cancellations timing out. GREEN `973ddbd` passed those tests 5/5, Bot 555/555, Network 150/150, and the serial full
+  solution 1,398/1,398 (+4 Bot tests from C4); build had 0 warnings/errors. Format verification and `git diff --check`
+  passed. Exact commands, line references, runner behavior, and test output are in [P2I_REPORT.md](P2I_REPORT.md#section-h--close-final-review-c5-findings).
+- **Limit/status**: No dedicated deterministic test pins admission before `InjectedFrames._gate`; Section G documents
+  why. Reads not yet admitted remain outside the fence; refusal wire correlation remains unavailable. READY for one
+  supervised automatic move to a neighboring map, subject to a fresh independent review and a NEW OWNER GO; not executed
+  in P2I. No live client, production host, Ankama relay, activity, or movement was run.

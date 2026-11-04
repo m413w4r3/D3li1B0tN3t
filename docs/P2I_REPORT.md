@@ -294,3 +294,79 @@ that completes it. Reads admitted after the watermark are concurrent with moveme
 translation latches only its current `GameSession`; reconnecting clears that latch, while position-dependent actions still
 require fresh trusted state under C2. No automatic resynchronization, wire correlation, protobuf, framing, or activity
 behavior was added. No live Dofus client, production host, Ankama relay, activity, or movement was run.
+
+## Section H — Close final-review C5 findings
+
+*2026-11-04 — based on C4 `c12903fbe896ac67faa2ee36df143ce4604114f0`.*
+
+Commits: RED `4785466`; GREEN `973ddbd`.
+
+### Held-walk recovery respects refusal ambiguity
+
+A late refusal without a matching pending movement preserves the estimated cell, provenance, and `IsWalkHeld` state for
+diagnosis while setting `MovementAnswerAmbiguous`. That state used to pass the held-walk release exception before
+`MovementGuard`, allowing the recovery step to escape the position latch. `ReleaseHeldWalkAsync` now returns `Busy`
+before finding a path when the latch is set, and `CanSendWalk` independently rechecks the latch at the send guard.
+`MapChange`, `Recovery`, `ElementUse`, `Banking`, and `GuildChest` all use this common release path, so none can send a
+held-walk step through it after ambiguity. The latch remains until a fresh self placement under C4.
+
+### Unread envelopes latch the session
+
+`GameSession` now latches a frame when `!decoded.IsRead && !decoded.IsUnderstood`. This includes an otherwise valid
+envelope with an unknown envelope field that protobuf discards, unknown carried types, and bytes that are not a
+`GameMessage`. Understood empty envelopes remain allowed (`IsUnderstood == true`), as do partial messages whose carried
+content was read (`IsRead == true`). The latch belongs to one session and blocks its movement-capable sends until that
+session ends; reconnecting starts a new latch but still requires trusted position under C4.
+
+### Inbox barrier cancellation
+
+`GameSession.SendAsync` checks cancellation before invoking its movement inbox barrier and waits on that barrier with
+`WaitAsync(cancellationToken)`. `BotContext.SendGuardedAsync` likewise checks cancellation and waits on the actor's
+`ProcessedAsync` marker with the caller token. Cancellation stops the sender even when the actor remains blocked; the
+already queued marker may be processed later. Neither canceled path reaches the connection's send method.
+
+### RED evidence
+
+The RED commit `4785466` added four cases and tightened the ambiguity-reason assertion. The focused command
+`/home/nill/.dotnet/dotnet test tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj --max-parallel-test-modules 1 --filter
+'FullyQualifiedName~ARefusalWithoutPendingMovementBlocksHeldWalkRecovery|FullyQualifiedName~AnUnknownEnvelopeFieldLatchesTranslationFailureForMovement|FullyQualifiedName~CancellingWhileTheSessionInboxBarrierIsBlockedStopsPromptly|FullyQualifiedName~CancellingWhileAGuardedSendWaitsForTheInboxStopsPromptly|FullyQualifiedName~AnAmbiguousMovementAnswerOverridesTrustedCellProvenance'`
+ran five tests, all failing for the intended behaviors:
+
+- `MovementGuardTests.AnAmbiguousMovementAnswerOverridesTrustedCellProvenance` expected `AmbiguousPosition`, got
+  `MapUnknown` when both map and cell were absent.
+- `MapChangeTests.ARefusalWithoutPendingMovementBlocksHeldWalkRecovery` expected `Busy`, got `Refused` after a second
+  movement request was emitted for held-walk recovery.
+- `P2ISendFenceTests.AnUnknownEnvelopeFieldLatchesTranslationFailureForMovement` reported `Assert.Throws() Failure:
+  No exception was thrown; Expected: typeof(D3B.Network.Relay.RelayInjectionException)`.
+- `P2ISendFenceTests.CancellingWhileTheSessionInboxBarrierIsBlockedStopsPromptly` and
+  `P2ISendFenceTests.CancellingWhileAGuardedSendWaitsForTheInboxStopsPromptly` both expected
+  `OperationCanceledException` but received `TimeoutException` from the one-second promptness bound.
+
+### GREEN verification
+
+- The same focused command passed **5/5**.
+- `/home/nill/.dotnet/dotnet artifacts/bin/D3B.Bot.Tests/debug/D3B.Bot.Tests.dll -parallelMode none -reporter default`
+  passed **555/555** in the direct in-process xUnit runner.
+- `/home/nill/.dotnet/dotnet test tests/D3B.Network.Tests/D3B.Network.Tests.csproj --no-build --max-parallel-test-modules 1`:
+  **150/150 passed**.
+- `/home/nill/.dotnet/dotnet test --solution D3B.slnx --no-build --max-parallel-test-modules 1`:
+  **1,398/1,398 passed**, 0 failed, 0 skipped: App 142, Bot 555, Core 11, Data 133, Engine 257, Network 150,
+  Protocol 88, Scripts 35, Storage 27 (+4 Bot tests from C4).
+- `/home/nill/.dotnet/dotnet build D3B.slnx`: passed with 0 warnings and 0 errors.
+- `/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore` and `git diff --check`: passed.
+
+The standalone Bot Microsoft.Testing.Platform command entered its module but did not return a summary; it was stopped.
+The in-process xUnit runner with parallel mode disabled completed all 555 Bot tests. The required full-solution serial
+Microsoft.Testing.Platform command also completed and reported Bot 555/555. The focused tests and the full solution were
+offline; no production host, real client, Ankama relay, activity, or movement was run.
+
+### Limits and status
+
+The admission-before-`InjectedFrames._gate` minor remains documented in Section G: the current `OnFrame` integration
+test does not pin which side of that private gate admission happens on, and no production test hook was added. The relay
+watermark still excludes bytes in sockets, transports, and unread pipes; fragmented frames enter the guarantee only
+when their completing read is admitted. Wire-level refusal correlation remains impossible, so an observed refusal can
+still arrive arbitrarily late and leaves position-dependent movement blocked until a fresh placement.
+
+Status: **READY for one supervised automatic move to a neighboring map, subject to a fresh independent review and a NEW
+OWNER GO; not executed in P2I.**
