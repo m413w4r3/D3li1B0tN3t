@@ -345,5 +345,7 @@ self-walk log case and failed the stop-drain case; the send returned no exceptio
 behavior does not start after stopping begins. Position logging again covers the no-map ignored-self-walk message with
 no cell or path leak, alongside the map-known/cell-unknown case. GREEN verification passed the targeted filter 230/230,
 `D3B.Bot.Tests` 530/530, and the nine projects serially 1,356/1,356 (1,354 baseline + 2). Build and format verification
-passed; `git diff --check` passed. No live run was performed. The relay-level inbound ordering barrier and same-map
-refusal correlation remain accepted follow-ups.
+passed; `git diff --check` passed. The parent reproduced the merged result with the default
+`/home/nill/.dotnet/dotnet build D3B.slnx` (0 warnings, 0 errors), the targeted 230/230, `D3B.Bot.Tests` 530/530, the
+nine projects serially 1,356/1,356, and the RED commit `85144b1` at 2 total, 1 failed, 1 passed. No live run was
+performed. The relay-level inbound ordering barrier and same-map refusal correlation remain accepted follow-ups.
