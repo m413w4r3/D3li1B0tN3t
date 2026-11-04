@@ -6964,3 +6964,37 @@ Settled questions leave this table, and the decision that settles one says so.
   why. Reads not yet admitted remain outside the fence; refusal wire correlation remains unavailable. READY for one
   supervised automatic move to a neighboring map, subject to a fresh independent review and a NEW OWNER GO; not executed
   in P2I. No live client, production host, Ankama relay, activity, or movement was run.
+
+## D305: Prepare one supervised map transition without widening navigation
+
+*2026-11-04, P2J preparation. Extends D302-D304; no live execution.*
+
+- **Trigger**: `D3B.Host` gains a standard-input reader for exactly `p2j readiness [<source> <target>]` and
+  `p2j move <source> <target>`, registered only with `Supervised:Move:Enabled true`. It is not a default module, so the
+  desktop app never reads it. Nothing starts on a game connection; only an explicit line naming both maps can move.
+- **Scope**: A move requires a fresh trusted server-placed or server-confirmed position, an open P2I translation latch,
+  the explicit source map, a target among the source's four map-data neighbours, and one plain `WorldTransitionType.Scroll`
+  graph step whose requested map is the target. Teleports, zaaps, NPC ways, doors, map actions, scrolls with an action,
+  haven bags, non-neighbours and multi-map paths are refused. `MapChange.ChangeMapAsync` is called once with the
+  prevalidated `WorldStep`; `WorldTravel` is not used.
+- **Single use**: `SupervisedMoveSession` consumes the authorization with `Interlocked.Exchange` before any check. A
+  BLOCKED, FAILED or INTERRUPTED first request still consumes it; later `move` lines return `ALREADY_CONSUMED` without a
+  send. A new attempt restarts the host under a new owner GO. PASS requires `MapChangeOutcome.Changed`, the target map, a
+  known cell and trusted server placement or confirmation.
+- **Readiness**: `p2j readiness` reports `MovementGuard`'s reason separately from `translation_blocked`, and reports
+  whether the latch was closed at the first trusted placement. It sends no request and does not consume the move.
+- **P2E compatibility**: The P2I latch condition `!IsRead && !IsUnderstood` is exactly the condition that produced P2E's
+  "not read" bucket, so all 210 P2E not-read frames would have latched. P2E retained no per-frame order, so whether they
+  preceded placement is UNKNOWN; GO 1 measures it live and GO 2 is forbidden while the latch is closed. The fail-closed
+  latch is not weakened.
+- **Queued-send closure**: A movement frame queued behind the relay's injection gate now carries a token linked to the
+  translation latch, so it is withdrawn instead of written when the latch closes before the relay claims it. The residual
+  race at the claim/write instant is documented; the one-shot bound and placement verification are unchanged.
+- **Evidence**: 32 focused movement tests, 2 module tests, and 1 P2I queued-send regression test cover passive/no-command behavior, unknown and held
+  positions, latch before/after placement, non-neighbour/door/map-action/haven targets, map-action on the approach path, last-walk-end-only exit, one-scroll PASS, walk + one map
+  change only, unexpected destination, refusal, timeout, all interruption kinds, and second requests after success,
+  timeout and a first BLOCKED request, plus two concurrent move requests. Requests are asserted through `TestConnection.Sent`. Build passed with 0
+  warnings/errors; the serial full suite passed 1,433/1,433 (baseline 1,398); format verification and `git diff --check`
+  passed. Details are in [P2J_REPORT.md](P2J_REPORT.md).
+- **Boundary**: No live client, host, relay, Ankama connection, activity, or movement was run, and nothing was pushed.
+  READY FOR GO 1 (passive observation) only; GO 2 remains conditional on GO 1 PASS and a separate owner GO.

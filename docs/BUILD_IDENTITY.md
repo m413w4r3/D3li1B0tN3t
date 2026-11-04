@@ -110,3 +110,24 @@ The protocol schema is byte-identical to `3.7.12.12` (`e383c947…`), and the re
 The P2D apphost was published from commit `c9c0d5e0660ecbd373380f1f57f2015b6f459125` and installed at `/home/nill/.local/share/D3B/apphost`. Its launcher is 78,192 B `de956557…`; `D3B.Host.dll` 5,632 B `c6589b05…`, `D3B.Network.dll` 112,640 B `279e2cf3…`, `D3B.Bot.dll` 650,240 B `a71bdb88…`; informational version `0.0.0-alpha.0.12+c9c0d5e…`; directory `0700`, launcher `0700`, payload `0600`; no capability. The P2B publication is backed up at `~/.local/share/D3B/private-backups/apphost-p2b-20261103T162503Z` with its verified 369-file manifest. Every `D3B.*.dll` in the live set differs from the P2B backup; no old P2B managed DLL is mixed in.
 
 **P2D update to R02:** `PackSource` now refuses a pack whose `ClientBuildDate` differs from the installed client's build date, even when the version string matches. `ClientRedirect` now compares the version file's version and build date with the installed build and calls `IHostApplicationLifetime.StopApplication()` on a change, so the host stops instead of relaying a protocol it was not prepared for; the normal stop preserves the launcher's new Ankama configuration. The full binary SHA-256 fingerprint is still not enforced at runtime, and `PackInfo.Fingerprint` is the extractor input fingerprint, not the binary identity. A same-version, same-build-date, different-binary build remains a manual preflight gate.
+
+## P2J apphost identity (2026-11-04)
+
+The P2J preparation published a fresh Linux apphost from the exact code commit
+`bef5066d0c17cb2d89d9ef0d5fd98185337c0449` on local branch `p2j-supervised-move` (not pushed) and
+installed it at `/home/nill/.local/share/D3B/apphost` as one verified set. The installed client
+remains `3.7.13.17` with the identity above; no client file or launcher was touched.
+
+| File | Size | SHA-256 |
+| --- | ---: | --- |
+| `D3B.Host` (launcher) | 78,192 B | `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0` |
+| `D3B.Host.dll` | 5,632 B | `b4c48761cecec769e314d9197eb5fd99842c72c5cb53f913eefab83c0f0da39e` |
+| `D3B.Network.dll` | 118,272 B | `6789048fb7befaa29b00d0b4f4d543d9e0998d884c4513178140e8f4921496b0` |
+| `D3B.Bot.dll` | 784,896 B | `3debd3ce1d8522a0363d06ca85d642d43e8c709266216e8e9e4ea71ec48df8fa` |
+
+The informational version is `0.0.0-alpha.0.56+bef5066d0c17cb2d89d9ef0d5fd98185337c0449`. The
+launcher is a stripped x86-64 ELF PIE; directory `0700`, launcher `0700`, payload `0600`, owner
+`nill`; no capability. The complete 369-file manifest matches the publish output. The P2F apphost is
+preserved at `~/.local/share/D3B/private-backups/apphost-p2f-20261104T173953Z` and
+`apphost-p2f-live-20261104T180525Z`. No host, relay, client, or movement was started during the
+publication. See [P2J_REPORT](P2J_REPORT.md).

@@ -5,8 +5,154 @@ supervised game session, and stop/restore on `3.7.13.17`. Frame decoding was mix
 completed and passed visual map/cell validation on Dofus Linux `3.7.13.17`; see
 [P2G_REPORT.md](P2G_REPORT.md). The P2F procedure below is retained as a historical, reproducible
 runbook. Any further live session requires a new owner GO, including the future one-neighbour
-automated move; P2G did not authorize or execute that move. The 443 route remains **BLOCKED** until
-explicit owner authorization for the dedicated apphost capability; no capability has been applied.
+automated move; P2G did not authorize or execute that move. P2J subsequently prepared the single
+one-neighbour trigger and its passive readiness checks without executing them; see
+[P2J_REPORT.md](P2J_REPORT.md) and the P2J GO 1 / GO 2 procedure below. The 443 route remains
+**BLOCKED** until explicit owner authorization for the dedicated apphost capability; no capability
+has been applied.
+
+## P2J — one supervised map transition (prepared, not executed)
+
+**Status: PREPARED / NOT EXECUTED.** P2J added a disabled-by-default, single-use trigger for one
+map transition to a direct neighbour, plus a passive readiness check that distinguishes the P2I
+translation latch from `MovementGuard`. No live session, no movement and no push occurred during
+P2J preparation. The P2J apphost identity is recorded in [P2J_REPORT.md](P2J_REPORT.md).
+
+The P2E aggregate recorded **210 not read** frames out of 848. The P2I latch condition
+(`!IsRead && !IsUnderstood`) is exactly the condition that produced that bucket, so all 210 would
+have latched movement for the session. The retained P2E evidence does **not** record whether they
+came before or after the first placement. GO 1 measures that live and sends nothing; GO 2 is
+forbidden until GO 1 shows the latch open.
+
+### The host command
+
+The reader exists only in `D3B.Host` and only when `--Supervised:Move:Enabled true` is present. Keep
+the host attached to the terminal: commands are read from its standard input. The desktop app does
+not register the reader.
+
+```sh
+/home/nill/.local/share/D3B/apphost/D3B.Host \
+  --Client:Directory /home/nill/.config/Ankama/Dofus-dofus3 \
+  --Data:Directory /home/nill/.local/share/D3B/data \
+  --Network:Redirect:Directory /home/nill/.local/share/D3B/client \
+  --Network:Captures:Enabled false \
+  --Fights:Alone false \
+  --Network:Address 127.0.13.59 \
+  --Network:Ports:0 5555 \
+  --Network:Game:Ports:0 5556 \
+  --Supervised:Move:Enabled true \
+  --Logging:LogLevel:D3B.Bot.Network.GameSession Debug \
+  --Logging:LogLevel:D3B.Bot.Runtime.BotActor Information
+```
+
+The host prints one banner line:
+
+```text
+P2J supervised move enabled. Commands: p2j readiness [<sourceMapId> <targetMapId>] | p2j move <sourceMapId> <targetMapId>
+```
+
+The commands are deliberately small:
+
+| Command | Effect |
+| --- | --- |
+| `p2j readiness` | Prints the passive session/position readiness. Sends nothing. Does not consume the move. |
+| `p2j readiness <source> <target>` | Prints the readiness and the plan for that pair. Sends nothing. Does not consume. |
+| `p2j move <source> <target>` | Consumes the one authorization, then attempts exactly one plain scroll to the target. Every later `move` in the same host process is refused. |
+
+### GO 1 — observation (no movement)
+
+Perform every preflight from [RUNTIME_ARTIFACTS](RUNTIME_ARTIFACTS.md) and the P2J identity in
+[P2J_REPORT](P2J_REPORT.md). In particular: client closed, no host/relay/updater, client identity
+`3.7.13.17` with the recorded hashes, staged pack/schema/mapping verified, private version-file
+backup present, ports 5555/5556 free, captures off, `Fights:Alone=false`, no profile/activity/
+schedule able to act, P2J apphost installed as one verified set with private permissions and no
+capability.
+
+1. Start the host with the command above. Keep its terminal in the foreground.
+2. Launch Dofus manually and select the character. Do not start an activity or a profile.
+3. Wait for the character to be visible and placed. Then type exactly:
+
+   ```text
+   p2j readiness
+   ```
+
+4. Compare the printed line with the visible game. A passing line has:
+
+   ```text
+   connected=true session=true translation_blocked=false
+   translation_blocked_at_first_placement=false|unknown
+   paused=false acting=false haven_bag=false guard=None
+   map=<visible map> cell=<visible cell> provenance=ServerPlaced
+   trusted=true can_move=true reason=READY
+   ```
+
+   - `translation_blocked=true` or `reason=TRANSLATION_LATCH_CLOSED` means an unread frame closed
+     the session's movement authorization. **GO 1 is BLOCKED.** Stop; do not attempt a move. The
+     fail-closed latch must not be disabled or loosened. Preserve only sanitized aggregates and plan
+     a mapping improvement in a later mission.
+   - `translation_blocked_at_first_placement=true` confirms the latch was already closed when the
+     first trusted placement was observed. Same STOP.
+   - Any guard other than `None`, any `trusted=false`, or a map/cell disagreement with the visible
+     client is a STOP.
+5. Optionally check the proposed pair without consuming the move:
+
+   ```text
+   p2j readiness <sourceMapId> <targetMapId>
+   ```
+
+   A passing plan prints `P2J PLAN ready=true reason=PLAN_READY ... transition=Scroll`. Only a
+   direct map-data neighbour with a plain scroll is accepted. `FORBIDDEN_TRANSITION`,
+   `TARGET_NOT_NEIGHBOUR`, `TRANSITION_UNAVAILABLE`, or any other reason is a STOP.
+6. Confirm that the host has logged no `D3B sent` movement request and that no map change occurred.
+   The only expected lines are the banner, readiness/plan lines, and the ordinary relay/state logs.
+
+**GO 1 PASS** requires a trusted server-placed position matching the visible client, an open
+translation latch, `guard=None`, and a `PLAN_READY` pair. GO 1 never authorizes a move.
+
+### GO 2 — the single move
+
+Only after GO 1 PASS and a separate owner GO:
+
+1. The supervisor names one source map and one directly adjacent target map, and confirms both on
+   the visible client. The pair must be the one checked in GO 1.
+2. Type exactly once:
+
+   ```text
+   p2j move <sourceMapId> <targetMapId>
+   ```
+
+3. Wait for the result line and compare it with the game:
+
+   ```text
+   P2J MOVE outcome=PASS reason=PASS ... transition=Scroll
+   ... end_map=<target> end_cell=<visible cell>
+   end_provenance=ServerPlaced end_trusted=true
+   ```
+
+   **PASS** requires the target map, a server-placed or server-confirmed cell, and a trusted
+   position. A shown walk or an estimated cell is not confirmation.
+4. Any other outcome is a STOP:
+
+   | Outcome | Meaning | Action |
+   | --- | --- | --- |
+   | `BLOCKED` | No map-change request went | Stop. Do not retry. |
+   | `FAILED` | A request went but the target/placement was not confirmed | Stop; the character may have moved. Do not retry. |
+   | `INTERRUPTED` | Player, fight, disconnect, host stop or cancellation | Stop. Do not retry. |
+   | `ALREADY_CONSUMED` | The one authorization was used | Stop. |
+
+5. Do not type a second `move`, even after a `BLOCKED` or `FAILED` result. The process retains the
+   used authorization; a new attempt requires restarting the host and a new owner GO.
+6. Stop manually, close the client, stop the host, and verify the Ankama configuration is restored,
+   no redirect remains, no listener remains, and the private version-file backup still matches.
+
+### P2J result criteria
+
+| Result | Criterion |
+| --- | --- |
+| GO 1 PASS | Server-placed map/cell matches the visible client; `guard=None`; `translation_blocked=false`; plan is a plain `Scroll` to a direct neighbour. |
+| GO 1 BLOCKED | Latch closed (including first-placement `true`), position untrusted, guard refusal, missing plan, identity or preflight failure. **No GO 2.** |
+| GO 2 PASS | Exactly one `p2j move`; `outcome=PASS`; target map and server placement/trust confirmed; no second transition or retry. |
+| GO 2 BLOCKED/FAILED/INTERRUPTED | Any other result or mismatch. STOP; preserve sanitized evidence; no improvised recovery. |
 
 ## P2F visual validation procedure
 

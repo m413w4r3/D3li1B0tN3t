@@ -174,6 +174,28 @@ This command was run and exited 0 in 61.53 seconds. It extracted 17,722 maps; `d
 
 An earlier Phase 0 schema attempt exited 1 after opening `Unity 6000.3.16f1, IL2CPP metadata version 39`: `The schema could not be read: mew: field 1 is written 0 times.` This is historical evidence; ABI-aware register handling resolved the failure. The final Linux schema generation succeeded: 170,287 B, SHA-256 `e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0`; connection schema has 37 messages, 9 enums, and 92 fields; game schema has 2,175 messages, 423 enums, and 6,302 fields. Explicit Unity version selection and automatic detection both work. Windows is unverified. The 10-minute allowance is a suggested supervision window, not a recorded timeout.
 
+## P2J supervised one-transition results
+
+The P2J preparation added 32 movement tests and 2 module tests. The focused classes are
+`D3B.Bot.Tests.Movement.SupervisedMoveTests` and
+`D3B.Bot.Tests.Hosting.SupervisedMoveModuleTests`; they drive the real `TestPlay` bots and
+`TestConnection` relay surface and assert the requests actually recorded in `connection.Sent`.
+
+| Check | Result |
+| --- | --- |
+| `/home/nill/.dotnet/dotnet build D3B.slnx` | PASS, 0 warnings, 0 errors |
+| `SupervisedMoveTests` | 32/32 |
+| `SupervisedMoveModuleTests` | 2/2 |
+| Full serialized suite | 1,433/1,433, 0 failed, 0 skipped (baseline 1,398) |
+| `dotnet format --verify-no-changes --no-restore` | PASS, exit 0 |
+| `git diff --check` | PASS, exit 0 |
+
+The tests cover passive readiness, no connection-triggered action, a queued movement frame withdrawn when the translation latch closes, unknown and held positions, the
+translation latch before and after first placement, non-neighbour/door/map-action/haven targets, map-action on the approach path, last-walk-end-only exit,
+one-scroll PASS, walk + one map change, unexpected destination, walk refusal, timeout, every
+interruption kind, and second requests after success, timeout and a first BLOCKED request. No live
+client, host, relay, or movement was run.
+
 ## Failure modes and test rules
 
 - **Wrong SDK:** system `dotnet` 10.0.114 failed against the required SDK. Check `dotnet --version` and use `/home/nill/.dotnet/dotnet` for the Phase 0 environment.
