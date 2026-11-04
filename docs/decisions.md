@@ -6899,3 +6899,23 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Limit**: A refusal can still arrive arbitrarily late, including while a later same-map movement is pending. Without
   wire correlation this cannot be proven stale or assigned to a request. After it is observed, position-dependent
   automated actions remain blocked until fresh placement; no live behavior is claimed.
+
+## D302: Recheck observation failure at injection and latch unread game frames
+
+*2026-11-04, P2I C3, completing D300 after the independent D1 review.*
+
+- **Final relay check**: A completed watermark wait is not sufficient by itself because observation can fail while a
+  movement sender is at the inbox barrier or waiting for the client injection gate. The tracker publishes sticky failure
+  state and a cancellation token. `InjectedFrames.Drain()` checks that state under its ordering gate immediately before
+  claiming and writing a frame; a failed connection cannot inject after that checkpoint. The tracker releases its lock
+  before cancelling the token.
+- **Unread frames**: `GameSession` blocks movement for the session if a frame has no game envelope or carries content the
+  mapping cannot read. Empty understood envelopes and partial messages whose content was read do not latch. A new session
+  clears the latch; it does not make the character's position trusted without the observations required by D301.
+- **Evidence**: RED `40fb7f0` failed 3/17 network tests and 3/13 Bot send-fence tests with the expected missing
+  `RelayInjectionException`. GREEN `d0d15ec` passed focused tests 17/17 and 13/13, Bot 547/547, Network 150/150, and the
+  serial solution suite 1,390/1,390 (+9 from D301). Build, format verification, and `git diff --check` passed. Exact
+  scenarios, commands, runner behavior, and limits are in [P2I_REPORT.md](P2I_REPORT.md#section-g--close-the-observation-failure-window-and-unread-translation-c3).
+- **Boundary**: A frame already claimed under the injection gate is concurrent with a later failure. Data not admitted by
+  `ReadAsync` remains outside the watermark, and an unreadable frame blocks only its current session. No wire-level
+  correlation or automatic resynchronization is claimed. No live client, host, relay, activity, or movement was run.

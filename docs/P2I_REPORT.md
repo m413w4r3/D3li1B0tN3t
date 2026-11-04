@@ -162,3 +162,91 @@ current map, or a new session followed by that placement observation. This polic
 refusal; it cannot prevent a still-later refusal from being mistaken for another request. No protocol, framing, relay,
 or movement-refusal correlation semantics were added. No live client, production host, Ankama relay, activity, or
 movement was run.
+
+## Section G — Close the observation failure window and unread translation (C3)
+
+*2026-11-04 — based on C2 `8dd735ffd7b0bc3ba84e5d4083139044559de396`.*
+
+Commits: RED `40fb7f0`; GREEN `d0d15ec`.
+
+### D1 finding and final injection checkpoint
+
+The relay watermark wait alone was not a durable authorization: observation could fail after the wait returned while a
+movement sender was still at the bot inbox barrier or waiting for the client's injection gate. `RelayObservationTracker`
+now exposes a sticky `IsFailed` state and a `Failed` token. Failure state is set under the tracker lock; token cancellation
+runs after that lock is released so cancellation callbacks cannot re-enter the tracker while its gate is held.
+
+`RelayConnection.SendToServerAsync` rejects an already failed tracker and links the caller token with the tracker's failure
+token. It gives `InjectedFrames` a fast synchronous validator. `Drain()` checks that validator under the injection gate,
+immediately before claiming and writing a queued frame. A failure after the observation wait but before that checkpoint
+fails the frame without writing it. A failure after the frame has been claimed is concurrent with an injection that has
+already linearized at the checkpoint. Caller cancellation remains an `OperationCanceledException`; tracker failure maps
+to `RelayInjectionException`.
+
+### Translation latch
+
+`GameSession` now latches movement authorization closed for its lifetime when a decoded frame has no `GameMessage`
+envelope, or carries a type that is not readable (`CarriedType != null && !IsRead`). The latch is checked before and after
+the relay observation wait, and again immediately before encoding a movement-capable send. That last check covers a
+translation failure discovered during the inbox barrier after the relay wait returned. A fresh `GameSession` starts with a
+clear latch; it does not bypass the existing position-trust requirements.
+
+An understood envelope with no carried content does not latch failure. A partial message with readable content
+(`IsRead == true`) also does not latch failure. An unknown carried type or bytes that do not parse as `GameMessage` do
+latch. This deliberately blocks movement for the rest of the session when the active mapping cannot show the bot all
+content the server sent.
+
+### RED evidence
+
+The RED commit `40fb7f0` added the network and bot regressions with only the minimal compile-time surface. The focused
+network run had **17 tests, 3 failed, 14 passed**:
+
+- `InjectedFramesTests.AQueuedFrameIsRejectedWhenItsConnectionIsNoLongerObservable` failed with `Assert.Throws()
+  Failure: No exception was thrown; Expected: typeof(D3B.Network.Relay.RelayInjectionException)`.
+- `RelayObservationTrackerTests.FailingTheTrackerExposesStickyFailureAndCancelsItsToken` failed with `Assert.True()
+  Failure; Expected: True; Actual: False` for the failure token.
+- `RelayObservationTests.AServerObservationFailureAfterTheFencePreventsLaterInjection` failed with the same
+  `Assert.Throws()` / `No exception was thrown` result after the server pump logged an unframed read.
+
+The final 13-case `P2ISendFenceTests` run against the C2 `GameSession` and fake relay had **3 failed, 10 passed**.
+`ARelayObservationFailureDuringTheInboxBarrierPreventsMovementInjection`,
+`AnUnknownCarriedTypeDuringTheInboxBarrierLatchesFailureForMovement`, and
+`BytesWithoutAGameMessageLatchTranslationFailureForMovement` each reported `Assert.Throws() Failure: No exception was
+thrown; Expected: typeof(D3B.Network.Relay.RelayInjectionException)`. The understood empty envelope and partial-but-read
+cases passed, confirming they must remain allowed.
+
+### GREEN verification
+
+- Focused relay observation, tracker, and injection tests: **17/17 passed**.
+- `P2ISendFenceTests`: **13/13 passed**.
+- `D3B.Network.Tests`: **150/150 passed**; `D3B.Bot.Tests`: **547/547 passed** in the required full solution run.
+- `/home/nill/.dotnet/dotnet build D3B.slnx`: passed with 0 warnings and 0 errors.
+- `/home/nill/.dotnet/dotnet test --solution D3B.slnx --no-build --max-parallel-test-modules 1`:
+  **1,390/1,390 passed**, 0 failed, 0 skipped. Counts were App 142, Bot 547, Core 11, Data 133, Engine 257,
+  Network 150, Protocol 88, Scripts 35, Storage 27. This is +5 Bot and +4 Network tests from C2.
+- `/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore` and `git diff --check` passed.
+
+The standalone Bot `dotnet test` invocation did not consistently return a summary in this environment; a detailed standalone
+run completed 547/547 once, while later standalone attempts were stopped after no summary appeared. The required full
+solution command completed and reported the Bot module at 547/547. No tests were changed to work around this runner
+behavior.
+
+### Limits and unpinned admission check
+
+The real `TestRelay` regression proves that the fence can return, a later server-side unframed read can fail observation,
+and a subsequent send then fails without reaching the upstream server. The `InjectedFrames` unit test proves a queued
+frame whose validator has turned false leaves the writer empty. Bot tests prove the same failure while the inbox barrier is
+held, and prove the translation latch for unknown types, malformed game bytes, empty understood envelopes, and partial
+readable messages. Several waiters on one tracker watermark complete together.
+
+No separate test pins that ticket admission precedes waiting for `InjectedFrames._gate`. The gated `OnFrame` integration
+tests stop after the client pump has acquired that gate; they cannot distinguish whether admission happened just before
+or just after it. Exposing a test hook at the private gate boundary would add a production seam solely for this assertion.
+The implementation order remains directly visible in `RelayConnectionHandler.PumpAsync`: it calls `Admit()` immediately
+after the non-empty `ReadAsync` result and before `await injected.EnterAsync()`.
+
+The watermark still excludes bytes in a socket, transport, or unread pipe. A partial frame is covered only by the read
+that completes it. Reads admitted after the watermark are concurrent with movement and outside that cutoff. An unreadable
+translation latches only its current `GameSession`; reconnecting clears that latch, while position-dependent actions still
+require fresh trusted state under C2. No automatic resynchronization, wire correlation, protobuf, framing, or activity
+behavior was added. No live Dofus client, production host, Ankama relay, activity, or movement was run.
