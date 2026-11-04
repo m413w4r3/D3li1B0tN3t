@@ -73,6 +73,7 @@ public sealed class BotActor : IAsyncDisposable
     private ImmutableHashSet<long> _noTeleportFrom = [];
     private ImmutableHashSet<int> _noNpcWays = [];
     private int _fightsBegun;
+    private int _handlerFailures;
     private int _lastEndedFight;
     private long _placedAt;
     private long _useEndedAt = NeverEnded;
@@ -372,8 +373,9 @@ public sealed class BotActor : IAsyncDisposable
     internal Task ProcessedAsync()
     {
         var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handlerFailures = Volatile.Read(ref _handlerFailures);
 
-        if (!_inbox.Writer.TryWrite(new Processing(processed)))
+        if (!_inbox.Writer.TryWrite(new Processing(processed, handlerFailures)))
             processed.TrySetResult();
 
         return processed.Task;
@@ -453,6 +455,7 @@ public sealed class BotActor : IAsyncDisposable
             catch (Exception exception)
             {
                 // A message the state handlers fail on must not stop the bot from seeing the next.
+                Interlocked.Increment(ref _handlerFailures);
                 BotLog.HandlerFailed(_log, Key.CharacterId, exception);
             }
         }
@@ -506,8 +509,15 @@ public sealed class BotActor : IAsyncDisposable
                     break;
                 }
             case Processing processing:
-                processing.Processed.TrySetResult();
-                break;
+                {
+                    var failures = Volatile.Read(ref _handlerFailures);
+
+                    if (processing.HandlerFailures > 0 || failures != processing.HandlerFailures)
+                        processing.Processed.TrySetException(new InvalidOperationException("A bot inbox handler failed before movement authorization."));
+                    else
+                        processing.Processed.TrySetResult();
+                    break;
+                }
             case MovementRequested movement:
                 if (movement.MapId is null || movement.MapId == _state.MapId)
                     _state = _state with { PendingMovementMapId = movement.MapId };
@@ -909,7 +919,7 @@ public sealed class BotActor : IAsyncDisposable
 
     private sealed record Settling(TaskCompletionSource Settled) : Input;
 
-    private sealed record Processing(TaskCompletionSource Processed) : Input;
+    private sealed record Processing(TaskCompletionSource Processed, int HandlerFailures) : Input;
 
     private sealed record MovementRequested(long? MapId) : Input;
 

@@ -172,6 +172,7 @@ public sealed class BotContext
         var requestedMapId = State.MapId;
 
         await WaitUntilDrawnAsync(cancellationToken).ConfigureAwait(false);
+        await _behavior.Session.WaitForObservedFramesAsync(cancellationToken).ConfigureAwait(false);
         await _bot.ProcessedAsync().ConfigureAwait(false);
 
         if (!canSend())

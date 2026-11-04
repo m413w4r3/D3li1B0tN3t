@@ -16,11 +16,13 @@ public interface IRelayConnection
     /// <remarks>
     /// The cutoff covers non-empty reads returned by either relay pump before this call's snapshot. A complete frame in
     /// those reads has been shown once the wait completes. Bytes still in a socket, transport, or unread pipe are outside
-    /// the cutoff, and a partial frame is not covered until a later read completes it.
+    /// the cutoff, and a partial frame is not covered until a later read completes it. Reads admitted after the snapshot
+    /// are concurrent with the send and do not extend this wait.
     /// </remarks>
     /// <param name="cancellationToken">Stops waiting.</param>
     /// <returns>A task that completes once the admitted reads were observed.</returns>
     /// <exception cref="RelayInjectionException">The connection ended or its stream could not be observed as frames.</exception>
+    /// <exception cref="OperationCanceledException">The caller cancelled its wait.</exception>
     Task WaitForObservedFramesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Sends the server a frame of D3B's own, between two of the client's frames.</summary>

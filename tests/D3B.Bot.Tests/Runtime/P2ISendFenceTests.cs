@@ -100,6 +100,77 @@ public sealed class P2ISendFenceTests
     }
 
     [Fact]
+    public async Task AFramePostedAfterTheProcessingMarkerIsOutsideThatMovementCutoff()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(300);
+        var wakes = 0;
+        var markerWakeEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gateEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseWake = new ManualResetEventSlim();
+        using var releaseGate = new ManualResetEventSlim();
+        using var waiterCancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+
+        var waiter = bot.WaitUntilAsync(
+            _ =>
+            {
+                if (Interlocked.Increment(ref wakes) == 4)
+                {
+                    markerWakeEntered.TrySetResult();
+
+                    if (!releaseWake.Wait(TimeSpan.FromSeconds(10)))
+                        throw new TimeoutException("The test did not release the actor's inbox.");
+                }
+
+                return false;
+            },
+            waiterCancellation.Token);
+        await bot.ProcessedAsync();
+
+        var sending = bot.RunAsync(
+            async (context, cancellationToken) => await context.SendGuardedAsync(
+                new MapChangeRequest { MapId = (int)TestPlay.EastMapId },
+                () =>
+                {
+                    gateEntered.TrySetResult();
+
+                    if (!releaseGate.Wait(TimeSpan.FromSeconds(10)))
+                        throw new TimeoutException("The test did not release the movement guard.");
+
+                    return MovementGuard.IsAllowed(context, TestPlay.MapId);
+                },
+                cancellationToken),
+            TestContext.Current.CancellationToken);
+
+        try
+        {
+            await Task.WhenAll(
+                markerWakeEntered.Task.WaitAsync(TestContext.Current.CancellationToken),
+                gateEntered.Task.WaitAsync(TestContext.Current.CancellationToken));
+
+            // This frame is posted behind the already handled Processing marker, while its sender is paused at the gate.
+            connection.Server(new MapCurrentEvent { MapId = TestPlay.EastMapId });
+            releaseGate.Set();
+
+            Assert.True(await sending);
+            Assert.Equal(TestPlay.MapId, bot.State.MapId);
+            Assert.Single(connection.Sent);
+        }
+        finally
+        {
+            releaseGate.Set();
+            releaseWake.Set();
+            waiterCancellation.Cancel();
+        }
+
+        await bot.ProcessedAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiter);
+
+        Assert.Equal(TestPlay.EastMapId, bot.State.MapId);
+        Assert.Single(connection.Sent);
+    }
+
+    [Fact]
     public async Task ARelayObservationFailurePreventsMovementInjection()
     {
         await using var play = new TestPlay();
@@ -120,6 +191,73 @@ public sealed class P2ISendFenceTests
             TestContext.Current.CancellationToken));
 
         Assert.Equal(0, barriers);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task CancellingTheRelayWaitPreventsMovementInjection()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(300);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+
+        connection.Relay.ObservationWait = async cancellationToken =>
+        {
+            entered.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        };
+
+        var sending = connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            cancellation.Token);
+
+        await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sending);
+
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task ClosingTheConnectionDuringTheRelayWaitPreventsMovementInjection()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(300);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        connection.Relay.ObservationWait = async cancellationToken =>
+        {
+            entered.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        };
+
+        var sending = connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken);
+
+        await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        connection.Close();
+
+        await Assert.ThrowsAsync<RelayInjectionException>(() => sending);
+
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AnInboxHandlerFailureBeforeTheMovementMarkerFailsClosed()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(300);
+
+        // A null attached state reaches the actor's normal handler catch and proves the barrier does not acknowledge it.
+        bot.Attach(connection.Session, null!);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken));
+
         Assert.Empty(connection.Sent);
     }
 

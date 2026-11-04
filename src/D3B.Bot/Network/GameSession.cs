@@ -75,6 +75,11 @@ public sealed class GameSession : IConnectionInterceptor
         }
     }
 
+    internal Task WaitForObservedFramesAsync(CancellationToken cancellationToken)
+    {
+        return _connection.WaitForObservedFramesAsync(cancellationToken);
+    }
+
     private GameSession(IRelayConnection connection, ProtocolTranslation translation, GameAccounts accounts, IReadOnlyList<IGameObserver> observers, ILogger log)
     {
         _connection = connection;
@@ -129,8 +134,13 @@ public sealed class GameSession : IConnectionInterceptor
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (MovementRequests.IsMovementCapable(request) && SendBarrier is { } barrier)
-            await barrier().ConfigureAwait(false);
+        if (MovementRequests.IsMovementCapable(request))
+        {
+            await WaitForObservedFramesAsync(cancellationToken).ConfigureAwait(false);
+
+            if (SendBarrier is { } barrier)
+                await barrier().ConfigureAwait(false);
+        }
 
         if (SendGate is { } gate && !gate(request))
             throw new InvalidOperationException("The request is not allowed from the current bot state.");

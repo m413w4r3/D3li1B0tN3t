@@ -4,6 +4,7 @@ namespace D3B.Network.Relay;
 internal sealed class RelayConnection : IRelayConnection
 {
     private readonly InjectedFrames _injected;
+    private readonly RelayObservationTracker _observation;
 
     public string Id { get; }
 
@@ -11,12 +12,13 @@ internal sealed class RelayConnection : IRelayConnection
 
     public CancellationToken Closed { get; }
 
-    public RelayConnection(string id, RelayRoute route, InjectedFrames injected, CancellationToken closed)
+    public RelayConnection(string id, RelayRoute route, InjectedFrames injected, RelayObservationTracker observation, CancellationToken closed)
     {
         Id = id;
         Route = route;
         Closed = closed;
         _injected = injected;
+        _observation = observation;
     }
 
     public Task SendToServerAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken = default)
@@ -26,6 +28,6 @@ internal sealed class RelayConnection : IRelayConnection
 
     public Task WaitForObservedFramesAsync(CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        return _observation.WaitAsync(cancellationToken);
     }
 }
