@@ -1,6 +1,8 @@
 using D3B.Bot.Movement;
+using D3B.Bot.Characters;
 using D3B.Bot.Runtime;
 using D3B.Bot.Tests.Network;
+using D3B.Network.Relay;
 using D3B.Protocol.Game;
 
 namespace D3B.Bot.Tests.Runtime;
@@ -105,6 +107,107 @@ public sealed class P2HSendBarrierTests
 
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task QueuedAttachAndPlacementCannotRestoreMovementAuthorizationWhileStopping()
+    {
+        var observer = new RecordingObserver();
+        await using var play = new TestPlay([observer]);
+        var (connection, bot) = await play.EnterAsync(300);
+        var expectationRegistered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var expectationEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reattached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseExpectation = new ManualResetEventSlim();
+        using var releaseWaiter = new ManualResetEventSlim();
+
+        var behavior = bot.RunAsync(
+            async (context, token) =>
+            {
+                context.Expect((_, message, _) =>
+                {
+                    if (message is KamasUpdateEvent)
+                    {
+                        expectationEntered.TrySetResult();
+
+                        if (!releaseExpectation.Wait(TimeSpan.FromSeconds(10)))
+                            throw new TimeoutException("The test did not release the actor's inbox.");
+                    }
+
+                    return false;
+                });
+                expectationRegistered.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+
+                return true;
+            },
+            TestContext.Current.CancellationToken);
+
+        await expectationRegistered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await bot.ProcessedAsync();
+        connection.Server(new KamasUpdateEvent { Kamas = 1 });
+        await expectationEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        var secondConnection = play.Connect(TestPlay.Account);
+        var secondSession = secondConnection.Session;
+        var initialState = bot.State;
+        var placedState = initialState with
+        {
+            MapId = TestPlay.NorthMapId,
+            Cell = 350,
+            Provenance = CellProvenance.ServerPlaced,
+        };
+        secondSession.SendGate = request => bot.CanSendRawRequest(secondSession, request);
+        secondSession.SendBarrier = bot.ProcessedAsync;
+        bot.Attach(secondSession, placedState);
+        bot.See(secondSession, RelayDirection.FromServer, new MapCurrentEvent { MapId = TestPlay.NorthMapId });
+        bot.See(secondSession, RelayDirection.FromServer, TestPlay.Information(350, TestPlay.NorthMapId));
+
+        var reattachWaiter = bot.WaitUntilAsync(
+            current =>
+            {
+                if (current.State.MapId != TestPlay.NorthMapId || current.State.Cell != 350)
+                    return false;
+
+                reattached.TrySetResult();
+
+                if (!releaseWaiter.Wait(TimeSpan.FromSeconds(10)))
+                    throw new TimeoutException("The test did not release the state waiter.");
+
+                return true;
+            },
+            TestContext.Current.CancellationToken);
+
+        var stopping = bot.DisposeAsync().AsTask();
+        releaseExpectation.Set();
+        await Task.WhenAny(reattached.Task, stopping).WaitAsync(TestContext.Current.CancellationToken);
+
+        Exception? sendException;
+
+        if (reattached.Task.IsCompleted)
+        {
+            sendException = await Record.ExceptionAsync(() => secondSession.SendAsync(
+                new ObjectUseRequest { Uid = 50 },
+                TestContext.Current.CancellationToken));
+        }
+        else
+        {
+            await stopping;
+            sendException = await Record.ExceptionAsync(() => secondSession.SendAsync(
+                new ObjectUseRequest { Uid = 50 },
+                TestContext.Current.CancellationToken));
+        }
+
+        releaseWaiter.Set();
+        await stopping;
+        await Assert.ThrowsAsync<BotInterruptedException>(() => behavior);
+        await Record.ExceptionAsync(() => reattachWaiter);
+
+        Assert.IsType<InvalidOperationException>(sendException);
+        Assert.Empty(secondConnection.Sent);
+        Assert.False(bot.IsConnected);
+        Assert.Equal(initialState.MapId, bot.State.MapId);
+        Assert.Equal(initialState.Cell, bot.State.Cell);
     }
 
     [Fact]

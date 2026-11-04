@@ -107,6 +107,29 @@ public sealed class PositionLoggingTests
     }
 
     [Fact]
+    public async Task ASelfWalkWithoutAMapIsLoggedWithoutExposingItsPath()
+    {
+        await using var play = new TestPlay();
+        var connection = play.Connect(TestPlay.Account);
+
+        connection.Server(TestPlay.Chosen());
+        Assert.True(play.Bots.TryGet(TestPlay.Key, out var bot));
+        await bot.ProcessedAsync();
+
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 433, 432 } });
+        await bot.ProcessedAsync();
+
+        var rejection = Assert.Single(PositionMessages(play), message => message.Contains("ignored self walk", StringComparison.Ordinal));
+
+        Assert.Equal($"Bot {TestPlay.CharacterId}: ignored self walk because the character is not placed on a map", rejection);
+        Assert.DoesNotContain("from cell", rejection, StringComparison.Ordinal);
+        Assert.DoesNotContain("to cell", rejection, StringComparison.Ordinal);
+        Assert.Null(bot.State.MapId);
+        Assert.Null(bot.State.Cell);
+        Assert.Empty(bot.State.Path);
+    }
+
+    [Fact]
     public async Task AWalkRefusalReportsItsCellOrUnknownPosition()
     {
         await using var play = new TestPlay();
