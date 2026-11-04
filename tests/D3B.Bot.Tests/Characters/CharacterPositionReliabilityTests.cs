@@ -118,8 +118,9 @@ public sealed class CharacterPositionReliabilityTests
 
         var refused = CharacterEvents.Apply(current, RelayDirection.FromServer, new MapMovementRefusedEvent { X = point.X, Y = point.Y });
 
-        Assert.Same(current, refused);
+        Assert.NotSame(current, refused);
         Assert.Null(refused.Cell);
+        Assert.True(refused.MovementAnswerAmbiguous);
     }
 
     [Fact]

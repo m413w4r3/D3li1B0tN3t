@@ -89,6 +89,7 @@ public sealed class P2HPositionTrustTests
         Assert.Empty(refused.Path);
         Assert.False(refused.IsWalkHeld);
         Assert.Null(refused.PendingMovementMapId);
+        Assert.True(refused.MovementAnswerAmbiguous);
         Assert.False(refused.IsPositionTrusted);
     }
 
@@ -103,6 +104,7 @@ public sealed class P2HPositionTrustTests
 
         Assert.Equal(312, placed.Cell);
         Assert.Equal(CellProvenance.ServerPlaced, placed.Provenance);
+        Assert.False(placed.MovementAnswerAmbiguous);
         Assert.True(placed.IsPositionTrusted);
     }
 
@@ -114,22 +116,41 @@ public sealed class P2HPositionTrustTests
 
         Assert.Null(refused.Cell);
         Assert.Equal(CellProvenance.Unknown, refused.Provenance);
+        Assert.True(refused.MovementAnswerAmbiguous);
         Assert.False(refused.IsPositionTrusted);
         Assert.Null(refused.PendingMovementMapId);
     }
 
     [Fact]
-    public void ARefusalWithoutAPendingMovementRequestDoesNotChangeThePosition()
+    public void ARefusalWithoutAPendingMovementRequestKeepsThePositionAndMarksItAmbiguous()
     {
         var placed = OnMap(300);
         var point = MapGeometry.PointOf(311);
 
         var refused = CharacterEvents.Apply(placed, RelayDirection.FromServer, new MapMovementRefusedEvent { X = point.X, Y = point.Y });
 
-        Assert.Same(placed, refused);
+        Assert.NotSame(placed, refused);
         Assert.Equal(300, refused.Cell);
         Assert.Equal(CellProvenance.ServerPlaced, refused.Provenance);
-        Assert.True(refused.IsPositionTrusted);
+        Assert.True(refused.MovementAnswerAmbiguous);
+        Assert.False(refused.IsPositionTrusted);
+    }
+
+    [Fact]
+    public void AConfirmationDoesNotClearAnExistingMovementAmbiguity()
+    {
+        var announced = CharacterEvents.Apply(
+            OnMap(300) with { PendingMovementMapId = TestPlay.MapId },
+            RelayDirection.FromServer,
+            new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
+        var ambiguous = announced with { MovementAnswerAmbiguous = true };
+
+        var confirmed = CharacterEvents.Apply(ambiguous, RelayDirection.FromServer, new MapMovementConfirmResponse());
+
+        Assert.Equal(301, confirmed.Cell);
+        Assert.Equal(CellProvenance.ServerConfirmed, confirmed.Provenance);
+        Assert.True(confirmed.MovementAnswerAmbiguous);
+        Assert.False(confirmed.IsPositionTrusted);
     }
 
     [Fact]
@@ -182,6 +203,18 @@ public sealed class P2HPositionTrustTests
         Assert.Equal(350, placed.Cell);
         Assert.Equal(CellProvenance.ServerPlaced, placed.Provenance);
         Assert.True(placed.IsPositionTrusted);
+    }
+
+    [Fact]
+    public void AMapCurrentThatClearsPositionAlsoClearsMovementAmbiguity()
+    {
+        var ambiguous = OnMap(300) with { MovementAnswerAmbiguous = true };
+
+        var changed = CharacterEvents.Apply(ambiguous, RelayDirection.FromServer, new MapCurrentEvent { MapId = TestPlay.NorthMapId });
+
+        Assert.Null(changed.Cell);
+        Assert.False(changed.MovementAnswerAmbiguous);
+        Assert.False(changed.IsPositionTrusted);
     }
 
     [Fact]
@@ -260,6 +293,7 @@ public sealed class P2HPositionTrustTests
         Assert.Equal(CellProvenance.Unknown, confirmed.Provenance);
         Assert.Equal(300, refused.Cell);
         Assert.Equal(CellProvenance.Unknown, refused.Provenance);
+        Assert.True(refused.MovementAnswerAmbiguous);
         Assert.False(refused.IsPositionTrusted);
     }
 
@@ -286,7 +320,8 @@ public sealed class P2HPositionTrustTests
 
         Assert.Equal(350, delayedRefusal.Cell);
         Assert.Equal(CellProvenance.ServerPlaced, delayedRefusal.Provenance);
-        Assert.True(delayedRefusal.IsPositionTrusted);
+        Assert.True(delayedRefusal.MovementAnswerAmbiguous);
+        Assert.False(delayedRefusal.IsPositionTrusted);
         Assert.False(delayedRefusal.IsWalkHeld);
     }
 

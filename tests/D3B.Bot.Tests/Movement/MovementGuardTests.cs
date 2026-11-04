@@ -51,6 +51,13 @@ public sealed class MovementGuardTests
     }
 
     [Fact]
+    public void AnAmbiguousMovementAnswerOverridesTrustedCellProvenance()
+    {
+        Assert.Equal(MovementRefusal.AmbiguousPosition, MovementGuard.Refuse(Trusted() with { MovementAnswerAmbiguous = true }, connected: true));
+        Assert.Equal(MovementRefusal.AmbiguousPosition, MovementGuard.Refuse(Trusted() with { Provenance = CellProvenance.ServerConfirmed, MovementAnswerAmbiguous = true }, connected: true));
+    }
+
+    [Fact]
     public async Task AnExpectedMapMismatchIsLogged()
     {
         await using var play = new TestPlay();

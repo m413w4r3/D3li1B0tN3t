@@ -44,6 +44,9 @@ public sealed record CharacterState
     /// <summary>Gets the map on which a movement request awaits the server's answer, or <see langword="null"/> when none does.</summary>
     public long? PendingMovementMapId { get; init; }
 
+    /// <summary>Gets whether a movement refusal was observed but cannot be correlated to a request, so the known cell is diagnostic only.</summary>
+    public bool MovementAnswerAmbiguous { get; init; }
+
     /// <summary>Gets whether a known map and cell have server placement or confirmation evidence suitable for actions.</summary>
     public bool IsPositionTrusted => MapId is not null && Cell is not null && Provenance is (CellProvenance.ServerPlaced or CellProvenance.ServerConfirmed);
 

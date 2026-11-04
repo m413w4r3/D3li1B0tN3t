@@ -91,6 +91,7 @@ public sealed class CharacterEventsTests
               "Cell": 300,
               "Provenance": 3,
               "PendingMovementMapId": null,
+              "MovementAnswerAmbiguous": false,
               "IsPositionTrusted": true,
               "Path": [],
               "IsWalking": false,
