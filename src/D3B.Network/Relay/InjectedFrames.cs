@@ -47,7 +47,7 @@ internal sealed class InjectedFrames
     }
 
     /// <summary>Sends a frame, as <see cref="IRelayConnection.SendToServerAsync"/> describes.</summary>
-    public async Task SendAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken)
+    public async Task SendAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken, Func<bool>? stillValid = null)
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(frame.Length, FrameReader.DefaultMaxLength, nameof(frame));
 

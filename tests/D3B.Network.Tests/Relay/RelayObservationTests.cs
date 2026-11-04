@@ -4,6 +4,17 @@ namespace D3B.Network.Tests.Relay;
 
 public sealed class RelayObservationTests
 {
+    private static async Task<IRelayConnection> ConnectionAsync(RecordingInterceptor interceptor)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+
+        while (interceptor.Connections.Count is 0)
+            await Task.Delay(10, timeout.Token);
+
+        return interceptor.Connections[0];
+    }
+
     [Fact]
     public async Task TheObservationWaitCoversAnAdmittedClientReadUntilItsFrameIsShown()
     {
@@ -92,6 +103,34 @@ public sealed class RelayObservationTests
             interceptor.Release.TrySetResult();
             client.Dispose();
             server.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task AServerObservationFailureAfterTheFencePreventsLaterInjection()
+    {
+        var interceptor = new RecordingInterceptor();
+        await using var relay = await TestRelay.StartAsync(interceptor: interceptor);
+        var (client, server) = await relay.ConnectAsync();
+        var connection = await ConnectionAsync(interceptor);
+
+        using (client)
+        using (server)
+        {
+            var first = TestFrames.Framed([0x21]);
+            await client.SendAsync(first, TestContext.Current.CancellationToken);
+            Assert.Equal(first, await TestRelay.ReadExactlyAsync(server, first.Length));
+            await connection.WaitForObservedFramesAsync(TestContext.Current.CancellationToken);
+
+            byte[] unframed = [0xFF, 0xFF, 0xFF, 0xFF, 0x7F];
+            await server.SendAsync(unframed, TestContext.Current.CancellationToken);
+            await relay.WaitForLogAsync(record => record.Message.Contains("the server's bytes are no varint frames", StringComparison.Ordinal));
+
+            await Assert.ThrowsAsync<RelayInjectionException>(() => connection.SendToServerAsync(new byte[] { 0x22 }, TestContext.Current.CancellationToken));
+
+            var marker = TestFrames.Framed([0x23]);
+            await client.SendAsync(marker, TestContext.Current.CancellationToken);
+            Assert.Equal(marker, await TestRelay.ReadExactlyAsync(server, marker.Length));
         }
     }
 

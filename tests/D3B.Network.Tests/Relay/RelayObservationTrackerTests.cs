@@ -104,6 +104,30 @@ public sealed class RelayObservationTrackerTests
     }
 
     [Fact]
+    public async Task SeveralWaitersCanObserveTheSameWatermark()
+    {
+        var tracker = new RelayObservationTracker();
+        var ticket = tracker.Admit();
+        var waiters = Enumerable.Range(0, 4).Select(_ => tracker.WaitAsync(TestContext.Current.CancellationToken)).ToArray();
+
+        tracker.Observe(ticket, watched: true);
+
+        await Task.WhenAll(waiters);
+    }
+
+    [Fact]
+    public async Task FailingTheTrackerExposesStickyFailureAndCancelsItsToken()
+    {
+        var tracker = new RelayObservationTracker();
+
+        tracker.Fail("the stream stopped being observable");
+
+        Assert.True(tracker.IsFailed);
+        Assert.True(tracker.Failed.IsCancellationRequested);
+        await Assert.ThrowsAsync<RelayInjectionException>(() => tracker.WaitAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task AFragmentIsObservedAsAReadAndItsCompletingReadWaitsForTheFrame()
     {
         var tracker = new RelayObservationTracker();

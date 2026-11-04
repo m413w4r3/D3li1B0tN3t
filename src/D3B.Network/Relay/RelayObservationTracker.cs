@@ -1,15 +1,25 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace D3B.Network.Relay;
 
 /// <summary>Tracks which admitted reads from either side have reached the connection interceptor.</summary>
+[SuppressMessage("Design", "CA1001", Justification = "The failure token belongs to the connection lifetime and its cancellation source is not exposed for disposal.")]
 internal sealed class RelayObservationTracker
 {
     private readonly object _gate = new();
     private readonly SortedSet<long> _observedOutOfOrder = [];
+    private readonly CancellationTokenSource _failed = new();
     private TaskCompletionSource _changed = NewSignal();
     private long _admitted;
     private long _observed;
     private string? _failure;
     private Exception? _failureCause;
+
+    /// <summary>Gets whether this connection can no longer guarantee observation.</summary>
+    public bool IsFailed => _failure is not null;
+
+    /// <summary>Gets a token cancelled when observation fails.</summary>
+    public CancellationToken Failed => _failed.Token;
 
     /// <summary>Assigns one ticket to a non-empty pipe read.</summary>
     /// <returns>The ticket that must be observed or fail the tracker.</returns>

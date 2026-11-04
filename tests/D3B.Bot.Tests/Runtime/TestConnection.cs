@@ -44,6 +44,16 @@ internal sealed class TestConnection : IDisposable
         Show(RelayDirection.FromServer, TestGame.Response(content));
     }
 
+    public void ServerRaw(byte[] frame)
+    {
+        Show(RelayDirection.FromServer, frame);
+    }
+
+    public void ClientRaw(byte[] frame)
+    {
+        Show(RelayDirection.FromClient, frame);
+    }
+
     /// <summary>Waits until D3B sent a number of requests, and gives the last.</summary>
     public async Task<IMessage> SentAsync(int count)
     {

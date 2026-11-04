@@ -1,6 +1,9 @@
 using D3B.Bot.Movement;
+using D3B.Bot.Tests.Network;
 using D3B.Network.Relay;
 using D3B.Protocol.Game;
+using Google.Protobuf;
+using Google.Protobuf.WellKnownTypes;
 
 namespace D3B.Bot.Tests.Runtime;
 
@@ -192,6 +195,138 @@ public sealed class P2ISendFenceTests
 
         Assert.Equal(0, barriers);
         Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task ARelayObservationFailureDuringTheInboxBarrierPreventsMovementInjection()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(300);
+        var barrierEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseBarrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        connection.Relay.ObservationWait = _ => Task.CompletedTask;
+        connection.Session.SendBarrier = async () =>
+        {
+            barrierEntered.TrySetResult();
+            await releaseBarrier.Task.WaitAsync(TestContext.Current.CancellationToken);
+        };
+        connection.Session.SendGate = _ => true;
+
+        var sending = connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken);
+
+        try
+        {
+            await barrierEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
+            connection.Relay.FailObservation();
+            releaseBarrier.TrySetResult();
+
+            await Assert.ThrowsAsync<RelayInjectionException>(() => sending);
+        }
+        finally
+        {
+            releaseBarrier.TrySetResult();
+        }
+
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AnUnknownCarriedTypeDuringTheInboxBarrierLatchesFailureForMovement()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(300);
+        var barrierEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseBarrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Relay.ObservationWait = _ => Task.CompletedTask;
+        connection.Session.SendBarrier = async () =>
+        {
+            barrierEntered.TrySetResult();
+            await releaseBarrier.Task.WaitAsync(TestContext.Current.CancellationToken);
+        };
+        connection.Session.SendGate = _ => true;
+        var unknown = new GameMessage
+        {
+            Event = new GameEvent
+            {
+                Content = new Any { TypeUrl = "type.ankama.com/unknown.message", Value = ByteString.Empty },
+            },
+        }.ToByteArray();
+
+        var sending = connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken);
+
+        try
+        {
+            await barrierEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
+            connection.ServerRaw(unknown);
+            releaseBarrier.TrySetResult();
+
+            await Assert.ThrowsAsync<RelayInjectionException>(() => sending);
+        }
+        finally
+        {
+            releaseBarrier.TrySetResult();
+        }
+
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task BytesWithoutAGameMessageLatchTranslationFailureForMovement()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(300);
+        connection.Session.SendBarrier = () => Task.CompletedTask;
+        connection.Session.SendGate = _ => true;
+
+        connection.ServerRaw([0x12, 0x7F, 0x01]);
+
+        await Assert.ThrowsAsync<RelayInjectionException>(() => connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AnUnderstoodGameEnvelopeWithoutContentDoesNotLatchTranslationFailure()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(300);
+        connection.Session.SendBarrier = () => Task.CompletedTask;
+        connection.Session.SendGate = _ => true;
+
+        connection.ServerRaw(new GameMessage { Request = new GameRequest { Id = -1 } }.ToByteArray());
+
+        await connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken);
+
+        Assert.Single(connection.Sent);
+    }
+
+    [Fact]
+    public async Task APartialButReadableMessageDoesNotLatchTranslationFailure()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(300);
+        connection.Session.SendBarrier = () => Task.CompletedTask;
+        connection.Session.SendGate = _ => true;
+        var envelope = GameMessage.Parser.ParseFrom(TestGame.Event(new MapInformationEvent { MapId = (int)TestPlay.MapId }));
+        var value = envelope.Event.Content.Value.ToByteArray();
+        envelope.Event.Content.Value = ByteString.CopyFrom([.. value, 0xA0, 0x01, 0x01]);
+
+        connection.ServerRaw(envelope.ToByteArray());
+
+        await connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken);
+
+        Assert.Single(connection.Sent);
     }
 
     [Fact]
