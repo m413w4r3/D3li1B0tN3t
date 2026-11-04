@@ -146,7 +146,7 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
             return;
 
         if (binding.Bot is { } bot)
-            bot.See(session, direction, frame.Content);
+            bot.See(session, direction, frame.Content, session.IsMovementTranslationBlocked);
         else if (direction is RelayDirection.FromServer && frame.Content is CharacterSelectionEvent { Success.Character: { } character })
             Bind(session, binding, character);
     }

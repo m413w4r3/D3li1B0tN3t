@@ -198,6 +198,35 @@ public sealed class P2ISendFenceTests
     }
 
     [Fact]
+    public async Task AQueuedMovementSendIsWithdrawnWhenTheTranslationLatchCloses()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(300);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        connection.Session.SendGate = _ => true;
+        connection.Relay.SendWait = async cancellationToken =>
+        {
+            entered.TrySetResult();
+            await release.Task.WaitAsync(cancellationToken);
+        };
+
+        var sending = connection.Session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken);
+
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        // The latch closes after the session's final check, while the relay has not written the frame yet.
+        connection.ServerRaw(TestGame.UnknownCarriedEvent());
+        release.TrySetResult();
+
+        await Assert.ThrowsAsync<RelayInjectionException>(() => sending);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
     public async Task ARelayObservationFailureDuringTheInboxBarrierPreventsMovementInjection()
     {
         await using var play = new TestPlay();

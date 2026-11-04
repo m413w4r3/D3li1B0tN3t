@@ -43,6 +43,22 @@ internal static class TestGame
         return new GameMessage { Response = new GameResponse { Id = -1, Content = Any(content) } }.ToByteArray();
     }
 
+    /// <summary>A server event carrying a type the readable protocol lacks, which the P2I latch must reject.</summary>
+    public static byte[] UnknownCarriedEvent()
+    {
+        return new GameMessage
+        {
+            Event = new GameEvent
+            {
+                Content = new Any
+                {
+                    TypeUrl = "type.ankama.com/not-in-the-readable-protocol",
+                    Value = ByteString.CopyFrom(1, 2, 3),
+                },
+            },
+        }.ToByteArray();
+    }
+
     private static Any Any(IMessage content)
     {
         return new Any { TypeUrl = TypeUrl(content), Value = content.ToByteString() };

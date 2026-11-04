@@ -14,6 +14,9 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
 
     public Func<CancellationToken, Task> ObservationWait { get; set; } = _ => Task.CompletedTask;
 
+    /// <summary>A test's wait before a frame is queued, to hold it while the session changes.</summary>
+    public Func<CancellationToken, Task>? SendWait { get; set; }
+
     public event Action<int>? FrameSent;
 
     public string Id { get; }
@@ -32,8 +35,13 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
         Route = route;
     }
 
-    public Task SendToServerAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken = default)
+    public async Task SendToServerAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (SendWait is { } wait)
+            await wait(cancellationToken).WaitAsync(cancellationToken);
+
         cancellationToken.ThrowIfCancellationRequested();
 
         int sentCount;
@@ -41,18 +49,16 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
         lock (_sendGate)
         {
             if (_closed.IsCancellationRequested)
-                return Task.FromException(new RelayInjectionException("The frame did not go: the client's side closed."));
+                throw new RelayInjectionException("The frame did not go: the client's side closed.");
 
             if (IsObservationFailed)
-                return Task.FromException(new RelayInjectionException("The frame did not go: the connection's frames are no longer observable."));
+                throw new RelayInjectionException("The frame did not go: the connection's frames are no longer observable.");
 
             _sent.Enqueue(frame.ToArray());
             sentCount = _sent.Count;
         }
 
         FrameSent?.Invoke(sentCount);
-
-        return Task.CompletedTask;
     }
 
     public async Task WaitForObservedFramesAsync(CancellationToken cancellationToken = default)

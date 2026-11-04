@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using D3B.Bot.Runtime;
 using D3B.Network.Relay;
 using D3B.Protocol.Game;
@@ -23,6 +24,7 @@ namespace D3B.Bot.Network;
 /// what is on a map it is sent to. So D3B never sends those, and the client stays the one that shows what happens.
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1001", Justification = "The signal lives as long as the game session and holds no timer or handle; the session is collected with its connection.")]
 public sealed class GameSession : IConnectionInterceptor
 {
     private readonly IRelayConnection _connection;
@@ -33,6 +35,7 @@ public sealed class GameSession : IConnectionInterceptor
     private readonly ConcurrentDictionary<TranslationProblemKey, int> _translationProblems = new();
     // Movement stays blocked for this session because unread wire content makes its position unsafe to trust.
     private RelayInjectionException? _translationFailure;
+    private readonly CancellationTokenSource _translationFailureSignal = new();
     private Func<IMessage, bool>? _sendGate;
     private Func<Task>? _sendBarrier;
 
@@ -52,6 +55,9 @@ public sealed class GameSession : IConnectionInterceptor
     /// before any event of the server.
     /// </remarks>
     public GameAccount? Account => _account;
+
+    /// <summary>Gets whether a frame this session could not read latched movement closed until the session ends.</summary>
+    internal bool IsMovementTranslationBlocked => Volatile.Read(ref _translationFailure) is not null;
 
     internal Func<IMessage, bool>? SendGate
     {
@@ -159,13 +165,34 @@ public sealed class GameSession : IConnectionInterceptor
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        var movement = MovementRequests.IsMovementCapable(request);
+
         // Guarded sends bypass SendAsync, so recheck after their inbox barrier and guard.
-        if (MovementRequests.IsMovementCapable(request))
+        if (movement)
             ThrowIfTranslationFailed();
 
         var frame = _translation.EncodeGameRequest(request);
 
-        await _connection.SendToServerAsync(frame, cancellationToken);
+        if (!movement)
+        {
+            await _connection.SendToServerAsync(frame, cancellationToken);
+        }
+        else
+        {
+            // The relay can queue the frame behind the client's injection gate after the check above. Link its token to
+            // the latch so a frame still queued when an unread frame arrives is withdrawn instead of written.
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _translationFailureSignal.Token);
+
+            try
+            {
+                await _connection.SendToServerAsync(frame, linked.Token);
+            }
+            catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested && IsMovementTranslationBlocked)
+            {
+                throw new RelayInjectionException("The frame did not go: the session's movement translation latch closed.", exception);
+            }
+        }
+
         GameLog.Sent(_log, Id, request.Descriptor.Name, frame.Length);
 
         var decoded = _translation.DecodeGame(new ReadOnlySequence<byte>(frame));
@@ -195,7 +222,9 @@ public sealed class GameSession : IConnectionInterceptor
         if (!decoded.IsRead && !decoded.IsUnderstood)
         {
             var failure = new RelayInjectionException("The frame could not be read as a game message; movement is not authorized for this session.");
-            Interlocked.CompareExchange(ref _translationFailure, failure, null);
+
+            if (Interlocked.CompareExchange(ref _translationFailure, failure, null) is null)
+                _translationFailureSignal.Cancel();
         }
 
         var side = direction is RelayDirection.FromClient ? "client" : "server";

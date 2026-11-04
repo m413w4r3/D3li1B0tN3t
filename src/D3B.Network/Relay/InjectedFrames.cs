@@ -57,25 +57,29 @@ internal sealed class InjectedFrames
 
         var injected = new Frame(writer.WrittenSpan.ToArray(), stillValid);
 
-        await _gate.WaitAsync(cancellationToken);
-
-        try
-        {
-            if (_closed is not null)
-                throw new RelayInjectionException($"The frame did not go: {_closed}.");
-
-            _waiting.Enqueue(injected);
-
-            if (Drain())
-                await FlushAsync();
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
+        // Register before taking the gate: once the gate is released, the client's read loop can drain and claim the
+        // frame, and a cancellation registered afterwards would no longer be able to withdraw it.
         using (cancellationToken.Register(static state => ((Frame)state!).Cancel(), injected))
+        {
+            await _gate.WaitAsync(cancellationToken);
+
+            try
+            {
+                if (_closed is not null)
+                    throw new RelayInjectionException($"The frame did not go: {_closed}.");
+
+                _waiting.Enqueue(injected);
+
+                if (Drain())
+                    await FlushAsync();
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
             await injected.Gone;
+        }
     }
 
     /// <summary>Starts putting frames between the client's, once its side is read as frames.</summary>

@@ -44,6 +44,11 @@ public sealed class BotActor : IAsyncDisposable
 
     private const long NeverEnded = long.MinValue;
 
+    // Whether a trusted placement was seen, and whether the session's movement translation latch was already closed then.
+    private const int PlacementNotSeen = 0;
+    private const int PlacementBeforeTranslationFailure = 1;
+    private const int PlacementAfterTranslationFailure = 2;
+
     private readonly Channel<Input> _inbox = Channel.CreateUnbounded<Input>(new UnboundedChannelOptions { SingleReader = true });
     private readonly List<GameExpectation> _expectations = [];
     private readonly List<Waiter> _waiters = [];
@@ -76,6 +81,7 @@ public sealed class BotActor : IAsyncDisposable
     private int _handlerFailures;
     private int _lastEndedFight;
     private long _placedAt;
+    private int _translationAtFirstPlacement;
     private long _useEndedAt = NeverEnded;
     private long _fightBeganAt = NeverEnded;
     private long _regeneratingSince = NeverEnded;
@@ -88,6 +94,26 @@ public sealed class BotActor : IAsyncDisposable
 
     /// <summary>Gets whether a game connection plays the character now.</summary>
     public bool IsConnected => _connected;
+
+    /// <summary>Gets the game session playing the character now, or <see langword="null"/> when none does.</summary>
+    internal GameSession? Session => _session;
+
+    /// <summary>Gets whether an unread frame latched the current session's movement closed.</summary>
+    internal bool IsMovementTranslationBlocked => _session is { } session && session.IsMovementTranslationBlocked;
+
+    /// <summary>Gets whether the latch was closed when the character was first placed, or <see langword="null"/> until that placement.</summary>
+    /// <remarks>
+    /// The relay latches before it posts a readable frame to the bot, so the placement carries the latch state observed with
+    /// that frame. True proves the latch was already closed when the first placement was applied; the exact wire order of
+    /// reads arriving on the two pumps at the same moment is not retained. A latch closed after the first placement leaves
+    /// this false.
+    /// </remarks>
+    internal bool? TranslationBlockedAtFirstPlacement => Volatile.Read(ref _translationAtFirstPlacement) switch
+    {
+        PlacementNotSeen => null,
+        PlacementBeforeTranslationFailure => false,
+        _ => true,
+    };
 
     /// <summary>Gets whether the player took the character over from a behavior: the bot starts nothing until <see cref="Resume"/>.</summary>
     public bool IsPaused => _paused;
@@ -359,9 +385,9 @@ public sealed class BotActor : IAsyncDisposable
         Post(new Attached(session, state));
     }
 
-    internal void See(GameSession session, RelayDirection side, IMessage message)
+    internal void See(GameSession session, RelayDirection side, IMessage message, bool translationBlocked = false)
     {
-        Post(new Seen(session, side, message));
+        Post(new Seen(session, side, message, translationBlocked));
     }
 
     internal void Detach(GameSession session)
@@ -466,7 +492,7 @@ public sealed class BotActor : IAsyncDisposable
         switch (input)
         {
             case Seen seen:
-                OnSeen(seen.Session, seen.Side, seen.Message);
+                OnSeen(seen.Session, seen.Side, seen.Message, seen.TranslationBlocked);
                 break;
             case Expecting expecting:
                 OnExpecting(expecting.Expectation);
@@ -525,7 +551,7 @@ public sealed class BotActor : IAsyncDisposable
         }
     }
 
-    private void OnSeen(GameSession session, RelayDirection side, IMessage message)
+    private void OnSeen(GameSession session, RelayDirection side, IMessage message, bool translationBlocked)
     {
         if (_stopping || session != _session)
             return;
@@ -551,7 +577,12 @@ public sealed class BotActor : IAsyncDisposable
             Volatile.Write(ref _regeneratingSince, Time.GetUtcNow().UtcTicks);
 
         if (side is RelayDirection.FromServer && message is MapInformationEvent information && information.MapId == state.MapId && state.Cell is not null)
+        {
+            if (Volatile.Read(ref _translationAtFirstPlacement) is PlacementNotSeen)
+                Volatile.Write(ref _translationAtFirstPlacement, translationBlocked ? PlacementAfterTranslationFailure : PlacementBeforeTranslationFailure);
+
             Volatile.Write(ref _placedAt, Time.GetUtcNow().UtcTicks);
+        }
 
         // A request to leave changes nothing of the state, so this is the dialog the client sent it in.
         if (side is RelayDirection.FromClient && _behavior is { } behavior && PlayerActions.Starts(state, message))
@@ -827,6 +858,7 @@ public sealed class BotActor : IAsyncDisposable
         _session = session;
         _state = state;
         _connected = true;
+        Volatile.Write(ref _translationAtFirstPlacement, PlacementNotSeen);
 
         if (state.MapId is { } map && state.Cell is { } cell)
             BotLog.AttachedAt(_log, Key.CharacterId, session.Id, map, cell);
@@ -897,7 +929,7 @@ public sealed class BotActor : IAsyncDisposable
 
     private abstract record Input;
 
-    private sealed record Seen(GameSession Session, RelayDirection Side, IMessage Message) : Input;
+    private sealed record Seen(GameSession Session, RelayDirection Side, IMessage Message, bool TranslationBlocked) : Input;
 
     private sealed record Expecting(GameExpectation Expectation) : Input;
 
