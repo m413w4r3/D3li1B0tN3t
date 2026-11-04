@@ -93,4 +93,27 @@ public sealed class ObjectUseTests
         Assert.Equal(ObjectUseOutcome.Used, await use);
         Assert.False(bot.State.Inventory.ContainsKey(50));
     }
+
+    [Fact]
+    public async Task AClientReportedCellCannotUseAnObject()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(300);
+
+        connection.Server(Carrying(1));
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
+        connection.Client(new MapMovementCancelRequest { CellId = 300 });
+        await bot.ProcessedAsync();
+
+        var use = bot.RunAsync((context, token) => context.UseObjectAsync(50, token), TestContext.Current.CancellationToken);
+
+        await connection.SentAsync(1);
+        connection.Server(new ObjectQuantityEvent { Object = new ObjectQuantity { Uid = 50, Quantity = 0 } });
+        connection.Server(new InventoryWeightEvent { Weight = 100, MaxWeight = 1_000 });
+
+        Assert.Equal(CellProvenance.ClientReported, bot.State.Provenance);
+        Assert.Equal(ObjectUseOutcome.Busy, await use);
+        Assert.Empty(connection.Sent);
+    }
 }

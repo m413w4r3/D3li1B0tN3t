@@ -38,6 +38,25 @@ public sealed class P2HSendBarrierTests
     }
 
     [Fact]
+    public async Task TheSessionGateRejectsObjectUseFromAClientReportedCell()
+    {
+        var observer = new RecordingObserver();
+        await using var play = new TestPlay([observer]);
+        var (connection, bot) = await play.EnterAsync(300);
+
+        connection.Client(new MapMovementRequest { MapId = (int)TestPlay.MapId });
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
+        connection.Client(new MapMovementCancelRequest { CellId = 300 });
+        await bot.ProcessedAsync();
+
+        var session = Assert.Single(observer.Sessions);
+        var send = session.SendAsync(new ObjectUseRequest { Uid = 50 }, TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => send);
+        Assert.Empty(connection.Sent);
+    }
+
+    [Fact]
     public async Task AQueuedMapChangeIsAppliedBeforeGuardedSendAuthorization()
     {
         await using var play = new TestPlay();

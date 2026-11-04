@@ -53,6 +53,30 @@ public sealed class P2HPositionTrustTests
     }
 
     [Fact]
+    public void AMaplessMovementNeedsAPendingRequestOnTheCurrentMap()
+    {
+        var changed = CharacterEvents.Apply(OnMap(300), RelayDirection.FromServer, new MapCurrentEvent { MapId = TestPlay.NorthMapId });
+        var placed = CharacterEvents.Apply(changed, RelayDirection.FromServer, TestPlay.Information(350, TestPlay.NorthMapId));
+        var delayed = CharacterEvents.Apply(placed, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 350, 351 } });
+        var delayedConfirmation = CharacterEvents.Apply(delayed, RelayDirection.FromServer, new MapMovementConfirmResponse());
+
+        Assert.Equal(350, delayed.Cell);
+        Assert.Empty(delayed.Path);
+        Assert.Equal(CellProvenance.ServerPlaced, delayed.Provenance);
+        Assert.Equal(350, delayedConfirmation.Cell);
+        Assert.Equal(CellProvenance.ServerPlaced, delayedConfirmation.Provenance);
+
+        var requested = CharacterEvents.Apply(placed, RelayDirection.FromClient, new MapMovementRequest { MapId = (int)TestPlay.NorthMapId });
+        var announced = CharacterEvents.Apply(requested, RelayDirection.FromServer, new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 350, 351 } });
+        var confirmed = CharacterEvents.Apply(announced, RelayDirection.FromServer, new MapMovementConfirmResponse());
+
+        Assert.Equal([350, 351], announced.Path);
+        Assert.Equal(350, announced.Cell);
+        Assert.Equal(351, confirmed.Cell);
+        Assert.Equal(CellProvenance.ServerConfirmed, confirmed.Provenance);
+    }
+
+    [Fact]
     public void AValidRefusalTrustsTheServerNamedCell()
     {
         var point = MapGeometry.PointOf(311);
