@@ -42,9 +42,7 @@ public sealed class InjectedFramesTests
             await Assert.ThrowsAsync<RelayInjectionException>(() => sending);
             Assert.Equal(0, injected.Sent);
 
-            var read = await pipe.Reader.ReadAsync(TestContext.Current.CancellationToken);
-            Assert.True(read.Buffer.IsEmpty);
-            pipe.Reader.AdvanceTo(read.Buffer.End);
+            Assert.False(pipe.Reader.TryRead(out _));
         }
         finally
         {

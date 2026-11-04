@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace D3B.Network.Relay;
 
 /// <summary>Tracks which admitted reads from either side have reached the connection interceptor.</summary>
-[SuppressMessage("Design", "CA1001", Justification = "The failure token belongs to the connection lifetime and its cancellation source is not exposed for disposal.")]
+[SuppressMessage("Design", "CA1001", Justification = "Late senders may still read this connection's cancelled token after its relay handler completes.")]
 internal sealed class RelayObservationTracker
 {
     private readonly object _gate = new();
@@ -14,9 +14,10 @@ internal sealed class RelayObservationTracker
     private long _observed;
     private string? _failure;
     private Exception? _failureCause;
+    private int _isFailed;
 
     /// <summary>Gets whether this connection can no longer guarantee observation.</summary>
-    public bool IsFailed => _failure is not null;
+    public bool IsFailed => Volatile.Read(ref _isFailed) is not 0;
 
     /// <summary>Gets a token cancelled when observation fails.</summary>
     public CancellationToken Failed => _failed.Token;
@@ -35,19 +36,17 @@ internal sealed class RelayObservationTracker
     /// <param name="failureCause">The error that stopped observation, if any.</param>
     public void Observe(long ticket, bool watched, Exception? failureCause = null)
     {
+        var cancelFailed = false;
+
         lock (_gate)
         {
             if (!watched)
             {
-                FailLocked("A relay stream stopped being observable as frames.", failureCause);
-
-                return;
+                cancelFailed = FailLocked("A relay stream stopped being observable as frames.", failureCause);
             }
-
-            if (_failure is not null)
+            else if (_failure is not null)
                 return;
-
-            if (ticket == _observed + 1)
+            else if (ticket == _observed + 1)
             {
                 _observed++;
 
@@ -59,8 +58,12 @@ internal sealed class RelayObservationTracker
                 _observedOutOfOrder.Add(ticket);
             }
 
-            SignalLocked();
+            if (watched)
+                SignalLocked();
         }
+
+        if (cancelFailed)
+            CancelFailed();
     }
 
     /// <summary>Fails every current and future observation wait for this connection.</summary>
@@ -68,8 +71,13 @@ internal sealed class RelayObservationTracker
     /// <param name="cause">The error that ended observation, if any.</param>
     public void Fail(string reason, Exception? cause = null)
     {
+        bool cancelFailed;
+
         lock (_gate)
-            FailLocked(reason, cause);
+            cancelFailed = FailLocked(reason, cause);
+
+        if (cancelFailed)
+            CancelFailed();
     }
 
     /// <summary>Waits for the shared admission watermark captured before this call yields.</summary>
@@ -112,14 +120,29 @@ internal sealed class RelayObservationTracker
         return new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    private void FailLocked(string reason, Exception? cause)
+    private bool FailLocked(string reason, Exception? cause)
     {
         if (_failure is not null)
-            return;
+            return false;
 
         _failure = reason;
         _failureCause = cause;
+        Volatile.Write(ref _isFailed, 1);
         SignalLocked();
+
+        return true;
+    }
+
+    private void CancelFailed()
+    {
+        try
+        {
+            _failed.Cancel();
+        }
+        catch (AggregateException)
+        {
+            // Cancellation callbacks belong to waiters and cannot undo the sticky connection failure.
+        }
     }
 
     private void SignalLocked()

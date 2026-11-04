@@ -31,6 +31,8 @@ public sealed class GameSession : IConnectionInterceptor
     private readonly IReadOnlyList<IGameObserver> _observers;
     private readonly ILogger _log;
     private readonly ConcurrentDictionary<TranslationProblemKey, int> _translationProblems = new();
+    // Movement stays blocked for this session because unread wire content makes its position unsafe to trust.
+    private RelayInjectionException? _translationFailure;
     private Func<IMessage, bool>? _sendGate;
     private Func<Task>? _sendBarrier;
 
@@ -75,9 +77,11 @@ public sealed class GameSession : IConnectionInterceptor
         }
     }
 
-    internal Task WaitForObservedFramesAsync(CancellationToken cancellationToken)
+    internal async Task WaitForObservedFramesAsync(CancellationToken cancellationToken)
     {
-        return _connection.WaitForObservedFramesAsync(cancellationToken);
+        ThrowIfTranslationFailed();
+        await _connection.WaitForObservedFramesAsync(cancellationToken).ConfigureAwait(false);
+        ThrowIfTranslationFailed();
     }
 
     private GameSession(IRelayConnection connection, ProtocolTranslation translation, GameAccounts accounts, IReadOnlyList<IGameObserver> observers, ILogger log)
@@ -152,6 +156,10 @@ public sealed class GameSession : IConnectionInterceptor
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        // Guarded sends bypass SendAsync, so recheck after their inbox barrier and guard.
+        if (MovementRequests.IsMovementCapable(request))
+            ThrowIfTranslationFailed();
+
         var frame = _translation.EncodeGameRequest(request);
 
         await _connection.SendToServerAsync(frame, cancellationToken);
@@ -181,6 +189,12 @@ public sealed class GameSession : IConnectionInterceptor
     byte[]? IConnectionInterceptor.OnFrame(RelayDirection direction, ReadOnlySequence<byte> frame, bool held)
     {
         var decoded = _translation.DecodeGame(frame);
+        if (decoded.Envelope is null || (decoded.CarriedType is not null && !decoded.IsRead))
+        {
+            var failure = new RelayInjectionException("The frame could not be read as a game message; movement is not authorized for this session.");
+            Interlocked.CompareExchange(ref _translationFailure, failure, null);
+        }
+
         var side = direction is RelayDirection.FromClient ? "client" : "server";
         var message = Describe(decoded);
 
@@ -233,6 +247,12 @@ public sealed class GameSession : IConnectionInterceptor
             GameLog.RepeatedPartial(_log, Id, side, message, count, category);
         else
             GameLog.RepeatedUnread(_log, Id, side, message, count, category);
+    }
+
+    private void ThrowIfTranslationFailed()
+    {
+        if (Volatile.Read(ref _translationFailure) is { } failure)
+            throw new RelayInjectionException(failure.Message, failure);
     }
 
     void IConnectionInterceptor.OnHoldAbandoned(RelayDirection direction, string reason)

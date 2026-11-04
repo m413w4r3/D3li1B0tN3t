@@ -55,7 +55,7 @@ internal sealed class InjectedFrames
 
         FrameWriter.Write(writer, frame.Span);
 
-        var injected = new Frame(writer.WrittenSpan.ToArray());
+        var injected = new Frame(writer.WrittenSpan.ToArray(), stillValid);
 
         await _gate.WaitAsync(cancellationToken);
 
@@ -137,6 +137,13 @@ internal sealed class InjectedFrames
 
         while (_waiting.TryDequeue(out var frame))
         {
+            if (frame.StillValid is { } stillValid && !stillValid())
+            {
+                frame.Fail("the connection's frames are no longer observable");
+
+                continue;
+            }
+
             if (!frame.TryClaim())
                 continue;
 
@@ -217,15 +224,17 @@ internal sealed class InjectedFrames
         private const int Cancelled = 2;
 
         private readonly TaskCompletionSource _gone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Func<bool>? StillValid { get; }
         private int _state;
 
         public byte[] Bytes { get; }
 
         public Task Gone => _gone.Task;
 
-        public Frame(byte[] bytes)
+        public Frame(byte[] bytes, Func<bool>? stillValid)
         {
             Bytes = bytes;
+            StillValid = stillValid;
         }
 
         /// <summary>Takes the frame to write it, unless its sender stopped waiting first.</summary>

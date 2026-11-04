@@ -8,7 +8,9 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
 {
     private readonly CancellationTokenSource _closed = new();
     private readonly CancellationTokenSource _observationFailed = new();
+    private readonly object _sendGate = new();
     private readonly ConcurrentQueue<byte[]> _sent = new();
+    private int _isObservationFailed;
 
     public Func<CancellationToken, Task> ObservationWait { get; set; } = _ => Task.CompletedTask;
 
@@ -20,7 +22,7 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
 
     public IReadOnlyList<byte[]> Sent => [.. _sent];
 
-    public bool IsObservationFailed => _observationFailed.IsCancellationRequested;
+    public bool IsObservationFailed => Volatile.Read(ref _isObservationFailed) is not 0;
 
     public FakeRelayConnection(string id, RelayRoute route)
     {
@@ -30,10 +32,18 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
 
     public Task SendToServerAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken = default)
     {
-        if (_closed.IsCancellationRequested)
-            return Task.FromException(new RelayInjectionException("The frame did not go: the client's side closed."));
+        cancellationToken.ThrowIfCancellationRequested();
 
-        _sent.Enqueue(frame.ToArray());
+        lock (_sendGate)
+        {
+            if (_closed.IsCancellationRequested)
+                return Task.FromException(new RelayInjectionException("The frame did not go: the client's side closed."));
+
+            if (IsObservationFailed)
+                return Task.FromException(new RelayInjectionException("The frame did not go: the connection's frames are no longer observable."));
+
+            _sent.Enqueue(frame.ToArray());
+        }
 
         return Task.CompletedTask;
     }
@@ -49,18 +59,25 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
         {
             await ObservationWait(linked.Token).WaitAsync(linked.Token);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (IsObservationFailed)
+        {
+            throw new RelayInjectionException("The observation wait failed: the connection's frames are no longer observable.");
+        }
         catch (OperationCanceledException) when (_closed.IsCancellationRequested)
         {
             throw new RelayInjectionException("The observation wait failed: the connection is closed.");
-        }
-        catch (OperationCanceledException) when (IsObservationFailed && !cancellationToken.IsCancellationRequested)
-        {
-            throw new RelayInjectionException("The observation wait failed: the connection's frames are no longer observable.");
         }
     }
 
     public void FailObservation()
     {
+        lock (_sendGate)
+            Volatile.Write(ref _isObservationFailed, 1);
+
         _observationFailed.Cancel();
     }
 

@@ -21,9 +21,21 @@ internal sealed class RelayConnection : IRelayConnection
         _observation = observation;
     }
 
-    public Task SendToServerAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken = default)
+    public async Task SendToServerAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken = default)
     {
-        return _injected.SendAsync(frame, cancellationToken);
+        if (_observation.IsFailed)
+            throw new RelayInjectionException("The frame did not go: the connection's frames are no longer observable, so there are no frames safe to insert between.");
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _observation.Failed);
+
+        try
+        {
+            await _injected.SendAsync(frame, linked.Token, () => !_observation.IsFailed).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_observation.IsFailed && !cancellationToken.IsCancellationRequested)
+        {
+            throw new RelayInjectionException("The frame did not go: the connection's frames are no longer observable, so there are no frames safe to insert between.");
+        }
     }
 
     public Task WaitForObservedFramesAsync(CancellationToken cancellationToken = default)
