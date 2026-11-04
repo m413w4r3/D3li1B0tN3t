@@ -9,6 +9,8 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
     private readonly CancellationTokenSource _closed = new();
     private readonly ConcurrentQueue<byte[]> _sent = new();
 
+    public Func<CancellationToken, Task> ObservationWait { get; set; } = _ => Task.CompletedTask;
+
     public string Id { get; }
 
     public RelayRoute Route { get; }
@@ -31,6 +33,23 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
         _sent.Enqueue(frame.ToArray());
 
         return Task.CompletedTask;
+    }
+
+    public async Task WaitForObservedFramesAsync(CancellationToken cancellationToken = default)
+    {
+        if (_closed.IsCancellationRequested)
+            throw new RelayInjectionException("The observation wait failed: the connection is closed.");
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _closed.Token);
+
+        try
+        {
+            await ObservationWait(linked.Token).WaitAsync(linked.Token);
+        }
+        catch (OperationCanceledException) when (_closed.IsCancellationRequested)
+        {
+            throw new RelayInjectionException("The observation wait failed: the connection is closed.");
+        }
     }
 
     public void Close()

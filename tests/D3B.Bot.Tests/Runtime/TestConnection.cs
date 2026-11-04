@@ -16,6 +16,8 @@ internal sealed class TestConnection : IDisposable
 
     public GameSession Session { get; }
 
+    public FakeRelayConnection Relay => _connection;
+
     /// <summary>Gets the requests D3B sent the server, readable.</summary>
     public IReadOnlyList<IMessage> Sent => [.. _connection.Sent.Select(frame => _translation.DecodeGame(new ReadOnlySequence<byte>(frame)).Content!)];
 

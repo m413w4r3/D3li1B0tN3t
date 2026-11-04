@@ -23,4 +23,9 @@ internal sealed class RelayConnection : IRelayConnection
     {
         return _injected.SendAsync(frame, cancellationToken);
     }
+
+    public Task WaitForObservedFramesAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
 }

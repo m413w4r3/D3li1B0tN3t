@@ -12,6 +12,17 @@ public interface IRelayConnection
     /// <summary>Gets a token cancelled once the relay is done with the connection, both sides closed.</summary>
     CancellationToken Closed { get; }
 
+    /// <summary>Waits until every relay read admitted before this call has been shown to the connection interceptor.</summary>
+    /// <remarks>
+    /// The cutoff covers non-empty reads returned by either relay pump before this call's snapshot. A complete frame in
+    /// those reads has been shown once the wait completes. Bytes still in a socket, transport, or unread pipe are outside
+    /// the cutoff, and a partial frame is not covered until a later read completes it.
+    /// </remarks>
+    /// <param name="cancellationToken">Stops waiting.</param>
+    /// <returns>A task that completes once the admitted reads were observed.</returns>
+    /// <exception cref="RelayInjectionException">The connection ended or its stream could not be observed as frames.</exception>
+    Task WaitForObservedFramesAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Sends the server a frame of D3B's own, between two of the client's frames.</summary>
     /// <remarks>
     /// The frame goes at once when what went to the server ends on one of the client's frames, else as soon as the client's
