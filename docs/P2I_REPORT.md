@@ -163,6 +163,50 @@ refusal; it cannot prevent a still-later refusal from being mistaken for another
 or movement-refusal correlation semantics were added. No live client, production host, Ankama relay, activity, or
 movement was run.
 
+### D2 finding and C4 late-refusal latch
+
+The independent D2 review found a later gap: walk A can return `NoAnswer`; walk B can then be sent and confirmed, clearing
+`PendingMovementMapId` and setting `ServerConfirmed`; a delayed refusal for A then matches no pending marker and used to be
+ignored. The state stayed trusted and `MovementGuard` allowed another automated action. The wire still cannot identify
+whether that refusal belongs to A, B, or client movement.
+
+`CharacterState.MovementAnswerAmbiguous` now latches every server `MapMovementRefusedEvent`. When the current map has a
+matching pending marker, C2 behavior remains: a mappable server-named cell is retained with `ServerRefused`, and path,
+held-walk state, and pending marker are cleared. Without a matching pending marker, the current cell and provenance stay
+untouched for diagnosis. Either way `IsPositionTrusted` becomes false and `MovementGuard` returns
+`AmbiguousPosition`, including for `ServerPlaced` and `ServerConfirmed` provenance. Movement confirmations and other
+events do not clear the latch. A current-map `MapInformationEvent` that contains a valid self cell restores
+`ServerPlaced` and clears it; `MapCurrentEvent` clears both the position and the latch. No timeout or automatic
+resynchronization was added.
+
+The controlled `TestPlay` case advances A to `NoAnswer`, sends B, applies B's movement and confirmation, then injects the
+late refusal. It asserts that B was trusted before the refusal, the confirmed cell and provenance remain diagnostic
+after it, `WalkAsync` returns `Busy` without a third request, and a fresh self placement restores trust.
+
+#### C4 RED evidence
+
+RED used the in-process xUnit runner with class filters for `P2IRefusalCorrelationTests`, `P2HPositionTrustTests`,
+`MovementGuardTests`, `CharacterPositionReliabilityTests`, and `CharacterEventsTests`. It ran **72 tests, 10 failed**.
+The new end-to-end case failed at `Assert.True()` (`Expected: True; Actual: False`) for the absent ambiguity latch. The
+no-pending case failed because `Assert.NotSame()` found the original state instance. The guard case expected
+`AmbiguousPosition` but got `None`. The other failures showed that map-current reset, matching and invalid refusals,
+confirmations, mapless refusals, and post-map-change refusals did not yet implement the latch.
+
+#### C4 GREEN evidence
+
+- Focused character, guard, correlation, and snapshot classes: **72/72 passed**.
+- Full `D3B.Bot.Tests` module, xUnit parallelism disabled: **551/551 passed**.
+- `/home/nill/.dotnet/dotnet test --solution D3B.slnx --no-build --max-parallel-test-modules 1`:
+  **1,394/1,394 passed**, 0 failed, 0 skipped: App 142, Bot 551, Core 11, Data 133, Engine 257, Network 150,
+  Protocol 88, Scripts 35, Storage 27 (+4 Bot tests from C3).
+- `/home/nill/.dotnet/dotnet build D3B.slnx`: passed with 0 warnings and 0 errors.
+- `/home/nill/.dotnet/dotnet format --verify-no-changes --no-restore` and `git diff --check`: passed.
+
+The default parallel xUnit run hung in the existing `ActivityRunTests.TheNextStepWaitsTheTimeBetweenTwoActions` case.
+The full solution command passed after placing a temporary `xunit.runner.json` only in the ignored Bot test output folder
+to disable collection parallelism; that file was removed immediately after the run. No tracked test or runner settings
+were changed. No live client, production host, Ankama relay, activity, or movement was run.
+
 ## Section G — Close the observation failure window and unread translation (C3)
 
 *2026-11-04 — based on C2 `8dd735ffd7b0bc3ba84e5d4083139044559de396`.*

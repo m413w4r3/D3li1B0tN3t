@@ -6919,3 +6919,26 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Boundary**: A frame already claimed under the injection gate is concurrent with a later failure. Data not admitted by
   `ReadAsync` remains outside the watermark, and an unreadable frame blocks only its current session. No wire-level
   correlation or automatic resynchronization is claimed. No live client, host, relay, activity, or movement was run.
+
+## D303: Revoke trusted position after every movement refusal
+
+*2026-11-04, P2I C4, completing D301 after the independent D2 review.*
+
+- **D2 gap**: D301 made a refusal-named cell untrusted while a movement was pending. It did not cover a refusal arriving
+  after a later walk had been confirmed and cleared `PendingMovementMapId`; that refusal was ignored and left the
+  confirmed position trusted.
+- **Latch policy**: Every accepted server `MapMovementRefusedEvent` sets `MovementAnswerAmbiguous`. With a pending
+  movement on the current map, retain C2's diagnostic coordinate and clear path, held-walk, and pending state. Without
+  a matching pending movement, preserve the cell and provenance and only mark ambiguity. `IsPositionTrusted` is false
+  while latched, and `MovementGuard` returns `AmbiguousPosition` ahead of provenance-based authorization.
+- **Recovery**: A current-map `MapInformationEvent` with a valid self cell resets the latch and restores `ServerPlaced`.
+  `MapCurrentEvent` clears both the position and latch. Confirmation and other events cannot clear it. There is no
+  timeout or automatic resynchronization.
+- **RED/GREEN evidence**: RED `0717a0a` ran 72 focused tests and failed 10. GREEN `a97545e` passed the focused set
+  72/72, the full Bot module 551/551, and the serial solution suite 1,394/1,394 (+4 from C3). Build completed with
+  0 warnings/errors; format verification and `git diff --check` passed. The runner needed temporary collection
+  serialization in the ignored Bot output directory because the existing timing-sensitive activity test hung with
+  default xUnit parallelism. Details and exact scenarios are in [P2I_REPORT.md](P2I_REPORT.md#d2-finding-and-c4-late-refusal-latch).
+- **Limit**: The event has no request or map identifier. A refusal may still arrive arbitrarily late and cannot be
+  formally assigned to a movement. Once observed, position-dependent automated actions stay blocked until a fresh
+  self-placement or a new session followed by one. No live client, host, relay, activity, or movement was run.
