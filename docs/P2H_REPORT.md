@@ -351,3 +351,7 @@ nine projects serially 1,356/1,356, and the RED commit `85144b1` at 2 total, 1 f
 performed. The relay-level inbound ordering barrier and same-map refusal correlation remain accepted follow-ups.
 A final interval regression calls `BeginStopping` while the trusted session remains current and verifies movement-capable
 sends are denied; verification now passes 231 targeted tests, 531 Bot tests, and 1,357 tests across all projects.
+The parent reproduced this final gate: the interval test `AStoppingSignalRejectsMovementBeforeTheCurrentSessionClears`
+failed 1/1 on `41249f7` and passes on `6bd9ab8`; the default build passed with 0 warnings and 0 errors; the targeted set
+passed 231/231, `D3B.Bot.Tests` 531/531, and the nine projects serially 1,357/1,357; formatting and `git diff --check`
+passed.
