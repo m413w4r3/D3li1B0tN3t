@@ -115,42 +115,32 @@ public sealed class P2HSendBarrierTests
         var observer = new RecordingObserver();
         await using var play = new TestPlay([observer]);
         var (connection, bot) = await play.EnterAsync(300);
-        var expectationRegistered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var expectationEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var inboxHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var reattached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var releaseExpectation = new ManualResetEventSlim();
+        var startEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseInbox = new ManualResetEventSlim();
         using var releaseWaiter = new ManualResetEventSlim();
-
-        var behavior = bot.RunAsync(
-            async (context, token) =>
+        var initialState = bot.State;
+        // Hold the loop so attach, placement, and behavior-start inputs queue before disposal.
+        var inboxWaiter = bot.WaitUntilAsync(
+            current =>
             {
-                context.Expect((_, message, _) =>
-                {
-                    if (message is KamasUpdateEvent)
-                    {
-                        expectationEntered.TrySetResult();
-
-                        if (!releaseExpectation.Wait(TimeSpan.FromSeconds(10)))
-                            throw new TimeoutException("The test did not release the actor's inbox.");
-                    }
-
+                if (current.State.MapId != initialState.MapId || current.State.Cell != initialState.Cell)
                     return false;
-                });
-                expectationRegistered.TrySetResult();
-                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+
+                inboxHeld.TrySetResult();
+
+                if (!releaseInbox.Wait(TimeSpan.FromSeconds(10)))
+                    throw new TimeoutException("The test did not release the actor's inbox.");
 
                 return true;
             },
             TestContext.Current.CancellationToken);
 
-        await expectationRegistered.Task.WaitAsync(TestContext.Current.CancellationToken);
-        await bot.ProcessedAsync();
-        connection.Server(new KamasUpdateEvent { Kamas = 1 });
-        await expectationEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await inboxHeld.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         var secondConnection = play.Connect(TestPlay.Account);
         var secondSession = secondConnection.Session;
-        var initialState = bot.State;
         var placedState = initialState with
         {
             MapId = TestPlay.NorthMapId,
@@ -177,9 +167,18 @@ public sealed class P2HSendBarrierTests
                 return true;
             },
             TestContext.Current.CancellationToken);
+        var queuedStart = bot.RunAsync(
+            async (_, token) =>
+            {
+                startEntered.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+
+                return true;
+            },
+            TestContext.Current.CancellationToken);
 
         var stopping = bot.DisposeAsync().AsTask();
-        releaseExpectation.Set();
+        releaseInbox.Set();
         await Task.WhenAny(reattached.Task, stopping).WaitAsync(TestContext.Current.CancellationToken);
 
         Exception? sendException;
@@ -200,7 +199,8 @@ public sealed class P2HSendBarrierTests
 
         releaseWaiter.Set();
         await stopping;
-        await Assert.ThrowsAsync<BotInterruptedException>(() => behavior);
+        await Assert.ThrowsAsync<BotInterruptedException>(() => queuedStart);
+        await Record.ExceptionAsync(() => inboxWaiter);
         await Record.ExceptionAsync(() => reattachWaiter);
 
         Assert.IsType<InvalidOperationException>(sendException);
@@ -208,6 +208,7 @@ public sealed class P2HSendBarrierTests
         Assert.False(bot.IsConnected);
         Assert.Equal(initialState.MapId, bot.State.MapId);
         Assert.Equal(initialState.Cell, bot.State.Cell);
+        Assert.False(startEntered.Task.IsCompleted);
     }
 
     [Fact]

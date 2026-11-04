@@ -197,7 +197,8 @@ policy or an explicit decision accepting this constraint.
 
 P2F recorded two lower risks: a delayed mapless movement event could pass the guards if it arrived
 after a new placement and happened to match that cell; and an absent MapCurrentEvent.map_id had no
-presence guard and could decode as 0. The mapless movement-announcement risk remains.
+presence guard and could decode as 0. P2H later closed the mapless movement-announcement path by
+requiring a pending movement marker for the current map; the absent map-id presence risk remains.
 
 P2H's audit follow-up mitigates the stale-refusal case from this warning. MapMovementRefusedEvent
 also has no map id, so the character now records the map on which a movement answer is pending and
@@ -229,11 +230,13 @@ The next live action still requires a **NEW OWNER GO** and publication and revie
 
 P2H's fourth audit follow-up closes the tested bot-boundary paths for generic object use, mapless self movement
 announcements, and the actor stop window. Object-use requests now pass the same trusted-position check as other
-movement-capable actions. Self announcements require a pending movement marker for the current map, and disposal clears
-the live session gate before closing the inbox. Its focused filter passed 228/228, `D3B.Bot.Tests` passed 528/528, and
-the nine projects passed serially 1,354/1,354. The strict end-to-end current-position criterion still needs a relay-level
-inbound ordering barrier for frames not yet posted to the actor inbox. Same-map refusal correlation remains ambiguous
-because the protocol has no request identifier. No live client, host, relay, or game was run.
+movement-capable actions. Self announcements require a pending movement marker for the current map. A closing audit
+follow-up sets a stopping flag before clearing the session, ignores queued attachment and frame inputs, and rejects queued
+behavior starts; it also restores the no-map ignored-self-walk log assertion. The resulting focused filter passed 230/230,
+`D3B.Bot.Tests` passed 530/530, and the nine projects passed serially 1,356/1,356. The strict end-to-end current-position
+criterion still needs a relay-level inbound ordering barrier for frames not yet posted to the actor inbox. Same-map
+refusal correlation remains ambiguous because the protocol has no request identifier. No live client, host, relay, or game
+was run.
 
 ## F. Supervised visual test and reproducible procedure
 

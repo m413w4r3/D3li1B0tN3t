@@ -305,9 +305,11 @@ The fourth independent audit found three remaining first-party gaps. This bounde
    known, the marker from a client `MapMovementRequest` or guarded send names that current map, and the path starts at the
    current cell. Acceptance clears the marker. A delayed mapless announcement after map change and new placement cannot
    create a path or be promoted by a following confirmation. Group and other-actor paths are unchanged.
-3. **Stop lifecycle.** `DisposeAsync` clears `_session` and `_connected` before it posts `Stopping` and completes the
-   inbox. `OnStopping` remains idempotent. A deterministic regression holds the actor loop while disposal closes the
-   inbox, then verifies a concurrent movement-capable session send is rejected before the stop message is processed.
+3. **Stop lifecycle.** `DisposeAsync` sets volatile `_stopping` before clearing `_session` and `_connected`, posting
+   `Stopping`, and completing the inbox. `OnAttached` and `OnSeen` drop queued inputs once stopping begins, while
+   `OnStarting` rejects queued behavior starts with `Interruption.Stopped`; `OnStopping` remains idempotent. A
+   deterministic regression queues an attach, placement frames, and a behavior start behind a held actor input, then
+   proves the state and movement session gate stay closed as disposal drains the inbox.
 
 The test-only commit `6e9fc8d` compiled and ran RED: **3/3 failed**. The behavior-level object use returned `Used` instead
 of `Busy`; direct session `SendAsync` did not reject object use from a client-reported cell; and a delayed mapless walk
@@ -336,3 +338,12 @@ The protocol also gives movement refusals neither a map id nor request correlati
 newer request remains ambiguous. These are the explicit remaining follow-ups; this lot does not attempt either. No live
 client, host, relay, game, or capture was run. The next live action still requires a **NEW OWNER GO** and publication and
 review of the build for that action.
+
+**Closing-audit completion.** The stop-drain regression ran RED in test commit `85144b1`: the queued reattach made the
+session's object-use `SendAsync` succeed while disposal was in progress. The test-only run passed the restored no-map
+self-walk log case and failed the stop-drain case; the send returned no exception. The regression now also proves a queued
+behavior does not start after stopping begins. Position logging again covers the no-map ignored-self-walk message with
+no cell or path leak, alongside the map-known/cell-unknown case. GREEN verification passed the targeted filter 230/230,
+`D3B.Bot.Tests` 530/530, and the nine projects serially 1,356/1,356 (1,354 baseline + 2). Build and format verification
+passed; `git diff --check` passed. No live run was performed. The relay-level inbound ordering barrier and same-map
+refusal correlation remain accepted follow-ups.

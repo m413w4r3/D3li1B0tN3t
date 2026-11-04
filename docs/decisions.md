@@ -6816,3 +6816,25 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Residual**: Tested bot-boundary paths are closed. Strict end-to-end current-position ordering still needs a relay-level
   inbound barrier for frames not yet posted to the actor inbox. Same-map movement refusal correlation remains ambiguous
   because the protocol carries neither a map id nor request id. No live run is claimed.
+
+## D298: Ignore queued actor inputs once stopping
+
+*2026-11-04, P2H closing-audit follow-up.*
+
+- **Stop drain**: `DisposeAsync` sets volatile `_stopping` before it clears the current session and connection state.
+  `OnAttached` and `OnSeen` ignore queued inputs, and `OnStarting` fails queued behavior starts with
+  `BotInterruptedException(Interruption.Stopped)`. `OnStopping` remains idempotent; `ProcessedAsync` still completes
+  immediately once the inbox writer has closed, and the session gate has no current session.
+- **Regression and logging**: The test-only commit `85144b1` compiled and ran RED. The stop-drain case failed because
+  a queued reattach allowed object-use `SendAsync` to succeed; the restored no-map self-walk logging case passed. The
+  focused RED run had 2 tests total, 1 failed and 1 passed. The regression now queues attach, placement frames, and a
+  behavior start before disposal, then checks that state, sends, and behavior remain stopped. Position logging checks the
+  no-map ignored-self-walk message without cell or path data, while retaining the map-known/cell-unknown assertion.
+- **GREEN evidence**: With SDK 10.0.403, the targeted P2H/movement/runtime/element-use/banking/fight/session/inventory
+  filter passed 230/230; `D3B.Bot.Tests` passed 530/530; and all nine projects passed serially: App 142, Bot 530, Core 11,
+  Data 133, Engine 257, Network 133, Protocol 88, Scripts 35, Storage 27 — 1,356/1,356, 0 failed, 0 skipped (1,354
+  baseline + 2). `dotnet build D3B.slnx` passed with 0 warnings and errors; format verification and `git diff --check`
+  passed. No live client, host, relay, game, or capture was used.
+- **Residual**: The relay-level inbound ordering barrier and same-map refusal correlation remain accepted follow-ups.
+  The bot boundary is closed for tested paths, while strict end-to-end current-position ordering still depends on the
+  relay-level follow-up. No live run is claimed.

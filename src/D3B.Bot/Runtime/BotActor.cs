@@ -59,6 +59,8 @@ public sealed class BotActor : IAsyncDisposable
     // The loop writes these; the session gate reads the current behavior.
     private volatile GameSession? _session;
     private volatile RunningBehavior? _behavior;
+    // Queued inputs can drain before Stopping, so handlers need the synchronous dispose signal.
+    private volatile bool _stopping;
 
     // The loop writes these, and anyone reads them.
     private volatile CharacterState _state;
@@ -321,6 +323,7 @@ public sealed class BotActor : IAsyncDisposable
     /// <returns>A task that completes once the bot's loop is over.</returns>
     public async ValueTask DisposeAsync()
     {
+        _stopping = true;
         _session = null;
         _connected = false;
         Post(new Stopping());
@@ -506,7 +509,7 @@ public sealed class BotActor : IAsyncDisposable
 
     private void OnSeen(GameSession session, RelayDirection side, IMessage message)
     {
-        if (session != _session)
+        if (_stopping || session != _session)
             return;
 
         var before = _state;
@@ -684,6 +687,13 @@ public sealed class BotActor : IAsyncDisposable
     {
         var started = starting.Started;
 
+        if (_stopping)
+        {
+            started.TrySetException(new BotInterruptedException(Interruption.Stopped));
+
+            return;
+        }
+
         if (starting.Readiness is not Readiness.Now)
         {
             if (CanAct(starting.Readiness))
@@ -790,6 +800,9 @@ public sealed class BotActor : IAsyncDisposable
 
     private void OnAttached(GameSession session, CharacterState state)
     {
+        if (_stopping)
+            return;
+
         if (_behavior is { } behavior)
             Interrupt(behavior, Interruption.Disconnected);
 
