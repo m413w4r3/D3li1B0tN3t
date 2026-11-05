@@ -131,6 +131,64 @@ fn valid_lok_payload_produces_two_fields() {
 }
 
 #[test]
+fn omitted_nullable_schema_and_frame_properties_are_accepted() {
+    let mut schema = lok_schema();
+    for field in schema["messages"][0]["fields"]
+        .as_array_mut()
+        .expect("schema fields are an array")
+    {
+        let object = field.as_object_mut().expect("field is an object");
+        object.remove("messageType");
+        object.remove("enumType");
+        object.remove("oneof");
+    }
+
+    let mut without_type_url = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    without_type_url
+        .as_object_mut()
+        .expect("frame is an object")
+        .remove("typeUrl");
+
+    let mut without_carried_type =
+        frame(1, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    without_carried_type
+        .as_object_mut()
+        .expect("frame is an object")
+        .remove("carriedType");
+
+    let output = run(&corpus(schema, &[without_type_url, without_carried_type]))
+        .expect("omitted nullable properties are accepted");
+    assert_eq!(analysis(&output, 0)["status"], "VALID");
+    assert_eq!(analysis(&output, 0)["typeUrlOk"], false);
+    assert_eq!(analysis(&output, 1)["status"], "UNKNOWN_TYPE");
+    assert_eq!(analysis(&output, 1)["carriedType"], Value::Null);
+}
+
+#[test]
+fn explicit_null_schema_properties_are_accepted() {
+    let output = run(&corpus(
+        lok_schema(),
+        &[frame(
+            0,
+            json!("lok"),
+            json!("type.ankama.com/lok"),
+            &[0x08, 0x01],
+        )],
+    ))
+    .expect("explicit null nullable properties are accepted");
+    assert_eq!(analysis(&output, 0)["status"], "VALID");
+}
+
+#[test]
+fn non_string_optional_schema_property_is_rejected() {
+    let mut schema = lok_schema();
+    schema["messages"][0]["fields"][0]["oneof"] = json!(7);
+    let error = run(&corpus(schema, &[])).expect_err("optional string of wrong type is rejected");
+    assert_eq!(error.exit_code(), 2);
+    assert_eq!(error.code, "SCHEMA_INVALID");
+}
+
+#[test]
 fn unknown_field_number_is_schema_mismatch() {
     let output = run(&corpus(
         lok_schema(),
