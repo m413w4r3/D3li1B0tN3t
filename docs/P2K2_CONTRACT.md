@@ -10,6 +10,8 @@ shape or a limit requires a new `protocolVersion`. The engine and the C# side re
 - The schema is always sent in-band by D3B; the engine never reads `.binpb`, never touches the filesystem for protocol
   data, and never persists a frame.
 - Output is redacted: no payload bytes, no string content, no numeric field values, no account data.
+- Optional properties may be omitted when their value is null; a reader treats an absent optional property as null.
+  Required booleans and strings are always present.
 - Ordering is deterministic: schema messages sorted by `name`, fields by `number`; analyses in input order.
 
 ## 2. Replay (Mode A)
