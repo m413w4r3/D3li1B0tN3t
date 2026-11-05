@@ -237,7 +237,7 @@ public sealed class P2LIntegrationTests
 
         FileDescriptorSet descriptorSet = DiagnosticTestSchema.CreateDescriptorSet();
         byte[] schemaBytes = descriptorSet.ToByteArray();
-        string clientVersion = "p2l-synthetic-cli";
+        string clientVersion = "3.7.99.98";
         DiagnosticSchema schema = DiagnosticSchemaExporter.Export(clientVersion, ProtocolSchema.Load(schemaBytes));
         DiagnosticMessage message = schema.Messages.Single(item => item.Name == "fixture.Root.Inner");
         DiagnosticAnalysis analysis = CreateAnalysis(message, 0, "server", DiagnosticStatus.Valid);
@@ -301,7 +301,7 @@ public sealed class P2LIntegrationTests
         };
         FileDescriptorSet descriptorSet = new();
         descriptorSet.File.Add(file);
-        return DiagnosticSchemaExporter.Export("p2l-synthetic-chain", descriptorSet);
+        return DiagnosticSchemaExporter.Export("3.7.99.99", descriptorSet);
     }
 
     private static DiagnosticAnalysis[] CreateChainAnalyses(DiagnosticSchema schema)
@@ -380,8 +380,8 @@ public sealed class P2LIntegrationTests
                 EngineVersion = "0.1.0",
                 SnsCommit = "abcdef0",
             },
-            Producer = "D3B.Diagnostic.Tests",
-            ProducerVersion = "p2l-synthetic",
+            Producer = "D3B.Diagnostic",
+            ProducerVersion = "1.0.0-p2l.synthetic",
             StartedAtUtc = _startedAtUtc,
             IncludeReadable = false,
             QueueCapacity = 16,

@@ -256,6 +256,23 @@ public sealed class DiagnosticReportTests
     }
 
     [Fact]
+    public void LoaderRejectsProducerValuesOutsideFieldSpecificFormats()
+    {
+        string valid = DiagnosticReportJson.Serialize(Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]), new DiagnosticReportOptions());
+
+        AssertRejected(root => root["provenance"]!["producer"] = "192.0.2.1");
+        AssertRejected(root => root["provenance"]!["producerVersion"] = "192.0.2.1");
+        AssertRejected(root => root["clientVersion"] = "3.7.preview");
+
+        void AssertRejected(Action<JsonObject> mutate)
+        {
+            JsonObject candidate = JsonNode.Parse(valid)!.AsObject();
+            mutate(candidate);
+            Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(Encoding.UTF8.GetBytes(candidate.ToJsonString())));
+        }
+    }
+
+    [Fact]
     public void UnattributedAndUnsafeEngineStringsNeverReachTheReport()
     {
         DiagnosticReport report = Build(
@@ -301,6 +318,43 @@ public sealed class DiagnosticReportTests
         Assert.Equal(string.Empty, report.Engine.SnsCommit);
         Assert.DoesNotContain("/private/engine", json, StringComparison.Ordinal);
         Assert.DoesNotContain("user@host", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnsafeProducerIdentityValuesAreRemovedAndMinVerIdentityIsPreserved()
+    {
+        DiagnosticReport unsafeReport = Build(
+            [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
+            context: Context() with { Producer = "192.0.2.1", ProducerVersion = "192.0.2.1" });
+        string unsafeJson = DiagnosticReportJson.Serialize(unsafeReport, new DiagnosticReportOptions());
+
+        Assert.Equal(string.Empty, unsafeReport.Provenance.Producer);
+        Assert.Equal(string.Empty, unsafeReport.Provenance.ProducerVersion);
+        Assert.DoesNotContain("192.0.2.1", unsafeJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("192.0.2.1", unsafeReport.Provenance.Producer, StringComparison.Ordinal);
+        Assert.DoesNotContain("192.0.2.1", unsafeReport.Provenance.ProducerVersion, StringComparison.Ordinal);
+
+        DiagnosticReport minVerReport = Build(
+            [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
+            context: Context() with { Producer = "D3B.Diagnostic", ProducerVersion = "0.0.0-alpha.0.94+sha" });
+        LoadedDiagnosticReport loaded = DiagnosticReportJson.Load(DiagnosticReportJson.SerializeToUtf8Bytes(minVerReport, new DiagnosticReportOptions()));
+
+        Assert.Equal("D3B.Diagnostic", loaded.Report.Provenance.Producer);
+        Assert.Equal("0.0.0-alpha.0.94+sha", loaded.Report.Provenance.ProducerVersion);
+    }
+
+    [Fact]
+    public void AggregatorKeepsOnlyDottedDofusClientVersions()
+    {
+        DiagnosticReport valid = Build(
+            [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
+            context: Context() with { ClientVersion = "3.7.12.12" });
+        DiagnosticReport invalid = Build(
+            [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
+            context: Context() with { ClientVersion = "3.7.preview" });
+
+        Assert.Equal("3.7.12.12", valid.ClientVersion);
+        Assert.Equal(string.Empty, invalid.ClientVersion);
     }
 
     [Fact]

@@ -15,6 +15,12 @@ public static class DiagnosticReportJson
     private static readonly Regex _safeEngineVersion = new(
         @"\A[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?\z",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly Regex _safeProducerVersion = new(
+        @"\A[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly Regex _safeClientVersion = new(
+        @"\A[0-9]+(?:\.[0-9]+)+\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     /// <summary>Serializes a report to deterministic compact UTF-8 JSON.</summary>
     public static byte[] SerializeToUtf8Bytes(DiagnosticReport report, DiagnosticReportOptions options)
@@ -653,7 +659,7 @@ public static class DiagnosticReportJson
             || report.ReportVersion != 1
             || report.ProtocolVersion != DiagnosticProtocol.ProtocolVersion
             || !IsSha256(report.SchemaSha256)
-            || !IsSafeIdentity(report.ClientVersion)
+            || !IsSafeClientVersion(report.ClientVersion)
             || report.Coverage is not ("complete" or "partial")
             || report.Engine is null
             || report.Provenance is null
@@ -741,8 +747,8 @@ public static class DiagnosticReportJson
     {
         ValidateRequiredProperties(element, "source", "producer", "producerVersion", "startedAtUtc", "completedAtUtc");
         if (provenance.Source is not ("live" or "synthetic")
-            || !IsSafeIdentity(provenance.Producer)
-            || !IsSafeIdentity(provenance.ProducerVersion))
+            || !IsSafeProducer(provenance.Producer)
+            || !IsSafeProducerVersion(provenance.ProducerVersion))
         {
             throw new DiagnosticReportException(InvalidReportMessage);
         }
@@ -1033,9 +1039,19 @@ public static class DiagnosticReportJson
         }
     }
 
-    internal static bool IsSafeIdentity(string? value)
+    internal static bool IsSafeClientVersion(string? value)
     {
-        return value is not null && value.Length <= 128 && value.All(character => character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '+' or '-');
+        return value is { Length: <= 128 } && _safeClientVersion.IsMatch(value);
+    }
+
+    internal static bool IsSafeProducer(string? value)
+    {
+        return value is "" or "D3B.Diagnostic";
+    }
+
+    internal static bool IsSafeProducerVersion(string? value)
+    {
+        return value == string.Empty || (value is { Length: <= 128 } && _safeProducerVersion.IsMatch(value));
     }
 
     internal static bool IsSafeEngine(string? value)
@@ -1161,15 +1177,36 @@ public static class DiagnosticReportJson
             return true;
         }
 
+        DiagnosticReportSession session = report.Session;
+        DiagnosticReportTruncation truncation = report.Truncation;
+        if (session.State != DiagnosticReportSessionState.Completed
+            || session.ErrorCode is not null
+            || session.EnqueuedFrames != session.AnalyzedFrames
+            || session.DroppedFrames != 0
+            || session.UnattributedAnalyses != 0
+            || truncation.OutputTruncated
+            || truncation.TypesOmitted != 0
+            || truncation.FieldsOmitted != 0
+            || truncation.NestedFieldsOmitted != 0
+            || truncation.VariantsOmitted != 0
+            || truncation.ProblemsOmitted != 0
+            || truncation.ShapeValuesOmitted != 0
+            || truncation.Reasons.Count != 0
+            || report.Types.Any(type => type.DetailTruncated
+                || type.Contradictions.Any(contradiction => contradiction.Code == DiagnosticReportContradictionCode.DetailTruncated)))
+        {
+            return false;
+        }
+
         try
         {
-            long frameTotal = report.Session.UnattributedAnalyses;
+            long frameTotal = session.UnattributedAnalyses;
             foreach (DiagnosticReportType type in report.Types)
             {
                 frameTotal = CheckedCountAdd(frameTotal, type.Occurrences);
             }
 
-            return frameTotal == report.Session.AnalyzedFrames;
+            return frameTotal == session.AnalyzedFrames;
         }
         catch (DiagnosticReportException)
         {
