@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\D3B.Core\D3B.Core.csproj" />
     <ProjectReference Include="..\D3B.Data\D3B.Data.csproj" />
+    <ProjectReference Include="..\D3B.Diagnostic\D3B.Diagnostic.csproj" />
     <ProjectReference Include="..\D3B.Engine\D3B.Engine.csproj" />
     <ProjectReference Include="..\D3B.Network\D3B.Network.csproj" />
     <ProjectReference Include="..\D3B.Protocol\D3B.Protocol.csproj" />
