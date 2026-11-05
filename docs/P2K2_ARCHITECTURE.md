@@ -120,7 +120,8 @@ configuration registers nothing and starts no process.
 
 ### 4.3 Resolver
 
-The resolver is deterministic offline code, not an LLM call. Its "agentic" cycle is explicit:
+The resolver is deterministic offline code, not an LLM call. Its observation/verification cycle is explicit (an offline
+workflow, not runtime agent autonomy; "agentic" names the workflow, not an autonomous actor):
 
 **Observe** (engine analysis + schema + observation metadata) → **propose** (structural matches against readable
 protocol, prior pins, external references) → **verify** (field-by-field and nested comparison, direction, build) →
@@ -156,8 +157,9 @@ and never clears a latch. Mapping regeneration stays in `scripts/mapping.cs`; de
   malformed output), IPC client (queue overflow drop accounting, crash, timeout, no relay blocking), resolver
   (`VERIFIED`/`CANDIDATE`/`CONFLICT`/`UNKNOWN` rules, `.jpe`/`.kjt` refusal, build rotation, ambiguity), promotion gate
   (refuses unproven, no latch clearing), privacy (no payload in any report/log).
-- **Integration**: an in-process fake engine and a real `d3b-diagnostic` process fed a synthetic replay, including sidecar
-  crash and queue overflow, asserting the relay path is unaffected.
+- **Integration**: an in-process fake engine and a real `d3b-diagnostic` process fed a synthetic replay; sidecar crash,
+  timeout and queue overflow are exercised with fakes. A combined real-process crash-plus-overflow scenario is not
+  tested, and the real-process test covers a successful session.
 - **Baseline**: the serialized full C# suite starts at 1,465 passed; every lot adds tests and keeps the suite green. Rust
   tests run with `cargo test --offline --locked` locally and `cargo test --locked` in CI.
 

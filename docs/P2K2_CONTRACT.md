@@ -286,7 +286,9 @@ mode 0600. No TCP, no network, no pid file, no daemonization.
 
 Each message is `u32` big-endian length followed by exactly that many UTF-8 JSON bytes. Maximum 1,048,576 bytes per
 message. Zero length, an over-limit length, invalid UTF-8 or invalid JSON closes the connection with an `error` message
-when possible.
+when possible. A payload travels as hex, so a frame message is roughly twice its payload plus metadata: the effective
+frame payload ceiling is about 0.5 MiB for the 1 MiB message cap. A larger frame is rejected or reported as a failed,
+partial observation; it never affects the relay. The engine's own analysis limit remains 1 MiB for direct payloads.
 
 ### 4.3 Session
 
@@ -373,10 +375,12 @@ build they came from. A report never contains a raw payload or a numeric field v
 For a `VERIFIED` candidate the resolver may propose a synthetic fixture: the schema message name, an expected engine
 status (`VALID`), and the expected redacted field structure. The fixture payload is generated from zero/empty values
 only, and it is never serialized into a report: a report carries the schema message name, expected status and expected
-field numbers, never payload hex. The resolver does not write a mapping. `PromotionGate` refuses any candidate that is
-not `VERIFIED`, whose structural flags (`ExactShape`, `UniqueShape`, `HasValidObservation`) are not all true, whose
-evidence has no verified item, that has a contradiction, lacks the fixture RED/GREEN pair, fails `ContractAudit`, or
-lacks an explicit owner approval token. It never clears the P2K latch and never edits a production mapping.
+field numbers, never payload hex. The resolver does not write a mapping. `PromotionGate` looks the candidate up in the
+supplied report by token and readable name and evaluates that reported candidate; a detached candidate is refused. It
+refuses any candidate that is not `VERIFIED`, whose structural flags (`ExactShape`, `UniqueShape`,
+`HasValidObservation`) are not all true, whose evidence has fewer than two distinct verified sources or no verified
+`schema`/`readable` source, that has a contradiction, lacks the fixture RED/GREEN pair, fails `ContractAudit`, or lacks
+an explicit owner approval token. It never clears the P2K latch and never edits a production mapping.
 
 ## 6. Versioning
 

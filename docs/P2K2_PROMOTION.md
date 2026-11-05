@@ -31,8 +31,10 @@ skipped because a candidate "looks right", and no agent, script or resolver may 
 
 `PromotionGate` refuses, with a stable reason code, when:
 
-- `NOT_VERIFIED`: classification is `CANDIDATE`, `CONFLICT` or `UNKNOWN`, or the candidate's own structural flags
-  (`ExactShape`, `UniqueShape`, `HasValidObservation`) are not all true, or no evidence item is verified;
+- `NOT_VERIFIED`: classification is `CANDIDATE`, `CONFLICT` or `UNKNOWN`, or the candidate is not the report's
+  candidate for its token/readable pair, or the candidate's own structural flags (`ExactShape`, `UniqueShape`,
+  `HasValidObservation`) are not all true, or its evidence has fewer than two distinct verified sources or no verified
+  `schema`/`readable` source;
 - `CONTRADICTION`: a contradiction exists, even if the score is high;
 - `BUILD_MISMATCH`: the report's client version or schema SHA-256 differs from the target build;
 - `PARTIAL_OBSERVATION`: the only supporting observation run dropped frames or the sidecar failed;
