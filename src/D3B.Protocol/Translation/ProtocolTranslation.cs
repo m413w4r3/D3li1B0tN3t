@@ -46,6 +46,7 @@ public sealed class ProtocolTranslation
 
     private readonly Dictionary<string, (MessageDescriptor Message, MessageParser Parser)> _readableOf;
     private readonly Dictionary<string, string> _obfuscatedOf;
+    private readonly Dictionary<string, MessageDescriptor> _schemaOf;
 
     /// <summary>Gets the client build it translates, as its version file names it.</summary>
     public string ClientVersion { get; }
@@ -53,12 +54,13 @@ public sealed class ProtocolTranslation
     /// <summary>Gets what auditing the build's mapping checked.</summary>
     public AuditReport Audit { get; }
 
-    private ProtocolTranslation(string clientVersion, AuditReport audit, Dictionary<string, (MessageDescriptor Message, MessageParser Parser)> readableOf, Dictionary<string, string> obfuscatedOf)
+    private ProtocolTranslation(string clientVersion, AuditReport audit, Dictionary<string, (MessageDescriptor Message, MessageParser Parser)> readableOf, Dictionary<string, string> obfuscatedOf, Dictionary<string, MessageDescriptor> schemaOf)
     {
         ClientVersion = clientVersion;
         Audit = audit;
         _readableOf = readableOf;
         _obfuscatedOf = obfuscatedOf;
+        _schemaOf = schemaOf;
     }
 
     /// <summary>Makes the translation of a build from its schema and its mapping, once they hold.</summary>
@@ -86,7 +88,13 @@ public sealed class ProtocolTranslation
 
         var obfuscatedOf = mapping.Messages.ToDictionary(pair => pair.Readable, pair => pair.Obfuscated, StringComparer.Ordinal);
 
-        return new ProtocolTranslation(mapping.ClientVersion, audit, readableOf, obfuscatedOf);
+        // A build's schema holds messages the readable protocol lacks. Their descriptors let a non-position policy check
+        // that an unknown payload is the shape the build named, not bytes of another message or a later field.
+        var schemaOf = schema.Files.SelectMany(file => Descriptors.Messages(file.MessageTypes)).ToDictionary(
+            message => message.FullName,
+            StringComparer.Ordinal);
+
+        return new ProtocolTranslation(mapping.ClientVersion, audit, readableOf, obfuscatedOf, schemaOf);
     }
 
     /// <summary>Lists the readable fields and enum values a mapping pairs with another number, which no translation reads.</summary>
@@ -186,13 +194,13 @@ public sealed class ProtocolTranslation
         }
         catch (InvalidProtocolBufferException exception)
         {
-            return new DecodedGameFrame((int)frame.Length, null, null, null, null, false, $"it is no game message: {exception.Message}");
+            return new DecodedGameFrame((int)frame.Length, null, null, null, null, false, $"it is no game message: {exception.Message}", TranslationProblemKind.MalformedEnvelope, false, false);
         }
 
         var length = envelope.CalculateSize();
 
         if (length != frame.Length)
-            return new DecodedGameFrame((int)frame.Length, envelope, null, null, null, false, $"its envelope encodes back to {length} of its {frame.Length} bytes: it holds what the readable protocol lacks, or is encoded otherwise.");
+            return new DecodedGameFrame((int)frame.Length, envelope, null, null, null, false, $"its envelope encodes back to {length} of its {frame.Length} bytes: it holds what the readable protocol lacks, or is encoded otherwise.", TranslationProblemKind.EnvelopeLengthMismatch, false, false);
 
         var any = envelope.ContentCase switch
         {
@@ -203,12 +211,17 @@ public sealed class ProtocolTranslation
         };
 
         if (any is null)
-            return new DecodedGameFrame((int)frame.Length, envelope, null, null, null, false, null);
+            return new DecodedGameFrame((int)frame.Length, envelope, null, null, null, false, null, TranslationProblemKind.None, true, false);
 
         var carried = Any.GetTypeName(any.TypeUrl);
+        var gameTypeUrl = string.Equals(any.TypeUrl, TypeUrlPrefix + carried, StringComparison.Ordinal);
 
         if (!_readableOf.TryGetValue(carried, out var readable))
-            return new DecodedGameFrame((int)frame.Length, envelope, carried, null, null, false, $"it carries .{carried}, which the readable protocol lacks.");
+        {
+            var schemaValid = _schemaOf.TryGetValue(carried, out var schemaDescriptor) && SchemaPayload.IsValid(schemaDescriptor, any.Value.Span);
+
+            return new DecodedGameFrame((int)frame.Length, envelope, carried, null, null, false, $"it carries .{carried}, which the readable protocol lacks.", TranslationProblemKind.UnknownCarriedType, schemaValid, gameTypeUrl);
+        }
 
         IMessage content;
 
@@ -218,13 +231,13 @@ public sealed class ProtocolTranslation
         }
         catch (InvalidProtocolBufferException exception)
         {
-            return new DecodedGameFrame((int)frame.Length, envelope, carried, readable.Message, null, false, $"it carries no {readable.Message.FullName}: {exception.Message}");
+            return new DecodedGameFrame((int)frame.Length, envelope, carried, readable.Message, null, false, $"it carries no {readable.Message.FullName}: {exception.Message}", TranslationProblemKind.UnreadablePayload, false, gameTypeUrl);
         }
 
         var contentLength = content.CalculateSize();
 
         return contentLength == any.Value.Length
-            ? new DecodedGameFrame((int)frame.Length, envelope, carried, readable.Message, content, true, null)
-            : new DecodedGameFrame((int)frame.Length, envelope, carried, readable.Message, content, true, $"its {readable.Message.FullName} encodes back to {contentLength} of its {any.Value.Length} bytes: it holds what the readable protocol lacks, or is encoded otherwise.");
+            ? new DecodedGameFrame((int)frame.Length, envelope, carried, readable.Message, content, true, null, TranslationProblemKind.None, true, gameTypeUrl)
+            : new DecodedGameFrame((int)frame.Length, envelope, carried, readable.Message, content, true, $"its {readable.Message.FullName} encodes back to {contentLength} of its {any.Value.Length} bytes: it holds what the readable protocol lacks, or is encoded otherwise.", TranslationProblemKind.PartialPayload, true, gameTypeUrl);
     }
 }

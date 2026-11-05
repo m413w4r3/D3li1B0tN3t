@@ -6,6 +6,7 @@ using D3B.Protocol.Mapping;
 using D3B.Protocol.Tests.Mapping;
 using D3B.Protocol.Translation;
 using Google.Protobuf;
+using Google.Protobuf.Reflection;
 using Google.Protobuf.WellKnownTypes;
 
 namespace D3B.Protocol.Tests.Translation;
@@ -173,6 +174,9 @@ public sealed class ProtocolTranslationTests
 
         Assert.True(decoded.IsUnderstood, decoded.Problem);
         Assert.True(decoded.IsRead);
+        Assert.True(decoded.IsSchemaValid);
+        Assert.True(decoded.IsGameTypeUrl);
+        Assert.Equal(TranslationProblemKind.None, decoded.ProblemKind);
         Assert.Equal(MapCurrentEvent.Descriptor, decoded.ReadableType);
         Assert.Equal(current, decoded.Content);
     }
@@ -186,6 +190,8 @@ public sealed class ProtocolTranslationTests
 
         Assert.True(decoded.IsRead);
         Assert.False(decoded.IsUnderstood);
+        Assert.True(decoded.IsSchemaValid);
+        Assert.Equal(TranslationProblemKind.PartialPayload, decoded.ProblemKind);
         Assert.Equal(information, decoded.Content);
         Assert.Contains("encodes back to", decoded.Problem, StringComparison.Ordinal);
     }
@@ -197,10 +203,91 @@ public sealed class ProtocolTranslationTests
 
         Assert.False(decoded.IsRead);
         Assert.False(decoded.IsUnderstood);
+        Assert.False(decoded.IsSchemaValid);
+        Assert.Equal(TranslationProblemKind.UnknownCarriedType, decoded.ProblemKind);
         Assert.NotNull(decoded.Envelope);
         Assert.Equal("unknown", decoded.CarriedType);
         Assert.Null(decoded.ReadableType);
         Assert.Equal("it carries .unknown, which the readable protocol lacks.", decoded.Problem);
+    }
+
+    [Fact]
+    public void AnUnknownCarriedTypeIsSchemaValidWhenItsPayloadFitsTheBuildsSchema()
+    {
+        var translation = Translate(obfuscation => obfuscation.AddSchemaMessage("unknown_current", (1, FieldDescriptorProto.Types.Type.Int64)));
+        var decoded = translation.DecodeGame(GameEventFrame(new MapCurrentEvent { MapId = 1 }, "unknown_current"));
+
+        Assert.False(decoded.IsRead);
+        Assert.False(decoded.IsUnderstood);
+        Assert.True(decoded.IsSchemaValid);
+        Assert.Equal(TranslationProblemKind.UnknownCarriedType, decoded.ProblemKind);
+    }
+
+    [Fact]
+    public void AGameFrameWithAForeignTypeUrlIsNotTheGamesType()
+    {
+        var translation = Translate(obfuscation => obfuscation.AddSchemaMessage("unknown_current", (1, FieldDescriptorProto.Types.Type.Int64)));
+
+        foreach (var typeUrl in new[] { "other/unknown_current", "type.ankama.com/x/unknown_current" })
+        {
+            var envelope = GameMessage.Parser.ParseFrom(GameEventFrame(new MapCurrentEvent { MapId = 1 }, "unknown_current"));
+            envelope.Event.Content.TypeUrl = typeUrl;
+            var decoded = translation.DecodeGame(new ReadOnlySequence<byte>(envelope.ToByteArray()));
+
+            Assert.Equal(TranslationProblemKind.UnknownCarriedType, decoded.ProblemKind);
+            Assert.True(decoded.IsSchemaValid);
+            Assert.False(decoded.IsGameTypeUrl);
+        }
+    }
+
+    [Fact]
+    public void AnUnknownCarriedTypeHoldingWhatItsSchemaLacksIsNotSchemaValid()
+    {
+        var translation = Translate(obfuscation => obfuscation.AddSchemaMessage("unknown_current", (1, FieldDescriptorProto.Types.Type.Int64)));
+        var decoded = translation.DecodeGame(GameEventFrame(new MapCurrentEvent { MapId = 1 }, "unknown_current", extra: [0x10, 0x01]));
+
+        Assert.Equal(TranslationProblemKind.UnknownCarriedType, decoded.ProblemKind);
+        Assert.False(decoded.IsSchemaValid);
+    }
+
+    [Fact]
+    public void AnUnknownCarriedTypeWhosePayloadDoesNotParseIsNotSchemaValid()
+    {
+        var translation = Translate(obfuscation => obfuscation.AddSchemaMessage("unknown_current", (1, FieldDescriptorProto.Types.Type.Int64)));
+        var decoded = translation.DecodeGame(GameEventFrame(new MapCurrentEvent { MapId = 1 }, "unknown_current", extra: [0x12, 0x7F]));
+
+        Assert.Equal(TranslationProblemKind.UnknownCarriedType, decoded.ProblemKind);
+        Assert.False(decoded.IsSchemaValid);
+    }
+
+    [Fact]
+    public void AGameEnvelopeHoldingWhatTheReadableProtocolLacksHasItsKind()
+    {
+        // Field 15 of the envelope, a varint: no readable field of GameMessage has it.
+        byte[] bytes = [.. new GameMessage { Event = new GameEvent { Content = new Any { TypeUrl = "type.ankama.com/" + new Obfuscation(ReadableProtocol.Files).Of(MapCurrentEvent.Descriptor.FullName), Value = ByteString.CopyFrom(new MapCurrentEvent { MapId = 1 }.ToByteArray()) } } }.ToByteArray(), 15 << 3, 1];
+        var decoded = Translate().DecodeGame(new ReadOnlySequence<byte>(bytes));
+
+        Assert.False(decoded.IsUnderstood);
+        Assert.False(decoded.IsSchemaValid);
+        Assert.Equal(TranslationProblemKind.EnvelopeLengthMismatch, decoded.ProblemKind);
+        Assert.NotNull(decoded.Envelope);
+    }
+
+    [Fact]
+    public void AReadablePayloadThatDoesNotParseHasItsKind()
+    {
+        var any = new Any
+        {
+            TypeUrl = "type.ankama.com/" + new Obfuscation(ReadableProtocol.Files).Of(MapCurrentEvent.Descriptor.FullName),
+            Value = ByteString.CopyFrom(0x12, 0x7F),
+        };
+        var decoded = Translate().DecodeGame(new ReadOnlySequence<byte>(new GameMessage { Event = new GameEvent { Content = any } }.ToByteArray()));
+
+        Assert.False(decoded.IsRead);
+        Assert.False(decoded.IsUnderstood);
+        Assert.False(decoded.IsSchemaValid);
+        Assert.Equal(TranslationProblemKind.UnreadablePayload, decoded.ProblemKind);
+        Assert.NotNull(decoded.CarriedType);
     }
 
     [Fact]
@@ -211,6 +298,8 @@ public sealed class ProtocolTranslationTests
 
         Assert.True(decoded.IsUnderstood, decoded.Problem);
         Assert.False(decoded.IsRead);
+        Assert.True(decoded.IsSchemaValid);
+        Assert.Equal(TranslationProblemKind.None, decoded.ProblemKind);
         Assert.Null(decoded.CarriedType);
     }
 
@@ -221,6 +310,8 @@ public sealed class ProtocolTranslationTests
 
         Assert.False(decoded.IsRead);
         Assert.Null(decoded.Envelope);
+        Assert.False(decoded.IsSchemaValid);
+        Assert.Equal(TranslationProblemKind.MalformedEnvelope, decoded.ProblemKind);
         Assert.StartsWith("it is no game message: ", decoded.Problem, StringComparison.Ordinal);
     }
 

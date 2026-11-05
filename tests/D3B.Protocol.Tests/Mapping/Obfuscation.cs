@@ -154,6 +154,29 @@ internal sealed class Obfuscation
         return set.ToByteArray();
     }
 
+    /// <summary>Adds a message no readable message pairs with, as a build's schema holds what D3B has not read.</summary>
+    /// <param name="name">The schema's name of the message, as a build's type URL carries it.</param>
+    /// <param name="fields">The message's fields, by number and protobuf type.</param>
+    public void AddSchemaMessage(string name, params (int Number, FieldDescriptorProto.Types.Type Type)[] fields)
+    {
+        var file = new FileDescriptorProto { Name = name + ".proto", Syntax = "proto3" };
+        var message = new DescriptorProto { Name = name };
+
+        foreach (var (number, type) in fields)
+        {
+            message.Field.Add(new FieldDescriptorProto
+            {
+                Name = $"field_{number}",
+                Number = number,
+                Type = type,
+                Label = FieldDescriptorProto.Types.Label.Optional,
+            });
+        }
+
+        file.MessageType.Add(message);
+        _files[file.Name] = file;
+    }
+
     /// <summary>Builds the schema of the obfuscated files as they stand.</summary>
     public ProtocolSchema Schema()
     {

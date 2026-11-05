@@ -26,6 +26,23 @@ public sealed class DecodedGameFrame
     /// <summary>Gets why the frame was not understood whole, or <see langword="null"/> when it was.</summary>
     public string? Problem { get; }
 
+    /// <summary>Gets the structured kind of <see cref="Problem"/>.</summary>
+    public TranslationProblemKind ProblemKind { get; }
+
+    /// <summary>Gets whether the carried payload is valid for its type: an unknown type's build schema, or a readable type the readable parser accepted.</summary>
+    /// <remarks>
+    /// For an unknown carried type, the build's schema is walked exactly. For a readable type, this is true when the
+    /// readable parser accepted the payload, whole or partial; a partial readable frame is read and is not walked against
+    /// the fields the readable protocol leaves out (D47). A frame with no content has nothing to validate. Malformed
+    /// envelopes, length mismatches and unreadable readable payloads are false. This property alone never authorizes
+    /// movement: the non-position policy also requires <see cref="TranslationProblemKind.UnknownCarriedType"/> and its
+    /// build-scoped list.
+    /// </remarks>
+    public bool IsSchemaValid { get; }
+
+    /// <summary>Gets whether the envelope's <c>Any</c> names its type with the game's type URL prefix.</summary>
+    public bool IsGameTypeUrl { get; }
+
     /// <summary>Gets whether the frame was understood whole: its envelope and its content encode back to their lengths, so D3B may rewrite it.</summary>
     [MemberNotNullWhen(true, nameof(Envelope))]
     [MemberNotNullWhen(false, nameof(Problem))]
@@ -39,7 +56,7 @@ public sealed class DecodedGameFrame
     [MemberNotNullWhen(true, nameof(Envelope), nameof(Content))]
     public bool IsRead { get; }
 
-    internal DecodedGameFrame(int length, GameMessage? envelope, string? carriedType, MessageDescriptor? readableType, IMessage? content, bool read, string? problem)
+    internal DecodedGameFrame(int length, GameMessage? envelope, string? carriedType, MessageDescriptor? readableType, IMessage? content, bool read, string? problem, TranslationProblemKind problemKind, bool schemaValid, bool gameTypeUrl)
     {
         Length = length;
         Envelope = envelope;
@@ -48,5 +65,8 @@ public sealed class DecodedGameFrame
         Content = content;
         IsRead = read && envelope is not null && content is not null;
         Problem = problem;
+        ProblemKind = problemKind;
+        IsSchemaValid = schemaValid;
+        IsGameTypeUrl = gameTypeUrl;
     }
 }

@@ -219,7 +219,10 @@ public sealed class GameSession : IConnectionInterceptor
     byte[]? IConnectionInterceptor.OnFrame(RelayDirection direction, ReadOnlySequence<byte> frame, bool held)
     {
         var decoded = _translation.DecodeGame(frame);
-        if (!decoded.IsRead && !decoded.IsUnderstood)
+        var unread = !decoded.IsRead && !decoded.IsUnderstood;
+        var nonPosition = unread && IsNonPosition(decoded, direction);
+
+        if (unread && !nonPosition)
         {
             var failure = new RelayInjectionException("The frame could not be read as a game message; movement is not authorized for this session.");
 
@@ -238,7 +241,7 @@ public sealed class GameSession : IConnectionInterceptor
         }
 
         if (decoded.Problem is not null)
-            LogTranslationProblem(side, message, decoded);
+            LogTranslationProblem(side, message, decoded, nonPosition);
 
         if (direction is RelayDirection.FromClient && _account is null && decoded.Content is AuthenticationRequest authentication)
             _account = _accounts.Take(authentication.Ticket);
@@ -259,7 +262,16 @@ public sealed class GameSession : IConnectionInterceptor
         return null;
     }
 
-    private void LogTranslationProblem(string side, string message, DecodedGameFrame decoded)
+    private bool IsNonPosition(DecodedGameFrame decoded, RelayDirection direction)
+    {
+        return decoded.ProblemKind is TranslationProblemKind.UnknownCarriedType
+            && decoded.CarriedType is { } carried
+            && decoded.IsGameTypeUrl
+            && NonPositionMessages.IsNonPosition(_translation.ClientVersion, carried, direction)
+            && decoded.IsSchemaValid;
+    }
+
+    private void LogTranslationProblem(string side, string message, DecodedGameFrame decoded, bool nonPosition)
     {
         var category = GameLog.ProblemCategory(decoded);
         var key = new TranslationProblemKey(side, message, category);
@@ -267,7 +279,9 @@ public sealed class GameSession : IConnectionInterceptor
 
         if (count is 1)
         {
-            if (decoded.IsRead)
+            if (nonPosition)
+                GameLog.NonPosition(_log, Id, side, message, category);
+            else if (decoded.IsRead)
                 GameLog.Partial(_log, Id, side, message, category);
             else
                 GameLog.NotUnderstood(_log, Id, side, message, category);
@@ -275,7 +289,9 @@ public sealed class GameSession : IConnectionInterceptor
             return;
         }
 
-        if (decoded.IsRead)
+        if (nonPosition)
+            GameLog.RepeatedNonPosition(_log, Id, side, message, count, category);
+        else if (decoded.IsRead)
             GameLog.RepeatedPartial(_log, Id, side, message, count, category);
         else
             GameLog.RepeatedUnread(_log, Id, side, message, count, category);

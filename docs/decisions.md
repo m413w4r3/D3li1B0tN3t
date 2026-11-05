@@ -7007,3 +7007,35 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Decision**: Keep the latch fail-closed. Do not allow unknown messages globally and do not weaken the P2I predicate. No movement was attempted; the relay summary reports 0 frames from D3B. The minimal TDD follow-up is a build-scoped non-position type classification (unlisted types still latch) or, preferably over time, readable descriptors and pins for each identified non-position type, starting with `TimeEvent`.
 - **Evidence**: `p2j readiness` returned `can_move=false reason=TRANSLATION_LATCH_CLOSED`; the session stopped with the client `version` file restored to SHA-256 `796d68f1…`, `ConfigUrl` back to Ankama, ports `5555`/`5556` free, no host or Dofus process. The full sanitized result is in [P2J_GO1_REPORT.md](P2J_GO1_REPORT.md).
 - **Boundary**: No hot fix, no mapping change during the session, no movement, no push. GO 2 remains forbidden until a new passive GO 1 shows `translation_blocked=false`, followed by a distinct explicit GO 2 with source and target.
+
+## D307: Classify only fully named, build-scoped non-position messages; keep the rest latched
+
+*2026-11-04, P2K. Extends D302 and D306; no live execution.*
+
+- **Problem**: P2J GO 1 closed the translation latch on 89 unknown carried types, 173 frames, before first placement. The
+  latch is intentionally fail-closed: an unread frame may change what the bot knows of its map or cell.
+- **Decision**: A frame may leave movement open only when all of these hold: its kind is `UnknownCarriedType`; its carried
+  type is listed for the mapping's exact client build, from the side GO 1 observed, and under the exact game type URL;
+  every field of the message's full payload graph is named by the external reference, recursively through message-typed
+  fields; its family is outside map, gamemap, game action, fight, house, haven bag, role-play challenge, NPC map state,
+  client verification, BAK/HAAPI and account role/security; and its payload walks the build's schema exactly (all tags,
+  wire types, nested messages, maps, packed scalars and UTF-8 strings, groups refused, ending on the last byte). Everything
+  else latches.
+- **Scope**: `NonPositionMessages` holds 25 `3.7.13.17` types. Another client version gets no entry. A type with an
+  anonymous field at any depth, a partial reference, an empty/trigger schema, an excluded family, an unidentified name or a
+  contradictory side stays out. Eight types with named direct fields but unnamed nested fields were removed after the
+  independent review; `.lwy` was removed for map-adjacent subarea state.
+- **Readable protocol**: Adding descriptors is still preferred for the long term, but it changes `ReadableProtocol.Digest`
+  and requires raising the mapping format version and regenerating each build's mapping. A `TimeEvent` prototype was
+  reverted for that reason. The table is the narrow correction for this build; readable descriptors belong to a deliberate
+  mapping-format lot. A readable **partial** payload is read and does not latch under P2I/D47; P2K preserves that
+  pre-existing behavior and records it as a residual case.
+- **`.jpe`/`.kjt`**: `.jpe` is `int32` field 1 in `3.7.13.17`; the readable `MapInformationRequest.map_id` is `int64` and
+  cannot pair with it. `.kjt` is pinned to `MapInformationRequest` by shape, but BillBot's build calls `.kjt`
+  `ContextReadyRequest` with the same `{int64 map_id = 1}` shape, so the pin's semantic identity is unproven. D3B does not
+  send `MapInformationRequest`; `.jpe` stays blocking and is the first type to identify next.
+- **Evidence**: The serialized full suite passed 1,465/1,465 after the review corrections; build had 0 warnings/errors;
+  format verification was clean. Coverage, details and the 89-type table are in [P2K_REPORT.md](P2K_REPORT.md).
+- **Boundary**: No installed/live client, host, relay, Ankama connection, activity, route, harvest or movement was run;
+  only in-process test hosts and fake relays from the suite. No GO 2, no `p2j move`, no push. The installed apphost and mapping were not changed. BLOCKED for a new GO 1 until the 64 remaining
+  types are resolved; the latch remains fail-closed for all of them.

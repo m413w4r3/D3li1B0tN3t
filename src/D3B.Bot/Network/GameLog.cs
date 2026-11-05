@@ -22,6 +22,12 @@ internal static partial class GameLog
     [LoggerMessage(Level = LogLevel.Debug, Message = "Connection {ConnectionId}: repeated unread translation problem for {Message} from the {Side}; seen {Count} times ({Category})")]
     public static partial void RepeatedUnread(ILogger logger, string connectionId, string side, string message, int count, string category);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connection {ConnectionId}: the {Side} sent {Message}, a proven non-position message of this build, relayed as it is: this frame does not close the movement latch ({Category})")]
+    public static partial void NonPosition(ILogger logger, string connectionId, string side, string message, string category);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Connection {ConnectionId}: repeated non-position translation problem for {Message} from the {Side}; seen {Count} times ({Category})")]
+    public static partial void RepeatedNonPosition(ILogger logger, string connectionId, string side, string message, int count, string category);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Connection {ConnectionId}: D3B sent {Message}, {Length} bytes")]
     public static partial void Sent(ILogger logger, string connectionId, string message, int length);
 
