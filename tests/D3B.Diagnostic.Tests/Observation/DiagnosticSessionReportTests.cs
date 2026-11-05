@@ -169,14 +169,24 @@ public sealed class DiagnosticSessionReportTests
     {
         var sidecar = SuccessfulSidecar(0);
         sidecar.Complete = () => Task.FromResult(new DiagnosticSummary { Frames = 9, Coverage = "complete" });
-        var writer = new FakeDiagnosticReportWriter();
-        var session = CreateSession(sidecar, writer);
+        string directory = CreateTemporaryDirectory();
+        try
+        {
+            DiagnosticReportOptions reportOptions = ReportOptions();
+            var writer = new AtomicDiagnosticReportWriter(reportOptions, directory, TimeProvider.System);
+            var session = CreateSession(sidecar, writer, reportOptions: reportOptions);
 
-        await session.DisposeAsync();
+            await session.DisposeAsync();
 
-        DiagnosticReport report = Assert.Single(writer.Reports);
-        Assert.Equal("partial", report.Coverage);
-        Assert.Contains("summary-mismatch", report.Truncation.Reasons);
+            string path = Assert.Single(Directory.GetFiles(directory, "*.json"));
+            DiagnosticReport report = DiagnosticReportJson.LoadFile(path, reportOptions).Report;
+            Assert.Equal("partial", report.Coverage);
+            Assert.Contains("summary-mismatch", report.Truncation.Reasons);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -192,17 +202,27 @@ public sealed class DiagnosticSessionReportTests
             Status = DiagnosticStatus.Valid,
             Fields = frame.Index == 0 ? null! : Array.Empty<DiagnosticFieldAnalysis>(),
         });
-        var writer = new FakeDiagnosticReportWriter();
-        var session = CreateSession(sidecar, writer);
-        Assert.True(session.TryEnqueue(Frame(0)));
-        Assert.True(session.TryEnqueue(Frame(1)));
+        string directory = CreateTemporaryDirectory();
+        try
+        {
+            DiagnosticReportOptions reportOptions = ReportOptions();
+            var writer = new AtomicDiagnosticReportWriter(reportOptions, directory, TimeProvider.System);
+            var session = CreateSession(sidecar, writer, reportOptions: reportOptions);
+            Assert.True(session.TryEnqueue(Frame(0)));
+            Assert.True(session.TryEnqueue(Frame(1)));
 
-        await session.DisposeAsync();
+            await session.DisposeAsync();
 
-        DiagnosticReport report = Assert.Single(writer.Reports);
-        Assert.Equal(2, session.Snapshot.AnalyzedFrames);
-        Assert.Equal("partial", report.Coverage);
-        Assert.Contains("aggregation-failed", report.Truncation.Reasons);
+            string path = Assert.Single(Directory.GetFiles(directory, "*.json"));
+            DiagnosticReport report = DiagnosticReportJson.LoadFile(path, reportOptions).Report;
+            Assert.Equal(2, session.Snapshot.AnalyzedFrames);
+            Assert.Equal("partial", report.Coverage);
+            Assert.Contains("aggregation-failed", report.Truncation.Reasons);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]

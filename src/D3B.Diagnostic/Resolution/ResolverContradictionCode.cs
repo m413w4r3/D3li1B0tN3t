@@ -32,5 +32,8 @@ public enum ResolverContradictionCode
     ObservationProblem,
     /// <summary>An observation carries a hard diagnostic status.</summary>
     [JsonStringEnumMemberName("OBSERVATION_STATUS_MISMATCH")]
-    ObservationStatusMismatch
+    ObservationStatusMismatch,
+    /// <summary>A diagnostic report records a hard contradiction.</summary>
+    [JsonStringEnumMemberName("OBSERVATION_REPORT_CONTRADICTION")]
+    ObservationReportContradiction
 }
