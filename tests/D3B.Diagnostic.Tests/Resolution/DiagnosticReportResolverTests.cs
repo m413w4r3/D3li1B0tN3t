@@ -101,6 +101,51 @@ public sealed class DiagnosticReportResolverTests
     }
 
     [Fact]
+    public void EnqueuedAndAnalyzedFrameMismatchForcesPartialEffectiveCoverage()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        var aggregator = new DiagnosticReportAggregator(schema, new DiagnosticReportOptions(), new DiagnosticReportBuildContext
+        {
+            ClientVersion = ResolverTestData.ClientVersion,
+            SchemaSha256 = ResolverTestData.SchemaHash,
+            Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "1.0.0", SnsCommit = "abcdef0" },
+            ProducerVersion = "1.0.0",
+            StartedAtUtc = DateTimeOffset.UnixEpoch,
+        });
+        aggregator.Observe(new DiagnosticAnalysis
+        {
+            CarriedType = "lok",
+            Message = "lok",
+            Direction = "server",
+            Status = DiagnosticStatus.Valid,
+            TypeUrlOk = true,
+            Fields = [new DiagnosticFieldAnalysis { Number = 1, Name = "obfuscated", DeclaredKind = DiagnosticFieldKind.SignedInteger64 }],
+        });
+        DiagnosticReport report = aggregator.Build(new DiagnosticReportBuildOutcome
+        {
+            State = DiagnosticReportSessionState.Completed,
+            Coverage = "complete",
+            EnqueuedFrames = 1,
+            AnalyzedFrames = 1,
+            CompletedAtUtc = DateTimeOffset.UnixEpoch.AddMinutes(1),
+        });
+        LoadedDiagnosticReport loaded = DiagnosticReportJson.Load(DiagnosticReportJson.SerializeToUtf8Bytes(report, new DiagnosticReportOptions()));
+        LoadedDiagnosticReport inconsistent = loaded with
+        {
+            Report = loaded.Report with { Session = loaded.Report.Session with { EnqueuedFrames = 2 } }
+        };
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        CandidateReport resolved = Resolve(schema, inconsistent, readable);
+        MappingCandidate candidate = Assert.Single(resolved.Candidates);
+
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.PartialObservation);
+        Assert.Equal("partial", resolved.Provenance!.ObservationCoverage);
+    }
+
+    [Fact]
     public void MixedStatusesNeverVerifyAndHardStatusesConflict()
     {
         DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
@@ -455,6 +500,9 @@ public sealed class DiagnosticReportResolverTests
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { SnsCommit = "synthetic" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { Producer = "/home/user" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "user@host" } } },
+            valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { Producer = "192.0.2.1" } } },
+            valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "192.0.2.1" } } },
+            valid with { Report = valid.Report with { ClientVersion = "3.7.preview" } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { Source = "local/path" } } },
         ];
         FileDescriptor readable = ResolverTestData.ReadableFile(

@@ -149,7 +149,7 @@ public static class DiagnosticReportResolver
             && report.ProtocolVersion == DiagnosticProtocol.ProtocolVersion
             && report.Coverage is "complete" or "partial"
             && report.ClientVersion is { Length: > 0 }
-            && DiagnosticReportJson.IsSafeIdentity(report.ClientVersion)
+            && DiagnosticReportJson.IsSafeClientVersion(report.ClientVersion)
             && IsSha256(report.SchemaSha256)
             && report.Engine is not null
             && DiagnosticReportJson.IsSafeEngine(report.Engine.Engine)
@@ -157,8 +157,8 @@ public static class DiagnosticReportResolver
             && DiagnosticReportJson.IsSafeSnsCommit(report.Engine.SnsCommit)
             && report.Provenance is not null
             && report.Provenance.Source is "live" or "synthetic"
-            && DiagnosticReportJson.IsSafeIdentity(report.Provenance.Producer)
-            && DiagnosticReportJson.IsSafeIdentity(report.Provenance.ProducerVersion)
+            && DiagnosticReportJson.IsSafeProducer(report.Provenance.Producer)
+            && DiagnosticReportJson.IsSafeProducerVersion(report.Provenance.ProducerVersion)
             && report.Session is not null
             && report.Truncation is not null
             && report.Types is not null

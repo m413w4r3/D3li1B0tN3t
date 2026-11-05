@@ -187,7 +187,7 @@ public sealed class DiagnosticReportAggregator
             Kind = "diagnostic-report",
             ReportVersion = 1,
             ProtocolVersion = DiagnosticProtocol.ProtocolVersion,
-            ClientVersion = SafeIdentity(_context.ClientVersion, DiagnosticReportJson.IsSafeIdentity),
+            ClientVersion = SafeIdentity(_context.ClientVersion, DiagnosticReportJson.IsSafeClientVersion),
             SchemaSha256 = GetSchemaHash(),
             Engine = new DiagnosticReportEngine
             {
@@ -199,8 +199,8 @@ public sealed class DiagnosticReportAggregator
             Provenance = new DiagnosticReportProvenance
             {
                 Source = "live",
-                Producer = SafeIdentity(string.IsNullOrEmpty(_context.Producer) ? "D3B.Diagnostic" : _context.Producer, DiagnosticReportJson.IsSafeIdentity),
-                ProducerVersion = SafeIdentity(_context.ProducerVersion, DiagnosticReportJson.IsSafeIdentity),
+                Producer = SafeIdentity(string.IsNullOrEmpty(_context.Producer) ? "D3B.Diagnostic" : _context.Producer, DiagnosticReportJson.IsSafeProducer),
+                ProducerVersion = SafeIdentity(_context.ProducerVersion, DiagnosticReportJson.IsSafeProducerVersion),
                 StartedAtUtc = _context.StartedAtUtc,
                 CompletedAtUtc = outcome.CompletedAtUtc,
             },
