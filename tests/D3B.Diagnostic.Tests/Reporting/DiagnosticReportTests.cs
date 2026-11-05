@@ -168,6 +168,20 @@ public sealed class DiagnosticReportTests
     }
 
     [Fact]
+    public void LoaderRejectsCompleteCoverageWhenTypedOccurrencesExceedAnalyzedFrames()
+    {
+        string valid = DiagnosticReportJson.Serialize(
+            Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid), Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]),
+            new DiagnosticReportOptions());
+        JsonObject candidate = JsonNode.Parse(valid)!.AsObject();
+        candidate["session"]!["enqueuedFrames"] = 1;
+        candidate["session"]!["analyzedFrames"] = 1;
+
+        Assert.Equal(2, candidate["types"]![0]!["occurrences"]!.GetValue<int>());
+        Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(Encoding.UTF8.GetBytes(candidate.ToJsonString())));
+    }
+
+    [Fact]
     public void LoaderRejectsUnsafeEngineIdentitySeparators()
     {
         string valid = DiagnosticReportJson.Serialize(Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]), new DiagnosticReportOptions());

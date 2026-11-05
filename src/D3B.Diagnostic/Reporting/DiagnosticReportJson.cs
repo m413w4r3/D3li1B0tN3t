@@ -697,7 +697,14 @@ public static class DiagnosticReportJson
 
         DiagnosticReportSession session = report.Session;
         DiagnosticReportTruncation truncation = report.Truncation;
-        return session.State != DiagnosticReportSessionState.Completed
+        long accountedAnalyses = session.UnattributedAnalyses;
+        foreach (DiagnosticReportType type in report.Types)
+        {
+            accountedAnalyses = SaturatingAdd(accountedAnalyses, type.Occurrences);
+        }
+
+        return accountedAnalyses != session.AnalyzedFrames
+            || session.State != DiagnosticReportSessionState.Completed
             || session.ErrorCode is not null
             || session.EnqueuedFrames != session.AnalyzedFrames
             || session.DroppedFrames != 0
