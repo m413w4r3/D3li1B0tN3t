@@ -20,5 +20,14 @@ public enum ResolverUncertaintyCode
     MissingValidObservation,
     /// <summary>Observation coverage is partial.</summary>
     [JsonStringEnumMemberName("PARTIAL_OBSERVATION")]
-    PartialObservation
+    PartialObservation,
+    /// <summary>Several observation statuses are present.</summary>
+    [JsonStringEnumMemberName("MIXED_OBSERVATION_STATUS")]
+    MixedObservationStatus,
+    /// <summary>Observation detail is truncated or carries a soft limit condition.</summary>
+    [JsonStringEnumMemberName("OBSERVATION_TRUNCATED")]
+    ObservationTruncated,
+    /// <summary>Several known observation directions are present.</summary>
+    [JsonStringEnumMemberName("AMBIGUOUS_OBSERVATION_DIRECTION")]
+    AmbiguousObservationDirection
 }

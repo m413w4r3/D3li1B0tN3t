@@ -23,5 +23,14 @@ public enum ResolverContradictionCode
     DirectionContradiction,
     /// <summary>Independent reference corpora name different readable messages for one token.</summary>
     [JsonStringEnumMemberName("CONFLICTING_REFERENCES")]
-    ConflictingReferences
+    ConflictingReferences,
+    /// <summary>An observation has a type URL mismatch.</summary>
+    [JsonStringEnumMemberName("OBSERVATION_TYPE_URL_MISMATCH")]
+    ObservationTypeUrlMismatch,
+    /// <summary>An observation carries a hard schema problem.</summary>
+    [JsonStringEnumMemberName("OBSERVATION_PROBLEM")]
+    ObservationProblem,
+    /// <summary>An observation carries a hard diagnostic status.</summary>
+    [JsonStringEnumMemberName("OBSERVATION_STATUS_MISMATCH")]
+    ObservationStatusMismatch
 }
