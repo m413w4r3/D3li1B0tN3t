@@ -105,7 +105,7 @@ References `D3B.Protocol` and `D3B.Network`; `D3B.Bot` references it. No new NuG
 | Namespace | Purpose |
 |---|---|
 | `D3B.Diagnostic.Schema` | `DiagnosticSchemaExporter`: `ProtocolSchema` (`FileDescriptorSet`) → contract-v1 schema JSON; SHA-256 stays the build fingerprint. |
-| `D3B.Diagnostic.Replay` | `ReplayCorpus`: reads a `.d3bcap` or a contract JSONL file into frames; `ReplayEngineClient`: one-shot stdin/stdout process. |
+| `D3B.Diagnostic.Replay` | `ReplayCorpus`: reads a contract JSONL corpus into `DiagnosticFrame` records; `ReplayEngineClient`: one-shot stdin/stdout process. A `.d3bcap` is assembled into those records by the caller (`D3B.Bot.Inspection.CaptureFrames` or `scripts/diagnose.cs`), because capture framing lives in `D3B.Bot` and `D3B.Diagnostic` must not depend on it. |
 | `D3B.Diagnostic.Ipc` | `SidecarProcess`, `DiagnosticSidecarClient`, length-prefixed JSON framing, handshake, timeouts, sequence gaps, drop accounting. |
 | `D3B.Diagnostic.Resolution` | `ProtocolResolver`, evidence/contradiction model, classification rules, `PromotionGate`, fixture proposal. |
 | `D3B.Diagnostic.Observation` | `IDiagnosticSink`, bounded queue and drop counters; no dependency on `D3B.Bot`. |
