@@ -21,6 +21,20 @@ public static class DiagnosticReportJson
     private static readonly Regex _safeClientVersion = new(
         @"\A[0-9]+(?:\.[0-9]+)+\z",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly Regex _ipv4LikeIdentity = new(
+        @"\b[0-9]{1,3}(?:\.[0-9]{1,3}){3}\b",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly DiagnosticReportOptions _maximumValidationOptions = new()
+    {
+        MaxTypes = 20_000,
+        MaxFieldsPerType = 4_096,
+        MaxFieldNodesPerType = 65_536,
+        MaxNestedDepth = 32,
+        MaxVariantsPerType = 1_024,
+        MaxShapeValues = 4_096,
+        MaxProblemsPerType = 4_096,
+        MaxBytes = 67_108_864,
+    };
 
     /// <summary>Serializes a report to deterministic compact UTF-8 JSON.</summary>
     public static byte[] SerializeToUtf8Bytes(DiagnosticReport report, DiagnosticReportOptions options)
@@ -180,6 +194,32 @@ public static class DiagnosticReportJson
         catch (ArgumentException)
         {
             throw new DiagnosticReportException(InvalidReportMessage);
+        }
+    }
+
+    internal static bool IsValidReportObject(DiagnosticReport report)
+    {
+        try
+        {
+            if (report is null || report.Coverage is not ("complete" or "partial"))
+            {
+                return false;
+            }
+
+            // Resolver input may be downgraded to partial when complete-session accounting disagrees.
+            DiagnosticReport candidate = report with { Coverage = "partial" };
+            JsonElement root = JsonSerializer.SerializeToElement(candidate, DiagnosticReportJsonContext.Protocol.DiagnosticReport);
+            ValidateReport(candidate, root, _maximumValidationOptions);
+            return true;
+        }
+        catch (Exception exception) when (exception is DiagnosticReportException
+            or JsonException
+            or ArgumentException
+            or InvalidOperationException
+            or NotSupportedException
+            or OverflowException)
+        {
+            return false;
         }
     }
 
@@ -1051,7 +1091,7 @@ public static class DiagnosticReportJson
 
     internal static bool IsSafeProducerVersion(string? value)
     {
-        return value == string.Empty || (value is { Length: <= 128 } && _safeProducerVersion.IsMatch(value));
+        return value == string.Empty || (value is { Length: <= 128 } && IsSafeVersion(value, _safeProducerVersion));
     }
 
     internal static bool IsSafeEngine(string? value)
@@ -1061,7 +1101,7 @@ public static class DiagnosticReportJson
 
     internal static bool IsSafeEngineVersion(string? value)
     {
-        return value == string.Empty || (value is not null && _safeEngineVersion.IsMatch(value));
+        return IsSafeVersion(value, _safeEngineVersion);
     }
 
     internal static bool IsSafeSnsCommit(string? value)
@@ -1224,6 +1264,12 @@ public static class DiagnosticReportJson
         {
             throw new DiagnosticReportException(InvalidReportMessage);
         }
+    }
+
+    private static bool IsSafeVersion(string? value, Regex format)
+    {
+        return value == string.Empty
+            || (value is not null && format.IsMatch(value) && !_ipv4LikeIdentity.IsMatch(value));
     }
 
     private static bool IsSafeToken(string? value)
