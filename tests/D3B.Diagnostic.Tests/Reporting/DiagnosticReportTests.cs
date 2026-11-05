@@ -245,6 +245,8 @@ public sealed class DiagnosticReportTests
         AssertRejected(root => root["engine"]!["engine"] = "192.168.0.1");
         AssertRejected(root => root["engine"]!["engineVersion"] = "1.2");
         AssertRejected(root => root["engine"]!["engineVersion"] = "192.168.0.1");
+        AssertRejected(root => root["engine"]!["engineVersion"] = "1.2.3+192.0.2.1");
+        AssertRejected(root => root["engine"]!["engineVersion"] = "1.2.3-192.0.2.1");
         AssertRejected(root => root["engine"]!["snsCommit"] = "synthetic");
 
         void AssertRejected(Action<JsonObject> mutate)
@@ -262,6 +264,8 @@ public sealed class DiagnosticReportTests
 
         AssertRejected(root => root["provenance"]!["producer"] = "192.0.2.1");
         AssertRejected(root => root["provenance"]!["producerVersion"] = "192.0.2.1");
+        AssertRejected(root => root["provenance"]!["producerVersion"] = "1.2.3+192.0.2.1");
+        AssertRejected(root => root["provenance"]!["producerVersion"] = "1.2.3-192.0.2.1");
         AssertRejected(root => root["clientVersion"] = "3.7.preview");
 
         void AssertRejected(Action<JsonObject> mutate)
@@ -318,6 +322,37 @@ public sealed class DiagnosticReportTests
         Assert.Equal(string.Empty, report.Engine.SnsCommit);
         Assert.DoesNotContain("/private/engine", json, StringComparison.Ordinal);
         Assert.DoesNotContain("user@host", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmbeddedIpv4LikeVersionComponentsAreRemovedFromTheReport()
+    {
+        DiagnosticReport[] reports =
+        [
+            Build(
+                [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
+                context: Context() with
+                {
+                    Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "1.2.3+192.0.2.1", SnsCommit = "abcdef0" },
+                    ProducerVersion = "1.2.3-192.0.2.1",
+                }),
+            Build(
+                [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
+                context: Context() with
+                {
+                    Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "1.2.3-192.0.2.1", SnsCommit = "abcdef0" },
+                    ProducerVersion = "1.2.3+192.0.2.1",
+                }),
+        ];
+
+        foreach (DiagnosticReport report in reports)
+        {
+            string json = DiagnosticReportJson.Serialize(report, new DiagnosticReportOptions());
+
+            Assert.Equal(string.Empty, report.Engine.EngineVersion);
+            Assert.Equal(string.Empty, report.Provenance.ProducerVersion);
+            Assert.DoesNotContain("192.0.2.1", json, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

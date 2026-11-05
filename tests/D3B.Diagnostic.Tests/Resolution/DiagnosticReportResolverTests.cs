@@ -496,10 +496,14 @@ public sealed class DiagnosticReportResolverTests
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { Engine = "sns" } } },
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = "user@host" } } },
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = "1.2" } } },
+            valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = "1.2.3+192.0.2.1" } } },
+            valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = "1.2.3-192.0.2.1" } } },
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { SnsCommit = "user@host" } } },
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { SnsCommit = "synthetic" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { Producer = "/home/user" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "user@host" } } },
+            valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "1.2.3+192.0.2.1" } } },
+            valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "1.2.3-192.0.2.1" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { Producer = "192.0.2.1" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "192.0.2.1" } } },
             valid with { Report = valid.Report with { ClientVersion = "3.7.preview" } },
@@ -517,6 +521,35 @@ public sealed class DiagnosticReportResolverTests
             Assert.DoesNotContain("/home/user", exception.Message, StringComparison.Ordinal);
             Assert.DoesNotContain("user@host", exception.Message, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void PublicResolverRejectsUndefinedReportProblemCodes()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        LoadedDiagnosticReport valid = LoadReport("lok");
+        DiagnosticReportType type = Assert.Single(valid.Report.Types);
+        LoadedDiagnosticReport invalid = valid with
+        {
+            Report = valid.Report with
+            {
+                Types =
+                [
+                    type with
+                    {
+                        Problems = [new DiagnosticReportProblemCount { Code = (DiagnosticProblemCode)999, Occurrences = 1 }]
+                    }
+                ]
+            }
+        };
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        DiagnosticReportResolutionException exception = Assert.Throws<DiagnosticReportResolutionException>(
+            () => Resolve(schema, invalid, readable));
+
+        Assert.Equal("diagnostic report is invalid for the build schema", exception.Message);
+        Assert.DoesNotContain("999", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

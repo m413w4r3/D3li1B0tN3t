@@ -35,7 +35,9 @@ public static class DiagnosticReportResolver
         ArgumentNullException.ThrowIfNull(readableFiles);
 
         DiagnosticReport source = report.Report;
-        if (!IsValidReportEnvelope(source) || !IsSha256(report.Sha256))
+        if (!DiagnosticReportJson.IsValidReportObject(source)
+            || !IsValidReportEnvelope(source)
+            || !IsSha256(report.Sha256))
         {
             throw new DiagnosticReportResolutionException(InvalidReportMessage);
         }
