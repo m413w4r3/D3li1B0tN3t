@@ -7,6 +7,6 @@ public sealed record DiagnosticError
     public string Kind { get; init; } = "error";
     /// <summary>Stable problem code.</summary>
     public DiagnosticErrorCode Code { get; init; }
-    /// <summary>Redacted explanation.</summary>
-    public string Detail { get; init; } = string.Empty;
+    /// <summary>Optional redacted explanation.</summary>
+    public string? Detail { get; init; }
 }

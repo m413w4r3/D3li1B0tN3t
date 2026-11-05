@@ -18,6 +18,6 @@ public sealed record SyntheticFixtureProposal
     public bool Synthetic { get; init; }
 
     /// <summary>Lowercase hex for the generated synthetic payload.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    [JsonIgnore]
     public string PayloadHex { get; init; } = string.Empty;
 }

@@ -80,6 +80,37 @@ public sealed class ReplayEngineClientTests
     }
 
     [Fact]
+    public async Task CountsFieldProblemsOnceFromTheAnalysisProblemArray()
+    {
+        var schema = ReplayTestData.CreateSchema();
+        const string analysis = "{\"kind\":\"analysis\",\"index\":7,\"direction\":\"server\",\"carriedType\":\"lok\",\"typeUrlOk\":true,\"message\":\"lok\",\"status\":\"SCHEMA_MISMATCH\",\"fields\":[{\"number\":99,\"name\":null,\"declaredKind\":null,\"repeated\":false,\"packed\":false,\"occurrences\":1,\"wireTypes\":[\"VARINT\"],\"observed\":{},\"problems\":[\"UNKNOWN_FIELD_NUMBER\"]}],\"problems\":[{\"code\":\"UNKNOWN_FIELD_NUMBER\"}]}";
+        string summary = "{\"kind\":\"summary\",\"protocolVersion\":1,\"clientVersion\":\"" + schema.ClientVersion + "\",\"schemaSha256\":\"" + schema.SchemaSha256 + "\",\"frames\":1,\"statuses\":{\"SCHEMA_MISMATCH\":1},\"problems\":{\"UNKNOWN_FIELD_NUMBER\":1},\"dropped\":0,\"coverage\":\"complete\"}";
+        using var duplex = new InMemoryDuplexStream(ReplayTestData.EngineHelloLine() + "\n" + analysis + "\n" + summary + "\n");
+        var client = new ReplayEngineClient(duplex, duplex);
+
+        ReplayResult result = await client.AnalyzeAsync(schema, [ReplayTestData.CreateFrame()], CancellationToken.None);
+
+        Assert.Equal(1, result.Summary.Problems[DiagnosticProblemCode.UnknownFieldNumber]);
+    }
+
+    [Theory]
+    [InlineData("clientVersion", "3.7.12.12")]
+    [InlineData("schemaSha256", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")]
+    public async Task RejectsSummaryForAnotherClientBuildOrSchema(string property, string value)
+    {
+        var schema = ReplayTestData.CreateSchema();
+        string summary = ReplayTestData.SummaryLine(schema, 1)
+            .Replace("\"" + property + "\":\"" + (property == "clientVersion" ? schema.ClientVersion : schema.SchemaSha256) + "\"",
+                "\"" + property + "\":\"" + value + "\"", StringComparison.Ordinal);
+        string response = ReplayTestData.EngineHelloLine() + "\n" + ReplayTestData.AnalysisLine(7) + "\n" + summary + "\n";
+        using var duplex = new InMemoryDuplexStream(response);
+        var client = new ReplayEngineClient(duplex, duplex);
+
+        await Assert.ThrowsAsync<DiagnosticProtocolException>(
+            () => client.AnalyzeAsync(schema, [ReplayTestData.CreateFrame()], CancellationToken.None));
+    }
+
+    [Fact]
     public async Task RejectsTruncatedOutputWithoutLeakingPayloadBytes()
     {
         var schema = ReplayTestData.CreateSchema();

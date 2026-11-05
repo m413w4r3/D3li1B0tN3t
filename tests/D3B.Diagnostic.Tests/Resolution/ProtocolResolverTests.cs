@@ -336,6 +336,22 @@ public sealed class ProtocolResolverTests
     }
 
     [Fact]
+    public void ValidStatusWithInvalidTypeUrlCannotVerify()
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusEvent", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        CandidateReport report = ResolverTestData.Resolver(readable)
+            .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)),
+                [ResolverTestData.Analysis("lok", "server") with { TypeUrlOk = false }], "server");
+
+        MappingCandidate candidate = report.Candidates.Single();
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.False(candidate.HasValidObservation);
+        Assert.DoesNotContain(candidate.Evidence, evidence => evidence.Source == "observation" && evidence.Verified);
+    }
+
+    [Fact]
     public void CandidateReportIsDeterministicAndContainsOnlySyntheticFixtureHex()
     {
         FileDescriptor readable = ResolverTestData.ReadableFile(
@@ -357,7 +373,8 @@ public sealed class ProtocolResolverTests
         using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(json);
         System.Text.Json.JsonElement fixture = document.RootElement.GetProperty("candidates")[0].GetProperty("fixture");
         Assert.True(fixture.GetProperty("synthetic").GetBoolean());
-        Assert.Equal("0800", fixture.GetProperty("payloadHex").GetString());
+        Assert.False(fixture.TryGetProperty("payloadHex", out _));
+        Assert.DoesNotContain("0800", json, StringComparison.Ordinal);
 
         MappingCandidate nonSynthetic = report.Candidates.Single() with
         {

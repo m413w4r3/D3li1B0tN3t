@@ -264,18 +264,18 @@ public sealed class ProtocolResolver
 
         string token = schemaMessage.Name;
         DiagnosticAnalysis[] tokenAnalyses = FindAnalyses(analyses, token).ToArray();
-        bool hasValidObservation = tokenAnalyses.Any(analysis => analysis.Status == DiagnosticStatus.Valid);
+        bool hasValidObservation = tokenAnalyses.Any(IsValidObservation);
         string? direction = tokenAnalyses.Select(analysis => analysis.Direction).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? targetDirection;
         foreach (DiagnosticAnalysis analysis in tokenAnalyses)
         {
-            bool valid = analysis.Status == DiagnosticStatus.Valid;
+            bool valid = IsValidObservation(analysis);
             evidence.Add(new CandidateEvidence
             {
                 Source = "observation",
                 Build = schema.ClientVersion,
                 Verified = valid,
                 Provenance = "diagnostic analysis",
-                Detail = valid ? "analysis status VALID; direction " + SafeDirection(analysis.Direction) : "analysis status " + analysis.Status
+                Detail = valid ? "analysis status VALID with valid type URL; direction " + SafeDirection(analysis.Direction) : "analysis status " + analysis.Status + "; type URL valid " + analysis.TypeUrlOk
             });
         }
 
@@ -376,6 +376,11 @@ public sealed class ProtocolResolver
             Uncertainties = uncertainties.DistinctBy(item => (item.Code, item.Detail)).ToArray(),
             FixtureProposal = fixture
         };
+    }
+
+    private static bool IsValidObservation(DiagnosticAnalysis analysis)
+    {
+        return analysis.Status == DiagnosticStatus.Valid && analysis.TypeUrlOk;
     }
 
     private static MappingCandidate CreateUnknown(DiagnosticSchema buildSchema, DiagnosticMessage schema, IReadOnlyList<DiagnosticAnalysis> analyses, string? targetDirection)

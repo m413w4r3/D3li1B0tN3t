@@ -19,6 +19,7 @@ public sealed partial class DiagnosticModule : IModule
     private const string EnginePathKey = "Diagnostic:EnginePath";
     private const string SocketDirectoryKey = "Diagnostic:SocketDirectory";
     private const string QueueCapacityKey = "Diagnostic:QueueCapacity";
+    private const string QueueByteCapacityKey = "Diagnostic:QueueByteCapacity";
     private const string IncludeReadableKey = "Diagnostic:IncludeReadable";
 
     /// <inheritdoc />
@@ -49,12 +50,10 @@ public sealed partial class DiagnosticModule : IModule
                 SocketDirectory = bot.Configuration[SocketDirectoryKey]
                     ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "D3B", "diagnostic"),
                 QueueCapacity = bot.Configuration.GetValue(QueueCapacityKey, 256),
+                QueueByteCapacity = bot.Configuration.GetValue(QueueByteCapacityKey, 16L * 1024 * 1024),
             };
 
-            if (options.QueueCapacity is < 1 or > 65_536)
-            {
-                throw new InvalidOperationException("The diagnostic queue capacity is outside the supported range.");
-            }
+            options.Validate();
 
             if (string.IsNullOrWhiteSpace(options.EnginePath) || !File.Exists(options.EnginePath))
             {
@@ -66,7 +65,13 @@ public sealed partial class DiagnosticModule : IModule
                 schema,
                 services.GetRequiredService<IDiagnosticSidecarFactory>(),
                 services.GetRequiredService<ILoggerFactory>());
-            return new DiagnosticObserver(sessions, bot.Configuration.GetValue<bool>(IncludeReadableKey), log, options.QueueCapacity);
+            return new DiagnosticObserver(
+                sessions,
+                bot.Configuration.GetValue<bool>(IncludeReadableKey),
+                log,
+                schema.Messages.Select(message => message.Name).ToHashSet(StringComparer.Ordinal),
+                options.QueueCapacity,
+                options.QueueByteCapacity);
         }
         catch (Exception)
         {

@@ -81,6 +81,23 @@ public sealed class PromotionGateTests
         Assert.Empty(decision.RefusalCodes);
     }
 
+    [Fact]
+    public void RefusesForgedVerifiedCandidateWithoutSupportingEvidence()
+    {
+        MappingCandidate candidate = CreateCandidate() with
+        {
+            ExactShape = false,
+            UniqueShape = false,
+            HasValidObservation = false,
+            Evidence = Array.Empty<CandidateEvidence>()
+        };
+
+        PromotionDecision decision = PromotionGate.Evaluate(candidate, CreateReport(candidate), CreateContext());
+
+        Assert.False(decision.Allowed);
+        Assert.Contains("NOT_VERIFIED", decision.RefusalCodes);
+    }
+
     private static MappingCandidate CreateCandidate()
     {
         return new MappingCandidate
@@ -89,6 +106,10 @@ public sealed class PromotionGateTests
             Readable = "d3b.game.MapInformationRequest",
             Classification = CandidateClassification.Verified,
             BuildExact = true,
+            ExactShape = true,
+            UniqueShape = true,
+            HasValidObservation = true,
+            Evidence = new[] { new CandidateEvidence { Source = "observation", Verified = true } },
             ClientVersion = "3.7.13.17",
             SchemaSha256 = new string('a', 64),
             FixtureProposal = new SyntheticFixtureProposal

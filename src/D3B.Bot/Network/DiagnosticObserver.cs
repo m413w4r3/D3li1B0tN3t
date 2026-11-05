@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
+using D3B.Diagnostic.Contract;
 using D3B.Diagnostic.Observation;
 using D3B.Diagnostic.Replay;
 using D3B.Network.Relay;
@@ -17,24 +18,35 @@ public sealed partial class DiagnosticObserver : IGameObserver
     private readonly bool _includeReadable;
     private readonly ILogger<DiagnosticObserver> _log;
     private readonly int _queueCapacity;
+    private readonly long _queueByteCapacity;
+    private readonly IReadOnlySet<string> _schemaMessageNames;
     private readonly ConcurrentDictionary<GameSession, SessionObservation> _observations = new();
 
     /// <summary>Creates an observer for diagnostic sessions.</summary>
-    public DiagnosticObserver(IDiagnosticSessionFactory sessions, bool includeReadable, ILogger<DiagnosticObserver> log, int queueCapacity = 256)
+    public DiagnosticObserver(IDiagnosticSessionFactory sessions, bool includeReadable, ILogger<DiagnosticObserver> log, IReadOnlySet<string> schemaMessageNames, int queueCapacity = 256, long queueByteCapacity = 16L * 1024 * 1024)
     {
         ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(log);
+        ArgumentNullException.ThrowIfNull(schemaMessageNames);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(queueCapacity);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(queueByteCapacity);
         _sessions = sessions;
         _includeReadable = includeReadable;
         _log = log;
         _queueCapacity = queueCapacity;
+        _queueByteCapacity = queueByteCapacity;
+        _schemaMessageNames = schemaMessageNames;
+        if (_includeReadable)
+        {
+            LogReadablePayloadsEnabled(_log);
+        }
     }
 
     internal DiagnosticObserver(ILogger<DiagnosticObserver> log)
     {
         ArgumentNullException.ThrowIfNull(log);
         _log = log;
+        _schemaMessageNames = new HashSet<string>(StringComparer.Ordinal);
     }
 
     /// <inheritdoc />
@@ -47,7 +59,7 @@ public sealed partial class DiagnosticObserver : IGameObserver
 
         try
         {
-            var observation = new SessionObservation(_sessions.CreateSession(), _queueCapacity);
+            var observation = new SessionObservation(_sessions.CreateSession(), _queueCapacity, _queueByteCapacity);
             if (!_observations.TryAdd(session, observation))
             {
                 observation.Complete();
@@ -85,7 +97,12 @@ public sealed partial class DiagnosticObserver : IGameObserver
                 return;
             }
 
-            bool isUnknownCarriedType = frame.ProblemKind is TranslationProblemKind.UnknownCarriedType && frame.CarriedType is not null;
+            if (!frame.IsGameTypeUrl || frame.CarriedType is null || !_schemaMessageNames.Contains(frame.CarriedType))
+            {
+                return;
+            }
+
+            bool isUnknownCarriedType = frame.ProblemKind is TranslationProblemKind.UnknownCarriedType;
             if (!isUnknownCarriedType && (!_includeReadable || !frame.IsRead))
             {
                 return;
@@ -96,6 +113,13 @@ public sealed partial class DiagnosticObserver : IGameObserver
                 return;
             }
 
+            if (any.Value.Length > DiagnosticProtocol.FramePayloadLimit)
+            {
+                Interlocked.Increment(ref observation.DroppedFrames);
+                observation.LogDropOnce(_log);
+                return;
+            }
+
             var diagnosticFrame = new DiagnosticFrame(
                 Interlocked.Increment(ref observation.Sequence),
                 direction is RelayDirection.FromClient ? "client" : "server",
@@ -103,8 +127,16 @@ public sealed partial class DiagnosticObserver : IGameObserver
                 frame.CarriedType,
                 any.Value.ToByteArray());
 
+            if (!observation.TryReserveBytes(diagnosticFrame.Payload.Length))
+            {
+                Interlocked.Increment(ref observation.DroppedFrames);
+                observation.LogDropOnce(_log);
+                return;
+            }
+
             if (!observation.Queue.Writer.TryWrite(diagnosticFrame))
             {
+                Interlocked.Add(ref observation.QueuedBytes, -diagnosticFrame.Payload.Length);
                 Interlocked.Increment(ref observation.DroppedFrames);
                 observation.LogDropOnce(_log);
             }
@@ -147,6 +179,7 @@ public sealed partial class DiagnosticObserver : IGameObserver
         {
             await foreach (DiagnosticFrame frame in observation.Queue.Reader.ReadAllAsync().ConfigureAwait(false))
             {
+                Interlocked.Add(ref observation.QueuedBytes, -frame.Payload.Length);
                 long dropped = Interlocked.Exchange(ref observation.DroppedFrames, 0);
                 if (dropped > 0)
                 {
@@ -176,8 +209,9 @@ public sealed partial class DiagnosticObserver : IGameObserver
         }
         finally
         {
-            while (observation.Queue.Reader.TryRead(out _))
+            while (observation.Queue.Reader.TryRead(out DiagnosticFrame? pending))
             {
+                Interlocked.Add(ref observation.QueuedBytes, -pending.Payload.Length);
                 Interlocked.Increment(ref observation.DroppedFrames);
             }
 
@@ -218,11 +252,18 @@ public sealed partial class DiagnosticObserver : IGameObserver
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Diagnostic observation is partial. Error code: {ErrorCode}; dropped frames: {DroppedFrames}.")]
     private static partial void LogObservationFailure(ILogger logger, string errorCode, long droppedFrames);
 
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Diagnostic:IncludeReadable is enabled; readable payloads may contain sensitive data.")]
+    private static partial void LogReadablePayloadsEnabled(ILogger logger);
+
     private sealed class SessionObservation
     {
         public long Sequence = -1;
 
         public long DroppedFrames;
+
+        public long QueuedBytes;
+
+        private readonly long _byteCapacity;
 
         public Channel<DiagnosticFrame> Queue { get; }
 
@@ -230,15 +271,33 @@ public sealed partial class DiagnosticObserver : IGameObserver
 
         public IDiagnosticSink Sink { get; }
 
-        public SessionObservation(IDiagnosticSink sink, int capacity)
+        public SessionObservation(IDiagnosticSink sink, int capacity, long byteCapacity)
         {
             Sink = sink;
+            _byteCapacity = byteCapacity;
             Queue = Channel.CreateBounded<DiagnosticFrame>(new BoundedChannelOptions(capacity)
             {
                 FullMode = BoundedChannelFullMode.Wait,
                 SingleReader = true,
                 SingleWriter = false,
             });
+        }
+
+        public bool TryReserveBytes(int bytes)
+        {
+            while (true)
+            {
+                long queued = Interlocked.Read(ref QueuedBytes);
+                if (bytes > _byteCapacity - queued)
+                {
+                    return false;
+                }
+
+                if (Interlocked.CompareExchange(ref QueuedBytes, queued + bytes, queued) == queued)
+                {
+                    return true;
+                }
+            }
         }
 
         public void Complete()
