@@ -156,6 +156,7 @@ Stable, uppercase, snake-free:
 | `LENGTH_OVERFLOW` | field | A length-delimited value overruns its container or the payload. |
 | `VARINT_OVERFLOW` | field | A varint exceeds 10 bytes or 64 bits. |
 | `TRUNCATED` | frame/field | The payload or a nested value ends early. |
+| `MALFORMED` | frame | A tag, wire type or value could not be decoded. |
 | `LIMIT_EXCEEDED` | frame | A size/count/output limit was hit. |
 | `SCHEMA_MESSAGE_MISSING` | field | A `MESSAGE` field's `messageType` is not in the schema. |
 | `SCHEMA_INVALID` | frame | The schema line is internally invalid (duplicate numbers, dangling references). |
@@ -185,6 +186,27 @@ Wire compatibility follows protobuf, with D3B's strict packed rule (P2K D307):
 
 Exceeding a limit yields `LIMIT_EXCEEDED` (or `detailTruncated` for output only), never a crash and never a silent
 success.
+
+### 2.9 Error lines
+
+An error is `{"kind":"error","code":"<CODE>"}`. The engine may omit `detail`; when present it is redacted (counts and
+codes only, never payload content). Exit `2` for a contract error, `3` for `INTERNAL_ERROR`. Error codes are a separate
+vocabulary from analysis problem codes:
+
+| Code | Meaning |
+|---|---|
+| `CONTRACT_INVALID` | The line sequence, a JSON envelope, a field type or an IPC frame violates this contract. |
+| `VERSION_UNSUPPORTED` | `protocolVersion` is not 1, or the engine `hello` version is not 1. |
+| `SCHEMA_FINGERPRINT_INVALID` | `schemaSha256` is not 64 lowercase hex characters, or it conflicts with a later echo. |
+| `SCHEMA_INVALID` | The schema line is internally invalid. |
+| `UNKNOWN_COMMAND` | The subcommand or an argument is unknown. |
+| `INTERNAL_ERROR` | The engine failed outside the contract; exit 3. |
+| `IO_ERROR` | `serve`: the socket read or write failed. |
+| `SOCKET_FAILED` | `serve`: the socket could not be created, bound or listened on. |
+| `UNSUPPORTED_PLATFORM` | `serve` on a platform without Unix domain sockets. |
+
+The C# side parses only these values for an error line; an unknown error code is a protocol violation. The same
+vocabulary is used in replay and IPC.
 
 ## 3. Schema line
 
