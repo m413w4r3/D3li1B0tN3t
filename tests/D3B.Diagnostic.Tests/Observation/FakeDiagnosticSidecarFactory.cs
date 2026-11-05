@@ -6,6 +6,7 @@ internal sealed class FakeDiagnosticSidecarFactory : IDiagnosticSidecarFactory
 {
     private readonly IDiagnosticSidecar? _sidecar;
     private readonly D3B.Diagnostic.Contract.DiagnosticErrorCode? _errorCode;
+    private readonly Func<CancellationToken, Task<SidecarStartResult>>? _start;
 
     public FakeDiagnosticSidecarFactory(IDiagnosticSidecar sidecar)
     {
@@ -17,8 +18,13 @@ internal sealed class FakeDiagnosticSidecarFactory : IDiagnosticSidecarFactory
         _errorCode = errorCode;
     }
 
+    public FakeDiagnosticSidecarFactory(Func<CancellationToken, Task<SidecarStartResult>> start)
+    {
+        _start = start;
+    }
+
     public Task<SidecarStartResult> StartAsync(SidecarOptions options, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new SidecarStartResult(_sidecar, _errorCode));
+        return _start?.Invoke(cancellationToken) ?? Task.FromResult(new SidecarStartResult(_sidecar, _errorCode));
     }
 }

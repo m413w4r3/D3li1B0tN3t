@@ -31,6 +31,54 @@ public sealed class DiagnosticReportResolverTests
     }
 
     [Fact]
+    public void OversizedDirectReportIsRejectedBeforeResolution()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        LoadedDiagnosticReport valid = LoadReport("lok");
+        DiagnosticReportType type = Assert.Single(valid.Report.Types);
+        int[] shapeValues = Enumerable.Range(0, 4_096).ToArray();
+        DiagnosticReport oversizedReport = valid.Report with
+        {
+            Types =
+            [
+                type with
+                {
+                    Fields =
+                    [
+                        new DiagnosticReportField
+                        {
+                            Number = 1,
+                            Occurrences = 1,
+                            WireTypes = [DiagnosticWireType.Varint],
+                            Observed = new DiagnosticObservedShape
+                            {
+                                VarintBytes = shapeValues,
+                                FixedLength = shapeValues,
+                                Length = shapeValues,
+                                FieldCount = shapeValues,
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+        LoadedDiagnosticReport oversized = valid with { Report = oversizedReport };
+        DiagnosticReportOptions small = new() { MaxBytes = 65_536, MaxShapeValues = 4_096 };
+        DiagnosticReportOptions sufficient = small with { MaxBytes = 4 * 1024 * 1024 };
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        Assert.False(DiagnosticReportJson.IsValidReportObject(oversizedReport, small));
+        Assert.True(DiagnosticReportJson.IsValidReportObject(oversizedReport, sufficient));
+        DiagnosticReportResolutionException exception = Assert.Throws<DiagnosticReportResolutionException>(
+            () => DiagnosticReportResolver.Resolve(schema, oversized, [], [], [readable], small));
+        Assert.Equal("diagnostic report is invalid for the build schema", exception.Message);
+
+        CandidateReport resolved = DiagnosticReportResolver.Resolve(schema, oversized, [], [], [readable], sufficient);
+        Assert.Equal(CandidateClassification.Verified, Assert.Single(resolved.Candidates).Classification);
+    }
+
+    [Fact]
     public void NearShapeResemblanceRemainsCandidate()
     {
         DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
@@ -498,12 +546,15 @@ public sealed class DiagnosticReportResolverTests
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = "1.2" } } },
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = "1.2.3+192.0.2.1" } } },
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = "1.2.3-192.0.2.1" } } },
+            valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = "1.2.3-a192.0.2.1b" } } },
+            valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = $"1.2.3-{new string('a', 123)}" } } },
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { SnsCommit = "user@host" } } },
             valid with { Report = valid.Report with { Engine = valid.Report.Engine with { SnsCommit = "synthetic" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { Producer = "/home/user" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "user@host" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "1.2.3+192.0.2.1" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "1.2.3-192.0.2.1" } } },
+            valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "1.2.3-a192.0.2.1b" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { Producer = "192.0.2.1" } } },
             valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "192.0.2.1" } } },
             valid with { Report = valid.Report with { ClientVersion = "3.7.preview" } },

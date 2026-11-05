@@ -178,13 +178,23 @@ public sealed class DiagnosticSessionTests
     [Fact]
     public async Task AFailedStartupCountsQueuedFramesAsPartialObservation()
     {
+        var startupEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseStartup = new TaskCompletionSource<SidecarStartResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var factory = new FakeDiagnosticSidecarFactory(_ =>
+        {
+            startupEntered.TrySetResult();
+            return releaseStartup.Task;
+        });
         var options = Options(2);
         var session = new DiagnosticSession(
             options,
             ReplayTestData.CreateSchema(),
-            new FakeDiagnosticSidecarFactory(DiagnosticErrorCode.SocketFailed),
+            factory,
             new FakeLogger<DiagnosticSession>(new FakeLogCollector()));
+
+        await startupEntered.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         Assert.True(session.TryEnqueue(Frame(1)));
+        releaseStartup.TrySetResult(new SidecarStartResult(null, DiagnosticErrorCode.SocketFailed));
 
         await session.DisposeAsync();
 
