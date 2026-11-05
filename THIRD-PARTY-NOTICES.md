@@ -77,6 +77,39 @@ SOFTWARE.
 | SQLite | Its authors | Public domain |
 | Velopack | Velopack Ltd. | MIT |
 
+## SniffSniffSquared (adapted)
+
+The Rust diagnostic crate adapts selected code and approaches from SniffSniffSquared (SNS), commit
+`c780035c9020058a772ac8a2eef09555acd5a173`, under the MIT License. Adapted files are:
+
+- `rust/d3b-diagnostic/src/wire/reader.rs` from `sniffer/src/pb.rs`
+- `rust/d3b-diagnostic/src/schema/model.rs` and `rust/d3b-diagnostic/src/schema/walker.rs` from the approach in `sniffer/src/schema.rs`
+- `rust/d3b-diagnostic/src/analysis/mismatch.rs` from the mismatch stance in `sniffer/src/dump.rs`
+
+```text
+MIT License
+
+Copyright (c) 2026 Miouzora
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## MIT
 
 ```text
