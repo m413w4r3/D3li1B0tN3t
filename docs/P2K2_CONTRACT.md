@@ -243,8 +243,10 @@ vocabulary is used in replay and IPC.
 | `oneof` | string or null | Real oneof name; null for a synthetic proto3-optional oneof. |
 | `hasPresence` | boolean | Descriptor presence, informational only in v1. |
 
-The C# exporter is the only producer. It emits every message of the build's `FileDescriptorSet`, including map-entry
-messages, except `google.protobuf.*` files, which the engine never needs. Message and field order must be stable so the
+The C# exporter is the only producer. It emits every message of the build's `FileDescriptorSet`, including protobuf's
+own messages that the build references (`google.protobuf.Any` and any other referenced well-known type) and map-entry
+messages. A field's `messageType` must always name an exported message; a dangling reference is a schema error.
+Message and field order must be stable so the
 export is byte-for-byte reproducible; the schema fingerprint remains the SHA-256 of the original `.binpb`, not of the
 JSON.
 
