@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using D3B.Diagnostic.Contract;
 using D3B.Diagnostic.Ipc;
 using D3B.Diagnostic.Replay;
+using D3B.Diagnostic.Reporting;
 using Microsoft.Extensions.Logging;
 
 namespace D3B.Diagnostic.Observation;
@@ -10,6 +11,7 @@ namespace D3B.Diagnostic.Observation;
 /// <summary>A bounded, single-reader diagnostic pump for one game connection.</summary>
 public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposable
 {
+    private static readonly TimeSpan _reportWriteTimeout = TimeSpan.FromSeconds(5);
     private readonly Channel<QueuedDiagnosticFrame> _frames;
     private readonly ConcurrentDictionary<long, byte> _droppedTickets = new();
     private readonly SidecarOptions _options;
@@ -18,6 +20,12 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _cancel = new();
     private readonly Task _pump;
+    private readonly DiagnosticReportOptions? _reportOptions;
+    private readonly IDiagnosticReportWriter? _reportWriter;
+    private readonly TimeProvider? _timeProvider;
+    private readonly bool _includeReadable;
+    private readonly DateTimeOffset? _startedAtUtc;
+    private DiagnosticReportAggregator? _reportAggregator;
     private long _nextTicket;
     private long _queuedBytes;
     private long _enqueuedFrames;
@@ -29,17 +37,41 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
     private DiagnosticErrorCode? _errorCode;
     private DiagnosticAnalysis? _lastAnalysis;
     private DiagnosticSummary? _summary;
+    private DiagnosticEngineHello? _engineHello;
+    private int _aggregationFailed;
 
     internal DiagnosticSession(
         SidecarOptions options,
         DiagnosticSchema schema,
         IDiagnosticSidecarFactory sidecarFactory,
-        ILogger logger)
+        ILogger logger,
+        DiagnosticReportOptions? reportOptions = null,
+        IDiagnosticReportWriter? reportWriter = null,
+        TimeProvider? timeProvider = null,
+        bool includeReadable = false)
     {
         _options = options;
         _schema = schema;
         _sidecarFactory = sidecarFactory;
         _logger = logger;
+        if (reportOptions is { Enabled: true } && reportWriter is not null)
+        {
+            reportOptions.Validate();
+            _reportOptions = reportOptions;
+            _reportWriter = reportWriter;
+            _timeProvider = timeProvider ?? TimeProvider.System;
+            _startedAtUtc = _timeProvider.GetUtcNow();
+            _includeReadable = includeReadable;
+        }
+        else
+        {
+            _reportOptions = null;
+            _reportWriter = null;
+            _timeProvider = null;
+            _startedAtUtc = null;
+            _includeReadable = false;
+        }
+
         _frames = Channel.CreateBounded<QueuedDiagnosticFrame>(
             new BoundedChannelOptions(options.QueueCapacity)
             {
@@ -70,6 +102,7 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
                 Coverage = coverage,
                 LastAnalysis = Volatile.Read(ref _lastAnalysis),
                 Summary = summary,
+                EngineHello = Volatile.Read(ref _engineHello),
             };
         }
     }
@@ -133,7 +166,7 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
         }
     }
 
-    /// <summary>Completes the queue and waits up to the configured response timeout for sidecar shutdown.</summary>
+    /// <summary>Completes the queue and waits for the sidecar and bounded report finalization.</summary>
     public async ValueTask DisposeAsync()
     {
         Complete();
@@ -150,6 +183,18 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
             catch (ObjectDisposedException)
             {
                 // The pump completed as the shutdown timeout elapsed.
+            }
+
+            if (_reportWriter is not null)
+            {
+                try
+                {
+                    await _pump.WaitAsync(_reportWriteTimeout).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    // A stuck sidecar or writer must not hold the host past the shutdown bound.
+                }
             }
         }
     }
@@ -169,10 +214,15 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
             }
 
             sidecar = start.Sidecar;
-            await WithTimeoutAsync(
+            DiagnosticEngineHello engineHello = await WithTimeoutAsync(
                 token => sidecar.StartAsync(_schema, token),
                 _options.HandshakeTimeout,
                 _cancel.Token).ConfigureAwait(false);
+            Volatile.Write(ref _engineHello, engineHello);
+            if (_reportWriter is not null && _reportOptions is not null)
+            {
+                _reportAggregator = CreateReportAggregator(engineHello);
+            }
 
             while (await _frames.Reader.WaitToReadAsync(_cancel.Token).ConfigureAwait(false))
             {
@@ -187,6 +237,15 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
                         _cancel.Token).ConfigureAwait(false);
                     Volatile.Write(ref _lastAnalysis, analysis);
                     Interlocked.Increment(ref _analyzedFrames);
+                    try
+                    {
+                        _reportAggregator?.Observe(analysis);
+                    }
+                    catch (Exception)
+                    {
+                        Interlocked.Exchange(ref _aggregationFailed, 1);
+                    }
+
                     inFlight = 0;
                 }
             }
@@ -204,7 +263,6 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
         catch (OperationCanceledException) when (_cancel.IsCancellationRequested)
         {
             CountPendingFrames(inFlight);
-            RecordFailure(DiagnosticErrorCode.IoError);
         }
         catch (Exception exception)
         {
@@ -213,6 +271,7 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
         }
         finally
         {
+            await WriteReportAsync().ConfigureAwait(false);
             if (sidecar is not null)
             {
                 try
@@ -226,6 +285,163 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
             }
 
             _cancel.Dispose();
+        }
+    }
+
+    private DiagnosticReportAggregator CreateReportAggregator(DiagnosticEngineHello? engineHello)
+    {
+        DiagnosticReportOptions options = _reportOptions ?? throw new InvalidOperationException();
+        return new DiagnosticReportAggregator(
+            _schema,
+            options,
+            new DiagnosticReportBuildContext
+            {
+                ClientVersion = _schema.ClientVersion,
+                SchemaSha256 = _schema.SchemaSha256,
+                Engine = engineHello ?? new DiagnosticEngineHello(),
+                StartedAtUtc = _startedAtUtc!.Value,
+                IncludeReadable = _includeReadable,
+                QueueCapacity = _options.QueueCapacity,
+                QueueByteCapacity = _options.QueueByteCapacity,
+            });
+    }
+
+    private async Task WriteReportAsync()
+    {
+        if (_reportWriter is null || _reportOptions is null)
+        {
+            return;
+        }
+
+        DiagnosticReport report;
+        try
+        {
+            _reportAggregator ??= CreateReportAggregator(Volatile.Read(ref _engineHello));
+            DiagnosticSummary? summary = Volatile.Read(ref _summary);
+            bool summaryMismatch = IsSummaryMismatched(summary);
+            bool aggregationFailed = Volatile.Read(ref _aggregationFailed) != 0;
+            report = _reportAggregator.Build(CreateReportBuildOutcome(summary, aggregationFailed));
+            if (summaryMismatch)
+            {
+                report = MarkReportPartial(report, "summary-mismatch");
+            }
+
+            if (aggregationFailed)
+            {
+                report = MarkReportPartial(report, "aggregation-failed");
+            }
+        }
+        catch (Exception)
+        {
+            try
+            {
+                _reportAggregator = CreateReportAggregator(Volatile.Read(ref _engineHello));
+                DiagnosticSummary? summary = Volatile.Read(ref _summary);
+                report = _reportAggregator.Build(CreateReportBuildOutcome(summary, forcePartial: true));
+                if (IsSummaryMismatched(summary))
+                {
+                    report = MarkReportPartial(report, "summary-mismatch");
+                }
+
+                report = MarkReportPartial(report, "aggregation-failed");
+            }
+            catch (Exception)
+            {
+                LogReportWriteFailureSafely();
+                return;
+            }
+        }
+
+        using var timeout = new CancellationTokenSource();
+        Task? writeTask = null;
+        try
+        {
+            writeTask = Task.Run(
+                async () => await _reportWriter.WriteAsync(report, timeout.Token).ConfigureAwait(false),
+                CancellationToken.None);
+            await writeTask.WaitAsync(_reportWriteTimeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            timeout.Cancel();
+            ObserveLateFailure(writeTask);
+            LogReportWriteFailureSafely();
+        }
+        catch (Exception)
+        {
+            LogReportWriteFailureSafely();
+        }
+    }
+
+    private DiagnosticReportBuildOutcome CreateReportBuildOutcome(DiagnosticSummary? summary, bool forcePartial = false)
+    {
+        long dropped = Interlocked.Read(ref _droppedFrames);
+        bool failure = Volatile.Read(ref _failureRecorded) != 0;
+        bool summaryMismatch = IsSummaryMismatched(summary);
+        string coverage = !forcePartial
+            && !failure
+            && summary?.Coverage == "complete"
+            && dropped == 0
+            && !summaryMismatch
+            ? "complete"
+            : "partial";
+        return new DiagnosticReportBuildOutcome
+        {
+            State = failure
+                ? DiagnosticReportSessionState.Failed
+                : summary is not null
+                    ? DiagnosticReportSessionState.Completed
+                    : DiagnosticReportSessionState.Cancelled,
+            ErrorCode = _errorCode,
+            Coverage = coverage,
+            EnqueuedFrames = Interlocked.Read(ref _enqueuedFrames),
+            AnalyzedFrames = Interlocked.Read(ref _analyzedFrames),
+            DroppedFrames = dropped,
+            CompletedAtUtc = _timeProvider!.GetUtcNow(),
+        };
+    }
+
+    private bool IsSummaryMismatched(DiagnosticSummary? summary)
+    {
+        return summary is not null && summary.Frames != Interlocked.Read(ref _analyzedFrames);
+    }
+
+    private void LogReportWriteFailureSafely()
+    {
+        try
+        {
+            LogReportWriteFailed(_logger);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static DiagnosticReport MarkReportPartial(DiagnosticReport report, string reason)
+    {
+        return report with
+        {
+            Coverage = "partial",
+            Truncation = report.Truncation with
+            {
+                Reasons = report.Truncation.Reasons
+                    .Append(reason)
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(item => item, StringComparer.Ordinal)
+                    .ToArray(),
+            },
+        };
+    }
+
+    private static void ObserveLateFailure(Task? writeTask)
+    {
+        if (writeTask is not null)
+        {
+            _ = writeTask.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
     }
 
@@ -290,6 +506,7 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
             DiagnosticSidecarException sidecarException => sidecarException.ErrorCode,
             DiagnosticProtocolException => DiagnosticErrorCode.ContractInvalid,
             IOException => DiagnosticErrorCode.IoError,
+            TimeoutException => DiagnosticErrorCode.IoError,
             OperationCanceledException => DiagnosticErrorCode.IoError,
             _ => DiagnosticErrorCode.InternalError,
         };
@@ -301,6 +518,9 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
         Message = "Diagnostic sidecar stopped with code {ErrorCode}; {DroppedFrames} frames were dropped or not analyzed.")]
     private static partial void LogSidecarStopped(ILogger logger, DiagnosticErrorCode errorCode, long droppedFrames);
 
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Diagnostic report could not be written.")]
+    private static partial void LogReportWriteFailed(ILogger logger);
+
     private static DiagnosticFrame WithSequence(DiagnosticFrame frame, long sequence)
     {
         return new DiagnosticFrame(sequence, frame.Direction, frame.TypeUrl, frame.CarriedType, frame.Payload);
@@ -311,8 +531,15 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(timeout);
-        return await action(timeoutSource.Token).ConfigureAwait(false);
+        using var timeoutSource = new CancellationTokenSource(timeout);
+        using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
+        try
+        {
+            return await action(linkedSource.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
+        {
+            throw new TimeoutException();
+        }
     }
 }

@@ -10,6 +10,14 @@ internal sealed class FakeDiagnosticSink : IDiagnosticSink
 
     public DiagnosticSessionSnapshot Snapshot { get; } = new();
 
+    public TaskCompletionSource DisposeStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public TaskCompletionSource DisposeRelease { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public bool BlockDisposeAsync { get; set; }
+
+    public int DisposeCount;
+
     public bool TryEnqueue(DiagnosticFrame frame)
     {
         Frames.Enqueue(frame);
@@ -22,5 +30,15 @@ internal sealed class FakeDiagnosticSink : IDiagnosticSink
 
     public void Complete()
     {
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Interlocked.Increment(ref DisposeCount);
+        DisposeStarted.TrySetResult();
+        if (BlockDisposeAsync)
+        {
+            await DisposeRelease.Task.ConfigureAwait(false);
+        }
     }
 }

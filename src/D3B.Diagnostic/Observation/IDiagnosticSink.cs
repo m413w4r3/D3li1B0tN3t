@@ -3,7 +3,7 @@ using D3B.Diagnostic.Replay;
 namespace D3B.Diagnostic.Observation;
 
 /// <summary>A nonblocking destination for diagnostic frames from one game connection.</summary>
-public interface IDiagnosticSink
+public interface IDiagnosticSink : IAsyncDisposable
 {
     /// <summary>Attempts to queue one frame without waiting.</summary>
     /// <param name="frame">The frame to observe.</param>
