@@ -1,4 +1,5 @@
 using D3B.Bot.Data;
+using D3B.Bot.Diagnostics;
 using D3B.Bot.Fighting;
 using D3B.Bot.Harvesting;
 using D3B.Bot.Network;
@@ -36,11 +37,19 @@ public sealed class DefaultModulesTests
     }
 
     [Fact]
-    public void TheBotsModuleBuildsAfterTheNetworkModule()
+    public void TheDiagnosticModuleBuildsAfterTheNetworkModule()
     {
         var bot = new BotBuilder(new HostApplicationBuilderSettings { DisableDefaults = true }).AddModules(new DefaultModules());
 
-        Assert.IsType<BotsModule>(bot.Modules[3]);
+        Assert.IsType<DiagnosticModule>(bot.Modules[3]);
+    }
+
+    [Fact]
+    public void TheBotsModuleBuildsAfterTheDiagnosticModule()
+    {
+        var bot = new BotBuilder(new HostApplicationBuilderSettings { DisableDefaults = true }).AddModules(new DefaultModules());
+
+        Assert.IsType<BotsModule>(bot.Modules[4]);
     }
 
     [Fact]
@@ -48,7 +57,7 @@ public sealed class DefaultModulesTests
     {
         var bot = new BotBuilder(new HostApplicationBuilderSettings { DisableDefaults = true }).AddModules(new DefaultModules());
 
-        Assert.IsType<HarvestingModule>(bot.Modules[4]);
+        Assert.IsType<HarvestingModule>(bot.Modules[5]);
     }
 
     [Fact]
@@ -56,7 +65,7 @@ public sealed class DefaultModulesTests
     {
         var bot = new BotBuilder(new HostApplicationBuilderSettings { DisableDefaults = true }).AddModules(new DefaultModules());
 
-        Assert.IsType<FightingModule>(bot.Modules[5]);
+        Assert.IsType<FightingModule>(bot.Modules[6]);
     }
 
     [Fact]

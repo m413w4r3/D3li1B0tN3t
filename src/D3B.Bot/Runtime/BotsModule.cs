@@ -1,5 +1,6 @@
 using D3B.Bot.Activities;
 using D3B.Bot.Data;
+using D3B.Bot.Diagnostics;
 using D3B.Bot.Fights;
 using D3B.Bot.Hosting;
 using D3B.Bot.Inspection;
@@ -39,6 +40,7 @@ public sealed class BotsModule : IModule
 
         bot.AddModule<DataModule>();
         bot.AddModule<NetworkModule>();
+        bot.AddModule<DiagnosticModule>();
 
         // Read as the module is built, so that a delay below its measured value stops the host before it starts (D151).
         var delays = BotDelays.Read(bot.Configuration);
