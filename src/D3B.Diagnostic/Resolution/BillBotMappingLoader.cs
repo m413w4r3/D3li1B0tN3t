@@ -39,13 +39,23 @@ public static class BillBotMappingLoader
             if (name is not null && token is not null)
             {
                 messages.Add(Create(token, name));
+                return;
             }
 
             foreach (JsonProperty property in element.EnumerateObject())
             {
+                if (property.Value.ValueKind == JsonValueKind.Object
+                    && TryCreateNamespaceEntry(property.Name, property.Value, out ReferenceMessage? reference)
+                    && reference is not null)
+                {
+                    messages.Add(reference);
+                    continue;
+                }
+
                 if (property.Value.ValueKind == JsonValueKind.String && LooksLikeName(property.Name))
                 {
                     messages.Add(Create(property.Value.GetString()!, property.Name));
+                    continue;
                 }
 
                 Collect(property.Value, messages);
@@ -58,6 +68,27 @@ public static class BillBotMappingLoader
                 Collect(child, messages);
             }
         }
+    }
+
+    private static bool TryCreateNamespaceEntry(string propertyName, JsonElement element, out ReferenceMessage? reference)
+    {
+        string? obfuscatedName = GetProperty(element, "full_obf_msg_namespace", "obf_msg_namespace");
+        string? token = obfuscatedName is null ? null : LeafToken(obfuscatedName);
+        if (token is null)
+        {
+            reference = null;
+            return false;
+        }
+
+        string? semanticName = GetProperty(element, "full_non_obf_msg_namespace");
+        reference = Create(token, string.IsNullOrWhiteSpace(semanticName) ? propertyName : semanticName);
+        return true;
+    }
+
+    private static string? LeafToken(string namespaceName)
+    {
+        string leaf = namespaceName[(namespaceName.LastIndexOf('.') + 1)..].Replace("`", string.Empty, StringComparison.Ordinal);
+        return string.IsNullOrWhiteSpace(leaf) ? null : leaf;
     }
 
     private static ReferenceMessage Create(string token, string name)
