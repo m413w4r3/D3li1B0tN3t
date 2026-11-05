@@ -126,11 +126,6 @@ public sealed class ReplayEngineClient
             {
                 AddProblem(problem.Code);
             }
-
-            foreach (var field in analysis.Fields)
-            {
-                AddFieldProblems(field);
-            }
         }
 
         if (summary.Problems.Count != expectedProblems.Count ||
@@ -143,22 +138,6 @@ public sealed class ReplayEngineClient
         {
             expectedProblems.TryGetValue(problem, out var count);
             expectedProblems[problem] = count + 1;
-        }
-
-        void AddFieldProblems(DiagnosticFieldAnalysis field)
-        {
-            foreach (var problem in field.Problems)
-            {
-                AddProblem(problem);
-            }
-
-            if (field.Nested is not null)
-            {
-                foreach (var nested in field.Nested)
-                {
-                    AddFieldProblems(nested);
-                }
-            }
         }
     }
 

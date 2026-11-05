@@ -15,7 +15,11 @@ public static class PromotionGate
 
         List<string> refusals = new();
 
-        if (candidate.Classification != CandidateClassification.Verified)
+        if (candidate.Classification != CandidateClassification.Verified
+            || !candidate.ExactShape
+            || !candidate.UniqueShape
+            || !candidate.HasValidObservation
+            || !candidate.Evidence.Any(evidence => evidence.Verified))
         {
             refusals.Add("NOT_VERIFIED");
         }

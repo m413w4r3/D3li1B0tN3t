@@ -19,6 +19,7 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
     private readonly CancellationTokenSource _cancel = new();
     private readonly Task _pump;
     private long _nextTicket;
+    private long _queuedBytes;
     private long _enqueuedFrames;
     private long _analyzedFrames;
     private long _droppedFrames;
@@ -86,8 +87,15 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
             }
 
             var ticket = Interlocked.Increment(ref _nextTicket);
+            if (!TryReserveBytes(frame.Payload.Length))
+            {
+                Interlocked.Increment(ref _droppedFrames);
+                return false;
+            }
+
             if (!_frames.Writer.TryWrite(new QueuedDiagnosticFrame(ticket, frame)))
             {
+                Interlocked.Add(ref _queuedBytes, -frame.Payload.Length);
                 Interlocked.Increment(ref _droppedFrames);
                 return false;
             }
@@ -170,6 +178,7 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
             {
                 while (_frames.Reader.TryRead(out var queued))
                 {
+                    Interlocked.Add(ref _queuedBytes, -queued.Frame.Payload.Length);
                     inFlight = 1;
                     var frame = WithSequence(queued.Frame, Interlocked.Increment(ref _nextSequence) - 1);
                     var analysis = await WithTimeoutAsync(
@@ -222,6 +231,7 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
 
     private void OnFrameDropped(QueuedDiagnosticFrame frame)
     {
+        Interlocked.Add(ref _queuedBytes, -frame.Frame.Payload.Length);
         _droppedTickets.TryAdd(frame.Ticket, 0);
         Interlocked.Increment(ref _droppedFrames);
     }
@@ -233,9 +243,27 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
             Interlocked.Add(ref _droppedFrames, inFlight);
         }
 
-        while (_frames.Reader.TryRead(out _))
+        while (_frames.Reader.TryRead(out var queued))
         {
+            Interlocked.Add(ref _queuedBytes, -queued.Frame.Payload.Length);
             Interlocked.Increment(ref _droppedFrames);
+        }
+    }
+
+    private bool TryReserveBytes(int bytes)
+    {
+        while (true)
+        {
+            long queued = Interlocked.Read(ref _queuedBytes);
+            if (bytes > _options.QueueByteCapacity - queued)
+            {
+                return false;
+            }
+
+            if (Interlocked.CompareExchange(ref _queuedBytes, queued + bytes, queued) == queued)
+            {
+                return true;
+            }
         }
     }
 

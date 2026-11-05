@@ -39,10 +39,7 @@ public static class CandidateReportJson
                 Uncertainties = candidate.Uncertainties
                     .OrderBy(uncertainty => uncertainty.Code)
                     .ThenBy(uncertainty => uncertainty.Detail, StringComparer.Ordinal)
-                    .ToArray(),
-                FixtureProposal = candidate.FixtureProposal is { Synthetic: false } fixture
-                    ? fixture with { PayloadHex = string.Empty }
-                    : candidate.FixtureProposal
+                    .ToArray()
             }).ToArray();
 
         return report with { Candidates = candidates };

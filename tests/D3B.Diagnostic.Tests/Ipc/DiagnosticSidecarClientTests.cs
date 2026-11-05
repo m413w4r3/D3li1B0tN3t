@@ -175,6 +175,26 @@ public sealed class DiagnosticSidecarClientTests
     }
 
     [Fact]
+    public async Task TimesOutWaitingForSocketAnalysisResponse()
+    {
+        var options = new SidecarOptions { ResponseTimeout = TimeSpan.FromMilliseconds(80) };
+        await RunSocketSessionAsync(options, async stream =>
+        {
+            await ReadFrameAsync(stream);
+            await ReadFrameAsync(stream);
+            await WriteFrameAsync(stream, ReplayTestData.EngineHelloLine());
+            await ReadFrameAsync(stream);
+            await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken);
+        }, async client =>
+        {
+            await client.StartAsync(ReplayTestData.CreateSchema(), TestContext.Current.CancellationToken);
+            DiagnosticSidecarException exception = await Assert.ThrowsAsync<DiagnosticSidecarException>(
+                () => client.AnalyzeAsync(ReplayTestData.CreateFrame(), TestContext.Current.CancellationToken));
+            Assert.Equal(DiagnosticErrorCode.IoError, exception.ErrorCode);
+        });
+    }
+
+    [Fact]
     public async Task ReportsAbruptSocketCloseDuringHandshake()
     {
         await RunSocketSessionAsync(new SidecarOptions(), async stream =>

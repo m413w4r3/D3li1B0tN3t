@@ -40,6 +40,37 @@ public sealed class DiagnosticSessionTests
     }
 
     [Fact]
+    public async Task QueueByteBudgetDropsFramesThatWouldExceedCapacity()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sidecar = new FakeDiagnosticSidecar
+        {
+            Analyze = async frame =>
+            {
+                entered.TrySetResult();
+                await release.Task;
+                return new DiagnosticAnalysis { Index = frame.Index };
+            },
+        };
+        var session = new DiagnosticSession(
+            Options(4, queueByteCapacity: 4),
+            ReplayTestData.CreateSchema(),
+            new FakeDiagnosticSidecarFactory(sidecar),
+            new FakeLogger<DiagnosticSession>(new FakeLogCollector()));
+
+        Assert.True(session.TryEnqueue(Frame(1)));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        Assert.True(session.TryEnqueue(Frame(2, [1, 2, 3])));
+        Assert.False(session.TryEnqueue(Frame(3, [4, 5, 6])));
+        Assert.Equal(1, session.Snapshot.DroppedFrames);
+
+        release.TrySetResult();
+        await session.DisposeAsync();
+        Assert.Equal(2, session.Snapshot.AnalyzedFrames);
+    }
+
+    [Fact]
     public async Task ABlockedSidecarDoesNotBlockTryEnqueue()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -149,20 +180,21 @@ public sealed class DiagnosticSessionTests
             logger);
     }
 
-    private static SidecarOptions Options(int queueCapacity)
+    private static SidecarOptions Options(int queueCapacity, long queueByteCapacity = 16L * 1024 * 1024)
     {
         return new SidecarOptions
         {
             EnginePath = "unused",
             SocketDirectory = "unused",
             QueueCapacity = queueCapacity,
+            QueueByteCapacity = queueByteCapacity,
             HandshakeTimeout = TimeSpan.FromSeconds(2),
             ResponseTimeout = TimeSpan.FromSeconds(2),
         };
     }
 
-    private static DiagnosticFrame Frame(long index)
+    private static DiagnosticFrame Frame(long index, byte[]? payload = null)
     {
-        return new DiagnosticFrame(index, "server", "type.ankama.com/lok", "lok", [0x08, 0x01]);
+        return new DiagnosticFrame(index, "server", "type.ankama.com/lok", "lok", payload ?? [0x08, 0x01]);
     }
 }
