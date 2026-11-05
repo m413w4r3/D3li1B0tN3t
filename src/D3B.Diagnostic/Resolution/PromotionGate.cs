@@ -14,24 +14,29 @@ public static class PromotionGate
         ArgumentNullException.ThrowIfNull(context);
 
         List<string> refusals = new();
+        MappingCandidate? reportCandidate = report.Candidates.FirstOrDefault(candidateInReport =>
+            string.Equals(candidateInReport.Token, candidate.Token, StringComparison.Ordinal)
+            && string.Equals(candidateInReport.Readable, candidate.Readable, StringComparison.Ordinal));
 
-        if (candidate.Classification != CandidateClassification.Verified
-            || !candidate.ExactShape
-            || !candidate.UniqueShape
-            || !candidate.HasValidObservation
-            || !candidate.Evidence.Any(evidence => evidence.Verified))
+        if (reportCandidate is null
+            || reportCandidate.Classification != CandidateClassification.Verified
+            || !reportCandidate.ExactShape
+            || !reportCandidate.UniqueShape
+            || !reportCandidate.HasValidObservation
+            || !HasRequiredVerifiedEvidence(reportCandidate))
         {
             refusals.Add("NOT_VERIFIED");
         }
 
-        if (candidate.Contradictions.Count > 0)
+        if (reportCandidate is not null && reportCandidate.Contradictions.Count > 0)
         {
             refusals.Add("CONTRADICTION");
         }
 
-        if (!candidate.BuildExact
-            || !string.Equals(candidate.ClientVersion, context.TargetClientVersion, StringComparison.Ordinal)
-            || !string.Equals(candidate.SchemaSha256, context.TargetSchemaSha256, StringComparison.Ordinal)
+        if (reportCandidate is null
+            || !reportCandidate.BuildExact
+            || !string.Equals(reportCandidate.ClientVersion, context.TargetClientVersion, StringComparison.Ordinal)
+            || !string.Equals(reportCandidate.SchemaSha256, context.TargetSchemaSha256, StringComparison.Ordinal)
             || !string.Equals(report.ClientVersion, context.TargetClientVersion, StringComparison.Ordinal)
             || !string.Equals(report.SchemaSha256, context.TargetSchemaSha256, StringComparison.Ordinal))
         {
@@ -43,7 +48,10 @@ public static class PromotionGate
             refusals.Add("PARTIAL_OBSERVATION");
         }
 
-        if (candidate.FixtureProposal is null || !candidate.FixtureProposal.Synthetic || !context.FixtureRedGreenPassed)
+        if (reportCandidate is null
+            || reportCandidate.FixtureProposal is null
+            || !reportCandidate.FixtureProposal.Synthetic
+            || !context.FixtureRedGreenPassed)
         {
             refusals.Add("NO_FIXTURE");
         }
@@ -60,7 +68,7 @@ public static class PromotionGate
 
         string expectedApproval = string.Concat(
             "P2K2-PROMOTE:",
-            candidate.Token,
+            reportCandidate?.Token ?? candidate.Token,
             ":",
             context.TargetClientVersion);
         if (!string.Equals(context.OwnerApprovalToken, expectedApproval, StringComparison.Ordinal))
@@ -78,5 +86,16 @@ public static class PromotionGate
             Allowed = refusals.Count == 0,
             RefusalCodes = refusals.AsReadOnly()
         };
+    }
+
+    private static bool HasRequiredVerifiedEvidence(MappingCandidate candidate)
+    {
+        HashSet<string> verifiedSources = candidate.Evidence
+            .Where(evidence => evidence.Verified)
+            .Select(evidence => evidence.Source)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return verifiedSources.Count >= 2
+            && (verifiedSources.Contains("schema") || verifiedSources.Contains("readable"));
     }
 }
