@@ -8,10 +8,9 @@ namespace D3B.Diagnostic.Schema;
 /// <summary>Projects a build's protobuf descriptors into the versioned diagnostic schema.</summary>
 public static class DiagnosticSchemaExporter
 {
-    private const string GoogleProtobufFilePrefix = "google/protobuf/";
     private const int MaximumFieldNumber = 536_870_911;
 
-    /// <summary>Exports every application message in a linked build schema.</summary>
+    /// <summary>Exports every message in a linked build schema.</summary>
     /// <param name="clientVersion">The opaque client version associated with the schema.</param>
     /// <param name="schema">The linked build schema.</param>
     /// <returns>A deterministic diagnostic schema projection.</returns>
@@ -23,7 +22,7 @@ public static class DiagnosticSchemaExporter
         ArgumentNullException.ThrowIfNull(schema);
 
         var descriptors = new List<MessageDescriptor>();
-        foreach (var file in schema.Files.Where(file => !file.Name.StartsWith(GoogleProtobufFilePrefix, StringComparison.Ordinal)))
+        foreach (var file in schema.Files)
         {
             foreach (var (message, depth) in EnumerateMessages(file.MessageTypes, 1))
             {
@@ -142,8 +141,8 @@ public static class DiagnosticSchemaExporter
             Kind = kind,
             Repeated = descriptor.IsRepeated,
             Packed = descriptor.IsPacked,
-            MessageType = descriptor.FieldType == FieldType.Message ? descriptor.MessageType.FullName : null,
-            EnumType = descriptor.FieldType == FieldType.Enum ? descriptor.EnumType.FullName : null,
+            MessageType = kind == DiagnosticFieldKind.Message ? descriptor.MessageType.FullName : null,
+            EnumType = kind == DiagnosticFieldKind.Enumeration ? descriptor.EnumType.FullName : null,
             Oneof = descriptor.RealContainingOneof?.Name,
             HasPresence = descriptor.HasPresence,
         };
@@ -194,7 +193,7 @@ public static class DiagnosticSchemaExporter
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
         var messageDefinitions = new List<(string Name, DescriptorProto Descriptor, int Depth)>();
-        foreach (var file in descriptorSet.File.Where(file => !file.Name.StartsWith(GoogleProtobufFilePrefix, StringComparison.Ordinal)))
+        foreach (var file in descriptorSet.File)
         {
             var prefix = string.IsNullOrEmpty(file.Package) ? string.Empty : file.Package + ".";
             CollectMessages(file.MessageType, prefix, 1, names, messageDefinitions);

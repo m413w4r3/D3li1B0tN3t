@@ -14,9 +14,9 @@ internal static class DiagnosticTestSchema
     public static FileDescriptorSet CreateDescriptorSet()
     {
         var set = new FileDescriptorSet();
+        set.File.Add(CreateGoogleFile());
         set.File.Add(CreateApplicationFile());
         set.File.Add(CreateGroupFile());
-        set.File.Add(CreateGoogleFile());
         return set;
     }
 
@@ -49,6 +49,7 @@ internal static class DiagnosticTestSchema
     private static FileDescriptorProto CreateApplicationFile()
     {
         var file = new FileDescriptorProto { Name = "fixture.proto", Package = "fixture", Syntax = "proto3" };
+        file.Dependency.Add("google/protobuf/any.proto");
         var root = new DescriptorProto { Name = "Root" };
         root.NestedType.Add(new DescriptorProto
         {
@@ -90,6 +91,7 @@ internal static class DiagnosticTestSchema
         root.Field.Add(CreateField("entries", 20, FieldDescriptorProto.Types.Type.Message, ".fixture.Root.EntriesEntry", FieldDescriptorProto.Types.Label.Repeated));
         root.Field.Add(CreateField("packed_values", 21, FieldDescriptorProto.Types.Type.Int32, label: FieldDescriptorProto.Types.Label.Repeated, packed: true));
         root.Field.Add(CreateField("unpacked_values", 22, FieldDescriptorProto.Types.Type.Int32, label: FieldDescriptorProto.Types.Label.Repeated, packed: false));
+        root.Field.Add(CreateField("any_value", 23, FieldDescriptorProto.Types.Type.Message, ".google.protobuf.Any"));
         file.MessageType.Add(root);
         return file;
     }
@@ -114,11 +116,14 @@ internal static class DiagnosticTestSchema
     {
         var file = new FileDescriptorProto
         {
-            Name = "google/protobuf/fixture.proto",
+            Name = "google/protobuf/any.proto",
             Package = "google.protobuf",
             Syntax = "proto3",
         };
-        file.MessageType.Add(new DescriptorProto { Name = "ShouldNotExport" });
+        var any = new DescriptorProto { Name = "Any" };
+        any.Field.Add(CreateField("type_url", 1, FieldDescriptorProto.Types.Type.String));
+        any.Field.Add(CreateField("value", 2, FieldDescriptorProto.Types.Type.Bytes));
+        file.MessageType.Add(any);
         return file;
     }
 
