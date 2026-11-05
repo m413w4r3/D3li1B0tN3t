@@ -106,14 +106,39 @@ struct CapturedReplay {
 }
 
 fn run(input: &str) -> Result<CapturedReplay, ReplayError> {
-    let mut stdout = Vec::new();
-    replay(&mut Cursor::new(input.as_bytes()), &mut stdout, false)?;
+    let (result, stdout) = run_raw(input);
+    result?;
     let lines = stdout
         .split(|byte| *byte == b'\n')
         .filter(|line| !line.is_empty())
         .map(<[u8]>::to_vec)
         .collect();
     Ok(CapturedReplay { lines })
+}
+
+fn run_raw(input: &str) -> (Result<(), ReplayError>, Vec<u8>) {
+    let mut stdout = Vec::new();
+    let result = replay(&mut Cursor::new(input.as_bytes()), &mut stdout, false).map(|_| ());
+    (result, stdout)
+}
+
+fn run_binary(input: &str) -> std::process::Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_d3b-diagnostic"))
+        .arg("replay")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("diagnostic binary starts");
+    child
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(input.as_bytes())
+        .expect("input writes");
+    child
+        .wait_with_output()
+        .expect("binary output is available")
 }
 
 fn analysis(output: &CapturedReplay, index: usize) -> Value {
@@ -201,6 +226,14 @@ fn exercise_streaming_client(stream: UnixStream) -> Result<(), String> {
 
 fn encode_length_field(number: u8, bytes: &[u8]) -> Vec<u8> {
     let mut result = vec![(number << 3) | 2, bytes.len() as u8];
+    result.extend_from_slice(bytes);
+    result
+}
+
+fn encode_length_field_number(number: u32, bytes: &[u8]) -> Vec<u8> {
+    let mut result = Vec::new();
+    encode_varint((u64::from(number) << 3) | 2, &mut result);
+    encode_varint(bytes.len() as u64, &mut result);
     result.extend_from_slice(bytes);
     result
 }
@@ -327,6 +360,122 @@ fn non_string_optional_schema_property_is_rejected() {
 }
 
 #[test]
+fn enum_type_is_rejected_for_non_enum_field() {
+    let mut schema = lok_schema();
+    schema["messages"][0]["fields"][0]["enumType"] = json!("some.Enum");
+    let error = run(&corpus(schema, &[])).expect_err("enum type on a scalar field is rejected");
+    assert_eq!(error.exit_code(), 2);
+    assert_eq!(error.code, "SCHEMA_INVALID");
+}
+
+#[test]
+fn optional_oneof_string_is_accepted() {
+    let mut schema = lok_schema();
+    schema["messages"][0]["fields"][0]["oneof"] = json!("choice");
+    run(&corpus(schema, &[])).expect("oneof remains an optional string");
+}
+
+#[test]
+fn replay_frame_limits_accept_their_maximum_values() {
+    let carried_type = "a".repeat(128);
+    let type_url = "u".repeat(256);
+    let schema = json!({"kind":"schema","messages":[message(&carried_type, false, vec![])]});
+    let output = run(&corpus(
+        schema,
+        &[frame(
+            i64::MAX as u64,
+            json!(carried_type),
+            json!(type_url),
+            &[],
+        )],
+    ))
+    .expect("maximum accepted frame bounds are valid");
+    let value = analysis(&output, 0);
+    assert_eq!(value["index"], i64::MAX);
+    assert_eq!(value["carriedType"].as_str().map(str::len), Some(128));
+    assert_eq!(value["status"], "VALID");
+}
+
+#[test]
+fn replay_frame_contract_bounds_reject_invalid_values_before_analysis() {
+    let mut invalid_frames = Vec::new();
+
+    let mut invalid = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    invalid["carriedType"] = json!("");
+    invalid_frames.push(("empty carriedType", invalid));
+
+    let mut invalid = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    invalid["carriedType"] = json!("bad/token");
+    invalid_frames.push(("carriedType character", invalid));
+
+    let mut invalid = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    invalid["carriedType"] = json!("é");
+    invalid_frames.push(("non-ASCII carriedType", invalid));
+
+    let mut invalid = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    invalid["carriedType"] = json!("a".repeat(129));
+    invalid_frames.push(("oversized carriedType", invalid));
+
+    let mut invalid = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    invalid["typeUrl"] = json!("u".repeat(257));
+    invalid_frames.push(("oversized typeUrl", invalid));
+
+    let mut invalid = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    invalid["direction"] = json!("peer");
+    invalid_frames.push(("unknown direction", invalid));
+
+    let mut invalid = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    invalid["index"] = json!(i64::MAX as u64 + 1);
+    invalid_frames.push(("index above signed 64-bit range", invalid));
+
+    let mut invalid = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    invalid["payloadHex"] = json!("0");
+    invalid_frames.push(("odd payloadHex", invalid));
+
+    let mut invalid = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    invalid["payloadHex"] = json!("gg");
+    invalid_frames.push(("non-hex payloadHex", invalid));
+
+    let mut invalid = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    invalid["payloadHex"] = json!(12);
+    invalid_frames.push(("malformed payloadHex type", invalid));
+
+    for (description, invalid) in invalid_frames {
+        let (result, stdout) = run_raw(&corpus(lok_schema(), &[invalid]));
+        let error = result.expect_err("invalid frame is rejected");
+        assert_eq!(error.exit_code(), 2, "{description}");
+        assert_eq!(error.code, "CONTRACT_INVALID", "{description}");
+        let stdout = String::from_utf8(stdout).expect("partial replay output is UTF-8");
+        assert!(!stdout.contains("\"kind\":\"analysis\""), "{description}");
+    }
+}
+
+#[test]
+fn hostile_carried_type_writes_only_a_contract_error_line() {
+    let hostile = format!("{}/private", "a".repeat(40));
+    let input = corpus(
+        lok_schema(),
+        &[frame(
+            0,
+            json!(hostile),
+            json!("type.ankama.com/lok"),
+            &[0x08, 0x01],
+        )],
+    );
+    let result = run_binary(&input);
+    assert_eq!(result.status.code(), Some(2));
+    let stdout = String::from_utf8(result.stdout).expect("error output is UTF-8");
+    let lines = stdout.lines().collect::<Vec<_>>();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(
+        serde_json::from_str::<Value>(lines[1]).unwrap()["code"],
+        "CONTRACT_INVALID"
+    );
+    assert!(!stdout.contains(&hostile));
+    assert!(!stdout.contains("\"kind\":\"analysis\""));
+}
+
+#[test]
 fn unknown_field_number_is_schema_mismatch() {
     let output = run(&corpus(
         lok_schema(),
@@ -342,6 +491,9 @@ fn unknown_field_number_is_schema_mismatch() {
     assert_eq!(value["status"], "SCHEMA_MISMATCH");
     assert!(has_problem(&value, "UNKNOWN_FIELD_NUMBER"));
     assert_eq!(value["fields"][0]["name"], Value::Null);
+    let summary: Value = serde_json::from_slice(output.lines.get(2).expect("summary exists"))
+        .expect("summary is JSON");
+    assert_eq!(summary["problems"]["UNKNOWN_FIELD_NUMBER"], 1);
 }
 
 #[test]
@@ -539,8 +691,8 @@ fn unknown_carried_type_reports_only_payload_length() {
         lok_schema(),
         &[frame(
             0,
-            json!("not-in-schema"),
-            json!("type.ankama.com/not-in-schema"),
+            json!("not_in_schema"),
+            json!("type.ankama.com/not_in_schema"),
             &payload,
         )],
     ))
@@ -804,6 +956,52 @@ fn analysis_output_limit_sets_detail_truncated() {
     let value: Value = serde_json::from_slice(line).expect("analysis remains JSON");
     assert_eq!(value["detailTruncated"], true);
     assert!(line.len() < 1_048_576);
+}
+
+#[test]
+fn pathological_analysis_falls_back_under_the_output_limit() {
+    const LINK_FIELD: u32 = 536_870_911;
+    let schema = json!({
+        "kind":"schema",
+        "messages":[message("node", false, vec![
+            field(u64::from(LINK_FIELD), "next", "MESSAGE", false, false, json!("node")),
+        ])],
+    });
+    let mut payload = Vec::new();
+    for number in 1..=MAX_FIELDS_PER_MESSAGE as u64 {
+        encode_varint(number << 3, &mut payload);
+        payload.push(1);
+    }
+    for _ in 0..MAX_DEPTH {
+        payload = encode_length_field_number(LINK_FIELD, &payload);
+    }
+
+    let output = run(&corpus(
+        schema,
+        &[frame(
+            0,
+            json!("node"),
+            json!("type.ankama.com/node"),
+            &payload,
+        )],
+    ))
+    .expect("pathological analysis is bounded");
+    let line = output.lines.get(1).expect("analysis exists");
+    let value: Value = serde_json::from_slice(line).expect("analysis remains JSON");
+    assert!(line.len() <= 1_048_576);
+    assert_eq!(value["index"], 0);
+    assert_eq!(value["direction"], "server");
+    assert_eq!(value["carriedType"], "node");
+    assert_eq!(value["status"], "LIMIT_EXCEEDED");
+    assert_eq!(value["message"], Value::Null);
+    assert_eq!(value["fields"], json!([]));
+    assert_eq!(value["problems"], json!([{"code":"LIMIT_EXCEEDED"}]));
+    assert_eq!(value["detailTruncated"], true);
+
+    let summary: Value = serde_json::from_slice(output.lines.get(2).expect("summary exists"))
+        .expect("summary is JSON");
+    assert_eq!(summary["statuses"]["LIMIT_EXCEEDED"], 1);
+    assert_eq!(summary["problems"]["LIMIT_EXCEEDED"], 1);
 }
 
 #[test]

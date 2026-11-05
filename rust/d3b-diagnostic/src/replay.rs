@@ -182,7 +182,40 @@ pub(crate) fn parse_hello(value: &Value) -> Result<HelloInput, ReplayError> {
 }
 
 fn parse_frame(value: &Value) -> Result<FrameInput, ReplayError> {
+    if value
+        .get("index")
+        .and_then(Value::as_u64)
+        .filter(|index| *index <= i64::MAX as u64)
+        .is_none()
+    {
+        return Err(ReplayError::contract("CONTRACT_INVALID"));
+    }
+
+    match value.get("typeUrl") {
+        None | Some(Value::Null) => {}
+        Some(Value::String(type_url)) if type_url.len() <= 256 => {}
+        _ => return Err(ReplayError::contract("CONTRACT_INVALID")),
+    }
+    match value.get("carriedType") {
+        None | Some(Value::Null) => {}
+        Some(Value::String(carried_type)) if valid_carried_type(carried_type) => {}
+        _ => return Err(ReplayError::contract("CONTRACT_INVALID")),
+    }
+    let payload_hex = value
+        .get("payloadHex")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ReplayError::contract("CONTRACT_INVALID"))?;
+    validate_payload_hex(payload_hex)?;
+
     parse_frame_with_key(value, "index")
+}
+
+fn valid_carried_type(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.'))
 }
 
 pub(crate) fn parse_frame_with_key(
@@ -259,13 +292,7 @@ fn optional_input_string(value: &Value, key: &str) -> Result<Option<String>, Rep
 }
 
 fn decode_payload(hex: &str) -> Result<Vec<u8>, ReplayError> {
-    if hex.len() % 2 != 0
-        || !hex
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return Err(ReplayError::contract("CONTRACT_INVALID"));
-    }
+    validate_payload_hex(hex)?;
     if hex.len() > MAX_WIRE_BYTES.saturating_mul(2) {
         return Ok(vec![0; MAX_WIRE_BYTES + 1]);
     }
@@ -279,6 +306,18 @@ fn decode_payload(hex: &str) -> Result<Vec<u8>, ReplayError> {
         payload.push((high << 4) | low);
     }
     Ok(payload)
+}
+
+fn validate_payload_hex(hex: &str) -> Result<(), ReplayError> {
+    if hex.len() % 2 == 0
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(ReplayError::contract("CONTRACT_INVALID"))
+    }
 }
 
 fn decode_hex_digit(byte: u8) -> Option<u8> {
@@ -311,14 +350,14 @@ fn analysis_value(
 
 fn serialize_analysis(mut value: Value, pretty: bool) -> Result<Vec<u8>, ReplayError> {
     let mut bytes = serialize_value(&value, pretty)?;
-    if bytes.len() < MAX_ANALYSIS_OUTPUT {
+    if bytes.len() <= MAX_ANALYSIS_OUTPUT {
         return Ok(bytes);
     }
 
     value["detailTruncated"] = json!(true);
     remove_nested_details(&mut value);
     bytes = serialize_value(&value, pretty)?;
-    if bytes.len() < MAX_ANALYSIS_OUTPUT {
+    if bytes.len() <= MAX_ANALYSIS_OUTPUT {
         return Ok(bytes);
     }
 
@@ -333,14 +372,46 @@ fn serialize_analysis(mut value: Value, pretty: bool) -> Result<Vec<u8>, ReplayE
         let keep = low + (high - low).div_ceil(2);
         value["fields"] = json!(original_fields[..keep]);
         bytes = serialize_value(&value, pretty)?;
-        if bytes.len() < MAX_ANALYSIS_OUTPUT {
+        if bytes.len() <= MAX_ANALYSIS_OUTPUT {
             low = keep;
         } else {
             high = keep - 1;
         }
     }
     value["fields"] = json!(original_fields[..low]);
-    serialize_value(&value, pretty)
+    bytes = serialize_value(&value, pretty)?;
+    if bytes.len() <= MAX_ANALYSIS_OUTPUT {
+        return Ok(bytes);
+    }
+
+    let mut minimal = json!({
+        "kind": "analysis",
+        "direction": value.get("direction").cloned().unwrap_or(Value::Null),
+        "carriedType": value.get("carriedType").cloned().unwrap_or(Value::Null),
+        "typeUrlOk": value.get("typeUrlOk").cloned().unwrap_or(json!(false)),
+        "status": "LIMIT_EXCEEDED",
+        "message": null,
+        "fields": [],
+        "problems": [{"code": "LIMIT_EXCEEDED"}],
+        "detailTruncated": true,
+    });
+    let minimal_object = minimal.as_object_mut().ok_or_else(ReplayError::internal)?;
+    let sequence_key = if value.get("sequence").is_some() {
+        "sequence"
+    } else {
+        "index"
+    };
+    let sequence = value
+        .get(sequence_key)
+        .cloned()
+        .ok_or_else(ReplayError::internal)?;
+    minimal_object.insert(sequence_key.to_owned(), sequence);
+
+    bytes = serialize_value(&minimal, pretty)?;
+    if bytes.len() > MAX_ANALYSIS_OUTPUT {
+        return Err(ReplayError::internal());
+    }
+    Ok(bytes)
 }
 
 fn remove_nested_details(value: &mut Value) {
