@@ -35,7 +35,7 @@ public sealed record ResolverObservation
                 && statuses.Length == 1
                 && statuses[0].Status == DiagnosticStatus.Valid
                 && statuses[0].Occurrences == Occurrences
-                && !Problems.Any(problem => IsHardProblem(problem.Code));
+                && !Problems.Any(problem => IsHardProblem(problem.Code) || IsSoftProblem(problem.Code));
         }
     }
 
@@ -52,6 +52,13 @@ public sealed record ResolverObservation
             or DiagnosticProblemCode.Malformed
             or DiagnosticProblemCode.SchemaMessageMissing
             or DiagnosticProblemCode.SchemaInvalid;
+    }
+
+    private static bool IsSoftProblem(DiagnosticProblemCode code)
+    {
+        return code is DiagnosticProblemCode.DepthExceeded
+            or DiagnosticProblemCode.Truncated
+            or DiagnosticProblemCode.LimitExceeded;
     }
 }
 

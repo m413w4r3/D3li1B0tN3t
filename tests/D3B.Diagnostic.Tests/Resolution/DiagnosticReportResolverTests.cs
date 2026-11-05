@@ -94,6 +94,23 @@ public sealed class DiagnosticReportResolverTests
         Assert.Contains(candidate.Contradictions, contradiction => contradiction.Code == ResolverContradictionCode.ObservationProblem);
     }
 
+    [Theory]
+    [InlineData(DiagnosticProblemCode.DepthExceeded)]
+    [InlineData(DiagnosticProblemCode.Truncated)]
+    [InlineData(DiagnosticProblemCode.LimitExceeded)]
+    public void SoftSchemaProblemWithValidCompleteObservationNeverVerifies(DiagnosticProblemCode problem)
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        LoadedDiagnosticReport report = LoadReport("lok", problems: [problem]);
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        MappingCandidate candidate = Assert.Single(Resolve(schema, report, readable).Candidates);
+
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.ObservationTruncated);
+    }
+
     [Fact]
     public void TypeUrlMismatchForcesConflict()
     {
