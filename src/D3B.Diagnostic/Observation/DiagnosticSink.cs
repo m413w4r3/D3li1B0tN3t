@@ -1,5 +1,6 @@
 using D3B.Diagnostic.Contract;
 using D3B.Diagnostic.Ipc;
+using D3B.Diagnostic.Reporting;
 using Microsoft.Extensions.Logging;
 
 namespace D3B.Diagnostic.Observation;
@@ -17,7 +18,11 @@ public sealed class DiagnosticSink : IDiagnosticSessionFactory
         SidecarOptions options,
         DiagnosticSchema schema,
         IDiagnosticSidecarFactory sidecarFactory,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        DiagnosticReportOptions? reportOptions = null,
+        IDiagnosticReportWriter? reportWriter = null,
+        TimeProvider? timeProvider = null,
+        bool includeReadable = false)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(schema);

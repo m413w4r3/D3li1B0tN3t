@@ -10,6 +10,33 @@ namespace D3B.Diagnostic.Tests.Observation;
 public sealed class DiagnosticSessionTests
 {
     [Fact]
+    public async Task SnapshotOnlyExposesTheLastAnalysisAndGlobalSummary()
+    {
+        var analyses = new[]
+        {
+            new DiagnosticAnalysis { Index = 0, Direction = "client", CarriedType = "lok" },
+            new DiagnosticAnalysis { Index = 1, Direction = "server", CarriedType = "lok" },
+        };
+        var sidecar = new FakeDiagnosticSidecar
+        {
+            Analyze = frame => Task.FromResult(analyses[(int)frame.Index]),
+            Complete = () => Task.FromResult(new DiagnosticSummary { Frames = analyses.Length, Coverage = "complete" }),
+        };
+        var session = CreateSession(sidecar);
+
+        Assert.True(session.TryEnqueue(Frame(0)));
+        Assert.True(session.TryEnqueue(Frame(1)));
+        await session.DisposeAsync();
+
+        DiagnosticSessionSnapshot snapshot = session.Snapshot;
+        Assert.Equal(1, snapshot.LastAnalysis?.Index);
+        Assert.Equal(2, snapshot.Summary?.Frames);
+        Assert.Single(
+            typeof(DiagnosticSessionSnapshot).GetProperties(),
+            property => typeof(DiagnosticAnalysis).IsAssignableFrom(property.PropertyType));
+    }
+
+    [Fact]
     public async Task QueueOverflowDropsAndCountsTheNewestFrame()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

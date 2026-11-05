@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using D3B.Diagnostic.Contract;
 using D3B.Diagnostic.Ipc;
 using D3B.Diagnostic.Replay;
+using D3B.Diagnostic.Reporting;
 using Microsoft.Extensions.Logging;
 
 namespace D3B.Diagnostic.Observation;
@@ -34,7 +35,11 @@ public sealed partial class DiagnosticSession : IDiagnosticSink, IAsyncDisposabl
         SidecarOptions options,
         DiagnosticSchema schema,
         IDiagnosticSidecarFactory sidecarFactory,
-        ILogger logger)
+        ILogger logger,
+        DiagnosticReportOptions? reportOptions = null,
+        IDiagnosticReportWriter? reportWriter = null,
+        TimeProvider? timeProvider = null,
+        bool includeReadable = false)
     {
         _options = options;
         _schema = schema;

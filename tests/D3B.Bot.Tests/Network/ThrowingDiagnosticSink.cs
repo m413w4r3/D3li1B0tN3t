@@ -19,4 +19,9 @@ internal sealed class ThrowingDiagnosticSink : IDiagnosticSink
     public void Complete()
     {
     }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
 }

@@ -29,4 +29,9 @@ internal sealed class BlockingDiagnosticSink : IDiagnosticSink
     {
         Release.Set();
     }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
 }

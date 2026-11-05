@@ -8,6 +8,7 @@ using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace D3B.Bot.Tests.Network;
 
@@ -154,6 +155,97 @@ public sealed class DiagnosticObserverTests : IDisposable
         Assert.True(SpinWait.SpinUntil(() => sink.DroppedFrames is 1, TimeSpan.FromSeconds(2)));
     }
 
+    [Fact]
+    public async Task DisposeAsyncAwaitsSinkDisposeAsync()
+    {
+        var sink = new FakeDiagnosticSink { BlockDisposeAsync = true };
+        var factory = new FakeDiagnosticSessionFactory { Create = () => sink };
+        var observer = CreateObserver(factory, false);
+        _ = Start(observer);
+
+        Task dispose = observer.DisposeAsync().AsTask();
+        await sink.DisposeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        Assert.False(dispose.IsCompleted);
+        sink.DisposeRelease.TrySetResult();
+        await dispose.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, sink.DisposeCount);
+    }
+
+    [Fact]
+    public async Task DisposeFlushesSynchronously()
+    {
+        var sink = new FakeDiagnosticSink { BlockDisposeAsync = true };
+        var observer = CreateObserver(new FakeDiagnosticSessionFactory { Create = () => sink }, false);
+        _ = Start(observer);
+
+        Task dispose = Task.Run(observer.Dispose, TestContext.Current.CancellationToken);
+        await sink.DisposeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        Assert.False(dispose.IsCompleted);
+        sink.DisposeRelease.TrySetResult();
+        await dispose.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, sink.DisposeCount);
+    }
+
+    [Fact]
+    public async Task DoubleDisposalIsHarmless()
+    {
+        var sink = new FakeDiagnosticSink();
+        var observer = CreateObserver(new FakeDiagnosticSessionFactory { Create = () => sink }, false);
+        _ = Start(observer);
+
+        await observer.DisposeAsync();
+        observer.Dispose();
+        await observer.DisposeAsync();
+
+        Assert.Equal(1, sink.DisposeCount);
+    }
+
+    [Fact]
+    public void AServiceProviderCanDisposeTheObserverSynchronously()
+    {
+        var sink = new FakeDiagnosticSink();
+        var observer = CreateObserver(new FakeDiagnosticSessionFactory { Create = () => sink }, false);
+        _ = Start(observer);
+        var services = new ServiceCollection();
+        services.AddSingleton(observer);
+        services.AddSingleton<IGameObserver>(provider => provider.GetRequiredService<DiagnosticObserver>());
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        Exception? exception = Record.Exception(provider.Dispose);
+
+        Assert.Null(exception);
+        Assert.Equal(1, sink.DisposeCount);
+    }
+
+    [Fact]
+    public async Task OnFramePathDoesNotWaitForAReportWriterFlush()
+    {
+        var firstSink = new FakeDiagnosticSink { BlockDisposeAsync = true };
+        var secondSink = new FakeDiagnosticSink();
+        int created = 0;
+        var factory = new FakeDiagnosticSessionFactory
+        {
+            Create = () => Interlocked.Increment(ref created) == 1 ? firstSink : secondSink,
+        };
+        var observer = CreateObserver(factory, false);
+        var firstSession = Start(observer);
+        Show(firstSession, RelayDirection.FromServer, UnknownFrame("opaque.Token", ByteString.CopyFrom(1)));
+        _connection.Close();
+        await firstSink.DisposeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+        using var secondConnection = new FakeRelayConnection("diagnostic-second", RelayRoute.Game);
+        var secondSession = Start(observer, secondConnection);
+        var timer = Stopwatch.StartNew();
+        Show(secondSession, RelayDirection.FromServer, UnknownFrame("opaque.Token", ByteString.CopyFrom(2)));
+        timer.Stop();
+
+        firstSink.DisposeRelease.TrySetResult();
+        await observer.DisposeAsync();
+        Assert.True(timer.Elapsed < TimeSpan.FromMilliseconds(250));
+    }
+
     private DiagnosticObserver CreateObserver(FakeDiagnosticSessionFactory factory, bool includeReadable, int queueCapacity = 256, long queueByteCapacity = 16L * 1024 * 1024)
     {
         IReadOnlySet<string> messageNames = new HashSet<string>(StringComparer.Ordinal)
@@ -166,13 +258,18 @@ public sealed class DiagnosticObserverTests : IDisposable
 
     private GameSession Start(IGameObserver observer)
     {
+        return Start(observer, _connection);
+    }
+
+    private GameSession Start(IGameObserver observer, IRelayConnection connection)
+    {
         var relay = new RelayDecoder(
             TestGame.Translation(),
             new GameServerSelections(_settings, TimeProvider.System),
             new GameAccounts(_settings.SelectionLifetime, TimeProvider.System),
             [observer],
             _logs);
-        return Assert.IsType<GameSession>(relay.Intercept(_connection));
+        return Assert.IsType<GameSession>(relay.Intercept(connection));
     }
 
     private static void Show(GameSession session, RelayDirection direction, byte[] bytes)

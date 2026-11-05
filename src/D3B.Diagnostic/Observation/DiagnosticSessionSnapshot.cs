@@ -25,4 +25,7 @@ public sealed record DiagnosticSessionSnapshot
 
     /// <summary>Gets the redacted summary, if one was received.</summary>
     public DiagnosticSummary? Summary { get; init; }
+
+    /// <summary>Gets the engine identity returned by the sidecar handshake, if one completed.</summary>
+    public DiagnosticEngineHello? EngineHello { get; init; }
 }

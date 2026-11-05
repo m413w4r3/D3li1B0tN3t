@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging;
 namespace D3B.Bot.Network;
 
 /// <summary>Passes selected game frames to the isolated diagnostic sidecar.</summary>
-public sealed partial class DiagnosticObserver : IGameObserver
+public sealed partial class DiagnosticObserver : IGameObserver, IDisposable, IAsyncDisposable
 {
     private readonly IDiagnosticSessionFactory? _sessions;
     private readonly bool _includeReadable;
@@ -47,6 +47,17 @@ public sealed partial class DiagnosticObserver : IGameObserver
         ArgumentNullException.ThrowIfNull(log);
         _log = log;
         _schemaMessageNames = new HashSet<string>(StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+    }
+
+    /// <inheritdoc />
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc />
