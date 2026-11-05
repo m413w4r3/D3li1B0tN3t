@@ -115,7 +115,7 @@ echoed in the summary.
 | `name` | string or null | Schema field name; null for an unknown number. |
 | `declaredKind` | string or null | One of the protobuf kind names (section 3.2); null when unknown. |
 | `repeated` | boolean | Declared repetition; false when unknown. |
-| `packed` | boolean | Descriptor `IsPacked`; false when unknown. |
+| `packed` | boolean | Effective packed encoding declared for the field; false when unknown. |
 | `occurrences` | integer | Number of times the field appeared. |
 | `wireTypes` | array of string | Distinct observed wire types, in first-seen order. |
 | `observed` | object | Redacted shape, see 2.6. |
@@ -239,7 +239,7 @@ vocabulary is used in replay and IPC.
 | `name` | string | Obfuscated field name from the build. |
 | `kind` | string | `DOUBLE`, `FLOAT`, `INT64`, `UINT64`, `INT32`, `FIXED64`, `FIXED32`, `BOOL`, `STRING`, `GROUP`, `MESSAGE`, `BYTES`, `UINT32`, `ENUM`, `SFIXED32`, `SFIXED64`, `SINT32`, `SINT64`. |
 | `repeated` | boolean | Repetition from the descriptor. |
-| `packed` | boolean | `FieldDescriptor.IsPacked` from the descriptor. |
+| `packed` | boolean | Effective packed encoding: true for a repeated packable scalar whose descriptor declares it packed; false for a singular, non-packable or explicitly unpacked field. |
 | `messageType` | string or null | Full name for `MESSAGE`; null otherwise. |
 | `enumType` | string or null | Full name for `ENUM`; null otherwise. |
 | `oneof` | string or null | Real oneof name; null for a synthetic proto3-optional oneof. |
