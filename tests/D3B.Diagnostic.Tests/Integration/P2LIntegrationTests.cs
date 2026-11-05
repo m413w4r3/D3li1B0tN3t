@@ -378,7 +378,7 @@ public sealed class P2LIntegrationTests
                 ProtocolVersion = DiagnosticProtocol.ProtocolVersion,
                 Engine = "d3b-diagnostic",
                 EngineVersion = "0.1.0",
-                SnsCommit = "synthetic",
+                SnsCommit = "abcdef0",
             },
             Producer = "D3B.Diagnostic.Tests",
             ProducerVersion = "p2l-synthetic",

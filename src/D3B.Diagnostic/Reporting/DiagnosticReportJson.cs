@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using D3B.Diagnostic.Contract;
 
 namespace D3B.Diagnostic.Reporting;
@@ -11,6 +12,9 @@ public static class DiagnosticReportJson
     private const string SizeLimitMessage = "report exceeds size limit";
     private const string InvalidReportMessage = "report is invalid";
     private static readonly string[] _shapeProperties = ["varintBytes", "fixedLength", "length", "fieldCount"];
+    private static readonly Regex _safeEngineVersion = new(
+        @"\A[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     /// <summary>Serializes a report to deterministic compact UTF-8 JSON.</summary>
     public static byte[] SerializeToUtf8Bytes(DiagnosticReport report, DiagnosticReportOptions options)
@@ -700,7 +704,7 @@ public static class DiagnosticReportJson
         long accountedAnalyses = session.UnattributedAnalyses;
         foreach (DiagnosticReportType type in report.Types)
         {
-            accountedAnalyses = SaturatingAdd(accountedAnalyses, type.Occurrences);
+            accountedAnalyses = CheckedCountAdd(accountedAnalyses, type.Occurrences);
         }
 
         return accountedAnalyses != session.AnalyzedFrames
@@ -724,7 +728,10 @@ public static class DiagnosticReportJson
     private static void ValidateEngine(DiagnosticReportEngine engine, JsonElement element)
     {
         ValidateRequiredProperties(element, "protocolVersion", "engine", "engineVersion", "snsCommit");
-        if (engine.ProtocolVersion < 0 || !IsSafeIdentity(engine.Engine) || !IsSafeIdentity(engine.EngineVersion) || !IsSafeIdentity(engine.SnsCommit))
+        if (engine.ProtocolVersion < 0
+            || !IsSafeEngine(engine.Engine)
+            || !IsSafeEngineVersion(engine.EngineVersion)
+            || !IsSafeSnsCommit(engine.SnsCommit))
         {
             throw new DiagnosticReportException(InvalidReportMessage);
         }
@@ -796,7 +803,7 @@ public static class DiagnosticReportJson
             || type.Occurrences < 0
             || type.TypeUrlOkOccurrences < 0
             || type.TypeUrlMismatchOccurrences < 0
-            || SaturatingAdd(type.TypeUrlOkOccurrences, type.TypeUrlMismatchOccurrences) != type.Occurrences
+            || CheckedCountAdd(type.TypeUrlOkOccurrences, type.TypeUrlMismatchOccurrences) != type.Occurrences
             || type.Directions.Count > 4
             || type.Statuses.Count > Enum.GetValues<DiagnosticStatus>().Length
             || type.Fields.Count > options.MaxFieldsPerType
@@ -821,7 +828,7 @@ public static class DiagnosticReportJson
                 throw new DiagnosticReportException(InvalidReportMessage);
             }
 
-            directionTotal = SaturatingAdd(directionTotal, direction.Occurrences);
+            directionTotal = CheckedCountAdd(directionTotal, direction.Occurrences);
         }
 
         if (directionTotal != type.Occurrences)
@@ -841,7 +848,7 @@ public static class DiagnosticReportJson
                 throw new DiagnosticReportException(InvalidReportMessage);
             }
 
-            statusTotal = SaturatingAdd(statusTotal, status.Occurrences);
+            statusTotal = CheckedCountAdd(statusTotal, status.Occurrences);
         }
 
         if (statusTotal != type.Occurrences)
@@ -893,7 +900,7 @@ public static class DiagnosticReportJson
                     throw new DiagnosticReportException(InvalidReportMessage);
                 }
 
-                variantStatusTotal = SaturatingAdd(variantStatusTotal, status.Occurrences);
+                variantStatusTotal = CheckedCountAdd(variantStatusTotal, status.Occurrences);
             }
 
             if (variantStatusTotal != variant.Occurrences)
@@ -901,7 +908,7 @@ public static class DiagnosticReportJson
                 throw new DiagnosticReportException(InvalidReportMessage);
             }
 
-            variantTotal = SaturatingAdd(variantTotal, variant.Occurrences);
+            variantTotal = CheckedCountAdd(variantTotal, variant.Occurrences);
         }
 
         bool aggregationFailed = truncation.Reasons.Contains("aggregation-failed", StringComparer.Ordinal);
@@ -1026,9 +1033,160 @@ public static class DiagnosticReportJson
         }
     }
 
-    private static bool IsSafeIdentity(string? value)
+    internal static bool IsSafeIdentity(string? value)
     {
         return value is not null && value.Length <= 128 && value.All(character => character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '+' or '-');
+    }
+
+    internal static bool IsSafeEngine(string? value)
+    {
+        return value is "" or "d3b-diagnostic";
+    }
+
+    internal static bool IsSafeEngineVersion(string? value)
+    {
+        return value == string.Empty || (value is not null && _safeEngineVersion.IsMatch(value));
+    }
+
+    internal static bool IsSafeSnsCommit(string? value)
+    {
+        return value == string.Empty
+            || (value is { Length: >= 7 and <= 64 } && value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f'));
+    }
+
+    internal static bool HasValidOccurrenceAccounting(DiagnosticReport report)
+    {
+        if (report.Session is null
+            || report.Truncation is null
+            || report.Types is null
+            || report.Session.AnalyzedFrames < 0
+            || report.Session.UnattributedAnalyses < 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            long frameTotal = report.Session.UnattributedAnalyses;
+            foreach (DiagnosticReportType? type in report.Types)
+            {
+                if (type is null
+                    || type.Occurrences < 0
+                    || type.TypeUrlOkOccurrences < 0
+                    || type.TypeUrlMismatchOccurrences < 0
+                    || type.Directions is null
+                    || type.Statuses is null
+                    || type.Variants is null
+                    || CheckedCountAdd(type.TypeUrlOkOccurrences, type.TypeUrlMismatchOccurrences) != type.Occurrences)
+                {
+                    return false;
+                }
+
+                frameTotal = CheckedCountAdd(frameTotal, type.Occurrences);
+                long directionTotal = 0;
+                foreach (DiagnosticReportDirectionCount? direction in type.Directions)
+                {
+                    if (direction is null || direction.Occurrences < 0)
+                    {
+                        return false;
+                    }
+
+                    directionTotal = CheckedCountAdd(directionTotal, direction.Occurrences);
+                }
+
+                long statusTotal = 0;
+                foreach (DiagnosticReportStatusCount? status in type.Statuses)
+                {
+                    if (status is null || status.Occurrences < 0)
+                    {
+                        return false;
+                    }
+
+                    statusTotal = CheckedCountAdd(statusTotal, status.Occurrences);
+                }
+
+                if (directionTotal != type.Occurrences || statusTotal != type.Occurrences)
+                {
+                    return false;
+                }
+
+                long variantTotal = 0;
+                foreach (DiagnosticReportVariant? variant in type.Variants)
+                {
+                    if (variant is null || variant.Occurrences < 0 || variant.Statuses is null)
+                    {
+                        return false;
+                    }
+
+                    long variantStatusTotal = 0;
+                    foreach (DiagnosticReportStatusCount? status in variant.Statuses)
+                    {
+                        if (status is null || status.Occurrences < 0)
+                        {
+                            return false;
+                        }
+
+                        variantStatusTotal = CheckedCountAdd(variantStatusTotal, status.Occurrences);
+                    }
+
+                    if (variantStatusTotal != variant.Occurrences)
+                    {
+                        return false;
+                    }
+
+                    variantTotal = CheckedCountAdd(variantTotal, variant.Occurrences);
+                }
+
+                bool aggregationFailed = report.Truncation.Reasons?.Contains("aggregation-failed", StringComparer.Ordinal) == true;
+                bool variantsOmitted = report.Truncation.VariantsOmitted > 0;
+                if (variantTotal > type.Occurrences
+                    || (!aggregationFailed && !variantsOmitted && variantTotal != type.Occurrences))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (DiagnosticReportException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool HasMatchingCompleteFrameAccounting(DiagnosticReport report)
+    {
+        if (report.Coverage != "complete")
+        {
+            return true;
+        }
+
+        try
+        {
+            long frameTotal = report.Session.UnattributedAnalyses;
+            foreach (DiagnosticReportType type in report.Types)
+            {
+                frameTotal = CheckedCountAdd(frameTotal, type.Occurrences);
+            }
+
+            return frameTotal == report.Session.AnalyzedFrames;
+        }
+        catch (DiagnosticReportException)
+        {
+            return false;
+        }
+    }
+
+    private static long CheckedCountAdd(long left, long right)
+    {
+        try
+        {
+            return checked(left + right);
+        }
+        catch (OverflowException)
+        {
+            throw new DiagnosticReportException(InvalidReportMessage);
+        }
     }
 
     private static bool IsSafeToken(string? value)

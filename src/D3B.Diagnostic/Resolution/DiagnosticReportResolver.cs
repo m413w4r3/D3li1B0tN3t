@@ -69,6 +69,7 @@ public static class DiagnosticReportResolver
         if (source.Session.State != DiagnosticReportSessionState.Completed
             || source.Session.ErrorCode is not null
             || truncated
+            || !DiagnosticReportJson.HasMatchingCompleteFrameAccounting(source)
             || HasIncompleteCoverage(source))
         {
             effectiveCoverage = "partial";
@@ -148,12 +149,20 @@ public static class DiagnosticReportResolver
             && report.ProtocolVersion == DiagnosticProtocol.ProtocolVersion
             && report.Coverage is "complete" or "partial"
             && report.ClientVersion is { Length: > 0 }
+            && DiagnosticReportJson.IsSafeIdentity(report.ClientVersion)
             && IsSha256(report.SchemaSha256)
             && report.Engine is not null
+            && DiagnosticReportJson.IsSafeEngine(report.Engine.Engine)
+            && DiagnosticReportJson.IsSafeEngineVersion(report.Engine.EngineVersion)
+            && DiagnosticReportJson.IsSafeSnsCommit(report.Engine.SnsCommit)
             && report.Provenance is not null
+            && report.Provenance.Source is "live" or "synthetic"
+            && DiagnosticReportJson.IsSafeIdentity(report.Provenance.Producer)
+            && DiagnosticReportJson.IsSafeIdentity(report.Provenance.ProducerVersion)
             && report.Session is not null
             && report.Truncation is not null
-            && report.Types is not null;
+            && report.Types is not null
+            && DiagnosticReportJson.HasValidOccurrenceAccounting(report);
     }
 
     private static DiagnosticMessage? FindSchemaMessage(
