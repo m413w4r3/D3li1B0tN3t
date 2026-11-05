@@ -28,6 +28,29 @@ public static class DiagnosticReportResolver
         IEnumerable<PriorMapping> pins,
         IReadOnlyList<FileDescriptor> readableFiles)
     {
+        return ResolveCore(buildSchema, report, references, pins, readableFiles, null);
+    }
+
+    internal static CandidateReport Resolve(
+        DiagnosticSchema buildSchema,
+        LoadedDiagnosticReport report,
+        IEnumerable<ReferenceCorpus> references,
+        IEnumerable<PriorMapping> pins,
+        IReadOnlyList<FileDescriptor> readableFiles,
+        DiagnosticReportOptions validationOptions)
+    {
+        ArgumentNullException.ThrowIfNull(validationOptions);
+        return ResolveCore(buildSchema, report, references, pins, readableFiles, validationOptions);
+    }
+
+    private static CandidateReport ResolveCore(
+        DiagnosticSchema buildSchema,
+        LoadedDiagnosticReport report,
+        IEnumerable<ReferenceCorpus> references,
+        IEnumerable<PriorMapping> pins,
+        IReadOnlyList<FileDescriptor> readableFiles,
+        DiagnosticReportOptions? validationOptions)
+    {
         ArgumentNullException.ThrowIfNull(buildSchema);
         ArgumentNullException.ThrowIfNull(report);
         ArgumentNullException.ThrowIfNull(references);
@@ -35,7 +58,10 @@ public static class DiagnosticReportResolver
         ArgumentNullException.ThrowIfNull(readableFiles);
 
         DiagnosticReport source = report.Report;
-        if (!DiagnosticReportJson.IsValidReportObject(source)
+        bool isValidReport = validationOptions is null
+            ? DiagnosticReportJson.IsValidReportObject(source)
+            : DiagnosticReportJson.IsValidReportObject(source, validationOptions);
+        if (!isValidReport
             || !IsValidReportEnvelope(source)
             || !IsSha256(report.Sha256))
         {

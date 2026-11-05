@@ -302,6 +302,10 @@ public sealed class DiagnosticReportTests
         Assert.True(DiagnosticReportJson.IsSafeEngineVersion(accepted));
         Assert.False(DiagnosticReportJson.IsSafeEngineVersion(rejected));
 
+        JsonObject acceptedCandidate = JsonNode.Parse(valid)!.AsObject();
+        acceptedCandidate["engine"]!["engineVersion"] = accepted;
+        Assert.Equal(accepted, DiagnosticReportJson.Load(Encoding.UTF8.GetBytes(acceptedCandidate.ToJsonString())).Report.Engine.EngineVersion);
+
         JsonObject candidate = JsonNode.Parse(valid)!.AsObject();
         candidate["engine"]!["engineVersion"] = rejected;
         Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(Encoding.UTF8.GetBytes(candidate.ToJsonString())));

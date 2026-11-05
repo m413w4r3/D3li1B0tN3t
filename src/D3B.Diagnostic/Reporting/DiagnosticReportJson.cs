@@ -22,7 +22,7 @@ public static class DiagnosticReportJson
         @"\A[0-9]+(?:\.[0-9]+)+\z",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
     private static readonly Regex _ipv4LikeIdentity = new(
-        @"\b[0-9]{1,3}(?:\.[0-9]{1,3}){3}\b",
+        @"[0-9]{1,3}(?:\.[0-9]{1,3}){3}",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
     private static readonly DiagnosticReportOptions _maximumValidationOptions = new()
     {
@@ -215,8 +215,14 @@ public static class DiagnosticReportJson
 
             // Resolver input may be downgraded to partial when complete-session accounting disagrees.
             DiagnosticReport candidate = report with { Coverage = "partial" };
-            JsonElement root = JsonSerializer.SerializeToElement(candidate, DiagnosticReportJsonContext.Protocol.DiagnosticReport);
-            ValidateReport(candidate, root, options);
+            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(candidate, DiagnosticReportJsonContext.Protocol.DiagnosticReport);
+            if (bytes.Length > options.MaxBytes)
+            {
+                return false;
+            }
+
+            using JsonDocument document = JsonDocument.Parse(bytes);
+            ValidateReport(candidate, document.RootElement, options);
             return true;
         }
         catch (Exception exception) when (exception is DiagnosticReportException
@@ -1276,7 +1282,7 @@ public static class DiagnosticReportJson
     private static bool IsSafeVersion(string? value, Regex format)
     {
         return value == string.Empty
-            || (value is not null && format.IsMatch(value) && !_ipv4LikeIdentity.IsMatch(value));
+            || (value is { Length: <= 128 } && format.IsMatch(value) && !_ipv4LikeIdentity.IsMatch(value));
     }
 
     private static bool IsSafeToken(string? value)
