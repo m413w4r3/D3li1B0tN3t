@@ -45,12 +45,13 @@ public sealed class DiagnosticSchemaExporterTests
         Assert.Null(fields["optional_value"].Oneof);
         Assert.True(fields["optional_value"].HasPresence);
         Assert.True(fields["message_value"].HasPresence);
+        Assert.Equal("google.protobuf.Any", fields["any_value"].MessageType);
         Assert.True(fields["packed_values"].Packed);
         Assert.False(fields["unpacked_values"].Packed);
         Assert.Contains("fixture.Root.EntriesEntry", messages.Keys);
         Assert.True(messages["fixture.Root.EntriesEntry"].MapEntry);
         Assert.Contains("fixture.Root.Inner", messages.Keys);
-        Assert.DoesNotContain(messages.Keys, name => name.StartsWith("google.protobuf.", StringComparison.Ordinal));
+        Assert.Contains("google.protobuf.Any", messages.Keys);
         Assert.Null(messages["fixture.Grouped"].Fields[0].MessageType);
         Assert.Equal(64, schema.SchemaSha256.Length);
         Assert.Equal(schema.SchemaSha256.ToLowerInvariant(), schema.SchemaSha256);
