@@ -24,6 +24,30 @@ public sealed class DiagnosticJsonTests
     }
 
     [Fact]
+    public void OmitsNullOptionalAnalysisProperties()
+    {
+        var analysis = new DiagnosticAnalysis
+        {
+            Direction = "server",
+            TypeUrlOk = false,
+            Status = DiagnosticStatus.UnknownType,
+        };
+
+        byte[] json = DiagnosticJson.SerializeAnalysis(analysis);
+        string jsonText = Encoding.UTF8.GetString(json);
+        DiagnosticAnalysis parsed = DiagnosticJson.DeserializeAnalysis(json);
+
+        Assert.Contains("\"kind\":\"analysis\"", jsonText, StringComparison.Ordinal);
+        Assert.Contains("\"typeUrlOk\":false", jsonText, StringComparison.Ordinal);
+        Assert.DoesNotContain("carriedType", jsonText, StringComparison.Ordinal);
+        Assert.DoesNotContain("message", jsonText, StringComparison.Ordinal);
+        Assert.DoesNotContain("detailTruncated", jsonText, StringComparison.Ordinal);
+        Assert.Null(parsed.CarriedType);
+        Assert.Null(parsed.Message);
+        Assert.Null(parsed.DetailTruncated);
+    }
+
+    [Fact]
     public void RejectsAnUnknownProtocolVersion()
     {
         const string json = "{\"kind\":\"hello\",\"protocolVersion\":2,\"engine\":\"d3b-diagnostic\",\"engineVersion\":\"0.1.0\",\"snsCommit\":\"commit\"}";

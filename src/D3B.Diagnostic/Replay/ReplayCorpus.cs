@@ -136,8 +136,12 @@ public sealed class ReplayCorpus
 
     private static string? GetNullableString(JsonElement element, string name)
     {
-        var value = element.GetProperty(name);
-        return value.ValueKind == JsonValueKind.Null ? null : value.GetString();
+        if (!element.TryGetProperty(name, out JsonElement value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        return value.GetString();
     }
 
     private static JsonDocument ParseLine(string line)

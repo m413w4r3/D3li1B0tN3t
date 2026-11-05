@@ -7,7 +7,7 @@ namespace D3B.Diagnostic.Contract;
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     GenerationMode = JsonSourceGenerationMode.Metadata,
-    DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     WriteIndented = false)]
 [JsonSerializable(typeof(DiagnosticSchema))]
 [JsonSerializable(typeof(DiagnosticMessage))]
@@ -30,7 +30,7 @@ public sealed partial class DiagnosticJsonContext : JsonSerializerContext
     {
         JsonSerializerOptions options = new(JsonSerializerDefaults.General);
         options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-        options.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
+        options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         options.WriteIndented = false;
         options.Converters.Add(new JsonStringEnumConverter<DiagnosticStatus>(allowIntegerValues: false));
         options.Converters.Add(new JsonStringEnumConverter<DiagnosticProblemCode>(allowIntegerValues: false));
