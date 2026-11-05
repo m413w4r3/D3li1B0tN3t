@@ -42,6 +42,7 @@ public static class DiagnosticReportJson
         ArgumentNullException.ThrowIfNull(report);
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
+        ValidateIdentity(report);
 
         DiagnosticReport current = report;
         while (true)
@@ -85,6 +86,21 @@ public static class DiagnosticReportJson
     public static string Serialize(DiagnosticReport report, DiagnosticReportOptions options)
     {
         return Encoding.UTF8.GetString(SerializeToUtf8Bytes(report, options));
+    }
+
+    private static void ValidateIdentity(DiagnosticReport report)
+    {
+        if (report.Engine is null
+            || report.Provenance is null
+            || !IsSafeClientVersion(report.ClientVersion)
+            || !IsSafeEngine(report.Engine.Engine)
+            || !IsSafeEngineVersion(report.Engine.EngineVersion)
+            || !IsSafeSnsCommit(report.Engine.SnsCommit)
+            || !IsSafeProducer(report.Provenance.Producer)
+            || !IsSafeProducerVersion(report.Provenance.ProducerVersion))
+        {
+            throw new DiagnosticReportException(InvalidReportMessage);
+        }
     }
 
     /// <summary>Loads and validates a bounded report file.</summary>

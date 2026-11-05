@@ -146,6 +146,85 @@ public sealed class DiagnosticReportTests
     }
 
     [Fact]
+    public void PublicSerializerRejectsUnsafeEngineIdentities()
+    {
+        DiagnosticReport valid = Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]);
+        string overlongVersion = $"1.2.3-{new string('a', 123)}";
+        (string Name, DiagnosticReport Report)[] cases =
+        [
+            ("engine", valid with { Engine = valid.Engine with { Engine = "untrusted-engine" } }),
+            ("IPv4LikeEngineVersion", valid with { Engine = valid.Engine with { EngineVersion = "192.0.2.1" } }),
+            ("OverlongEngineVersion", valid with { Engine = valid.Engine with { EngineVersion = overlongVersion } }),
+            ("SNSCommit", valid with { Engine = valid.Engine with { SnsCommit = "not-a-commit" } }),
+        ];
+
+        AssertAllIdentityCasesRejected(cases);
+    }
+
+    [Fact]
+    public void PublicSerializerRejectsUnsafeProducerIdentities()
+    {
+        DiagnosticReport valid = Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]);
+        string overlongVersion = $"1.2.3-{new string('a', 123)}";
+        (string Name, DiagnosticReport Report)[] cases =
+        [
+            ("producer", valid with { Provenance = valid.Provenance with { Producer = "untrusted-producer" } }),
+            ("IPv4LikeProducer", valid with { Provenance = valid.Provenance with { Producer = "192.0.2.1" } }),
+            ("IPv4LikeProducerVersion", valid with { Provenance = valid.Provenance with { ProducerVersion = "192.0.2.1" } }),
+            ("OverlongProducerVersion", valid with { Provenance = valid.Provenance with { ProducerVersion = overlongVersion } }),
+        ];
+
+        AssertAllIdentityCasesRejected(cases);
+    }
+
+    [Fact]
+    public void PublicSerializerRejectsInvalidClientVersion()
+    {
+        DiagnosticReport valid = Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]);
+
+        AssertAllIdentityCasesRejected([("ClientVersion", valid with { ClientVersion = "3.7.preview" })]);
+    }
+
+    [Fact]
+    public void PublicSerializerRejectsNullIdentityObjectsAndStrings()
+    {
+        DiagnosticReport valid = Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]);
+        (string Name, DiagnosticReport Report)[] cases =
+        [
+            ("nullEngine", valid with { Engine = null! }),
+            ("nullProvenance", valid with { Provenance = null! }),
+            ("nullClientVersion", valid with { ClientVersion = null! }),
+            ("nullEngineName", valid with { Engine = valid.Engine with { Engine = null! } }),
+            ("nullEngineVersion", valid with { Engine = valid.Engine with { EngineVersion = null! } }),
+            ("nullSNSCommit", valid with { Engine = valid.Engine with { SnsCommit = null! } }),
+            ("nullProducer", valid with { Provenance = valid.Provenance with { Producer = null! } }),
+            ("nullProducerVersion", valid with { Provenance = valid.Provenance with { ProducerVersion = null! } }),
+        ];
+
+        AssertAllIdentityCasesRejected(cases);
+    }
+
+    [Fact]
+    public void PublicSerializerKeepsValidAggregatorOutputUnchanged()
+    {
+        DiagnosticReport report = Build(
+            [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
+            context: Context() with
+            {
+                Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "1.2.3", SnsCommit = "abcdef0" },
+                Producer = "D3B.Diagnostic",
+                ProducerVersion = "0.4.0",
+            });
+        DiagnosticReportOptions options = new();
+
+        byte[] bytes = DiagnosticReportJson.SerializeToUtf8Bytes(report, options);
+        string json = DiagnosticReportJson.Serialize(report, options);
+
+        Assert.Equal(Encoding.UTF8.GetString(bytes), json);
+        Assert.Equal("diagnostic-report", DiagnosticReportJson.Load(bytes, options).Report.Kind);
+    }
+
+    [Fact]
     public void LoaderRejectsWrongVersionOversizedMalformedUnsafeAndInconsistentReports()
     {
         DiagnosticReport report = Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]);
@@ -509,6 +588,27 @@ public sealed class DiagnosticReportTests
         LoadedDiagnosticReport loaded = DiagnosticReportJson.Load(bytes);
 
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(bytes)), loaded.Sha256);
+    }
+
+    private static void AssertAllIdentityCasesRejected(IEnumerable<(string Name, DiagnosticReport Report)> cases)
+    {
+        List<string> failures = [];
+        foreach ((string name, DiagnosticReport report) in cases)
+        {
+            Exception? bytesError = Record.Exception(
+                () => DiagnosticReportJson.SerializeToUtf8Bytes(report, new DiagnosticReportOptions()));
+            Exception? textError = Record.Exception(
+                () => DiagnosticReportJson.Serialize(report, new DiagnosticReportOptions()));
+            bool bytesRejected = bytesError is DiagnosticReportException { Message: "report is invalid" };
+            bool textRejected = textError is DiagnosticReportException { Message: "report is invalid" };
+
+            if (!bytesRejected || !textRejected)
+            {
+                failures.Add(name);
+            }
+        }
+
+        Assert.True(failures.Count == 0, $"Serializers accepted unsafe identity cases: {string.Join(", ", failures)}");
     }
 
     private static DiagnosticReport Build(
