@@ -6,6 +6,7 @@
   <Folder Name="/scripts/">
     <File Path="scripts/capture.cs" />
     <File Path="scripts/client.cs" />
+    <File Path="scripts/diagnose.cs" />
     <File Path="scripts/embed.cs" />
     <File Path="scripts/extract.cs" />
     <File Path="scripts/fights.cs" />
@@ -34,6 +35,14 @@
     <File Path="scripts/capture/GameMessages.cs" />
     <File Path="scripts/capture/ProtobufShape.cs" />
     <File Path="scripts/capture/SchemaMatch.cs" />
+  </Folder>
+  <Folder Name="/scripts/diagnose/">
+    <File Path="scripts/diagnose/DiagnoseCommand.cs" />
+    <File Path="scripts/diagnose/DiagnoseIO.cs" />
+    <File Path="scripts/diagnose/ReplayCommand.cs" />
+    <File Path="scripts/diagnose/ReplayEngineFallback.cs" />
+    <File Path="scripts/diagnose/SchemaCommand.cs" />
+    <File Path="scripts/diagnose/TypesCommand.cs" />
   </Folder>
   <Folder Name="/scripts/client/">
     <File Path="scripts/client/ClientCommand.cs" />
