@@ -191,8 +191,15 @@ public sealed class ReplayEngineClient
             writer.WriteString("kind", "frame");
             writer.WriteNumber("index", frame.Index);
             writer.WriteString("direction", frame.Direction);
-            if (frame.TypeUrl is null) writer.WriteNull("typeUrl"); else writer.WriteString("typeUrl", frame.TypeUrl);
-            if (frame.CarriedType is null) writer.WriteNull("carriedType"); else writer.WriteString("carriedType", frame.CarriedType);
+            if (frame.TypeUrl is not null)
+            {
+                writer.WriteString("typeUrl", frame.TypeUrl);
+            }
+
+            if (frame.CarriedType is not null)
+            {
+                writer.WriteString("carriedType", frame.CarriedType);
+            }
             writer.WriteString("payloadHex", Convert.ToHexStringLower(frame.Payload));
             writer.WriteEndObject();
         }

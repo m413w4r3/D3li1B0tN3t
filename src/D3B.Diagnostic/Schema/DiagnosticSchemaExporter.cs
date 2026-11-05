@@ -140,7 +140,7 @@ public static class DiagnosticSchemaExporter
             Name = descriptor.Name,
             Kind = kind,
             Repeated = descriptor.IsRepeated,
-            Packed = descriptor.IsPacked,
+            Packed = descriptor.IsRepeated && IsPackable(kind) && descriptor.IsPacked,
             MessageType = kind == DiagnosticFieldKind.Message ? descriptor.MessageType.FullName : null,
             EnumType = kind == DiagnosticFieldKind.Enumeration ? descriptor.EnumType.FullName : null,
             Oneof = descriptor.RealContainingOneof?.Name,
@@ -172,6 +172,11 @@ public static class DiagnosticSchemaExporter
             FieldType.SInt64 => DiagnosticFieldKind.SignedZigZag64,
             _ => throw new DiagnosticSchemaException($"Unknown protobuf field kind: {fieldType}.")
         };
+    }
+
+    private static bool IsPackable(DiagnosticFieldKind kind)
+    {
+        return kind is not (DiagnosticFieldKind.Utf8String or DiagnosticFieldKind.Bytes or DiagnosticFieldKind.Message or DiagnosticFieldKind.Group);
     }
 
     private static IEnumerable<(MessageDescriptor Message, int Depth)> EnumerateMessages(

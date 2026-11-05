@@ -22,6 +22,23 @@ public sealed class ReplayEngineClientTests
         Assert.EndsWith("{\"kind\":\"end\"}\n", duplex.WrittenText, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task OmitsNullOptionalFrameProperties()
+    {
+        var schema = ReplayTestData.CreateSchema();
+        var frame = new DiagnosticFrame(7, "server", null, null, [0x08, 0x01]);
+        const string analysisLine = "{\"kind\":\"analysis\",\"index\":7,\"direction\":\"server\",\"typeUrlOk\":false,\"status\":\"UNKNOWN_TYPE\",\"fields\":[],\"problems\":[{\"code\":\"UNKNOWN_TYPE\",\"detail\":\"2\"}]}";
+        string summaryLine = "{\"kind\":\"summary\",\"protocolVersion\":1,\"clientVersion\":\"" + schema.ClientVersion + "\",\"schemaSha256\":\"" + schema.SchemaSha256 + "\",\"frames\":1,\"statuses\":{\"UNKNOWN_TYPE\":1},\"problems\":{\"UNKNOWN_TYPE\":1},\"dropped\":0,\"coverage\":\"complete\"}";
+        string response = ReplayTestData.EngineHelloLine() + "\n" + analysisLine + "\n" + summaryLine + "\n";
+        using var duplex = new InMemoryDuplexStream(response);
+        var client = new ReplayEngineClient(duplex, duplex);
+
+        _ = await client.AnalyzeAsync(schema, [frame], CancellationToken.None);
+
+        Assert.DoesNotContain("\"typeUrl\"", duplex.WrittenText, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"carriedType\"", duplex.WrittenText, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(2)]
     [InlineData(3)]

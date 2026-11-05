@@ -20,6 +20,19 @@ public sealed class ReplayCorpusTests
     }
 
     [Fact]
+    public void TreatsAbsentOptionalFramePropertiesAsNull()
+    {
+        string corpusText = ReplayTestData.CreateCorpus()
+            .Replace("\"typeUrl\":\"type.ankama.com/lok\",\"carriedType\":\"lok\",", string.Empty, StringComparison.Ordinal);
+        using var input = new MemoryStream(Encoding.UTF8.GetBytes(corpusText));
+
+        DiagnosticFrame frame = Assert.Single(ReplayCorpus.Read(input).Frames);
+
+        Assert.Null(frame.TypeUrl);
+        Assert.Null(frame.CarriedType);
+    }
+
+    [Fact]
     public void RejectsFrameIndicesThatAreNotIncreasing()
     {
         var corpus = ReplayTestData.CreateCorpus().Replace("\"index\":0", "\"index\":2", StringComparison.Ordinal)
