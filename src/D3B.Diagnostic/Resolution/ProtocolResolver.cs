@@ -1,6 +1,7 @@
 using D3B.Diagnostic.Contract;
 using D3B.Protocol.Readable;
 using Google.Protobuf.Reflection;
+using System.Globalization;
 
 namespace D3B.Diagnostic.Resolution;
 
@@ -56,6 +57,10 @@ public sealed class ProtocolResolver
         DiagnosticMessage[] candidateSchemaMessages = schemaMessages.Values
             .Where(message => !message.MapEntry)
             .ToArray();
+        bool useAggregatedObservations = observations is not null;
+        Dictionary<string, ResolverObservation> observationsByToken = observations is null
+            ? new Dictionary<string, ResolverObservation>(StringComparer.Ordinal)
+            : MapObservations(schemaMessages, observations);
         List<ResolverSchemaPair> namedPairs = [];
         List<ResolverSchemaPair> exactPairs = [];
         List<ResolverSchemaPair> nearPairs = [];
@@ -114,6 +119,16 @@ public sealed class ProtocolResolver
             }
         }
 
+        foreach (string token in observationsByToken.Keys.OrderBy(token => token, StringComparer.Ordinal))
+        {
+            if (!selectedTokens.Contains(token))
+            {
+                DiagnosticMessage message = schemaMessages[token];
+                selected.Add(new ResolverSchemaPair(message, null, null, null));
+                selectedTokens.Add(token);
+            }
+        }
+
         if (selected.Count == 0 && candidateSchemaMessages.Length > 0)
         {
             DiagnosticMessage fallback = candidateSchemaMessages[0];
@@ -134,7 +149,15 @@ public sealed class ProtocolResolver
             {
                 if (pair.Readable is null)
                 {
-                    candidates.Add(CreateUnknown(buildSchema, schemaMessage, analyses, targetDirection));
+                    observationsByToken.TryGetValue(schemaMessage.Name, out ResolverObservation? observation);
+                    candidates.Add(CreateUnknown(
+                        buildSchema,
+                        schemaMessage,
+                        analyses,
+                        targetDirection,
+                        observation,
+                        useAggregatedObservations,
+                        summary));
                     continue;
                 }
 
@@ -152,7 +175,9 @@ public sealed class ProtocolResolver
                     analyses,
                     targetDirection,
                     summary,
-                    schemaMessages));
+                    schemaMessages,
+                    observationsByToken.GetValueOrDefault(schemaMessage.Name),
+                    useAggregatedObservations));
             }
         }
 
@@ -188,7 +213,9 @@ public sealed class ProtocolResolver
         IReadOnlyList<DiagnosticAnalysis> analyses,
         string? targetDirection,
         CandidateObservationSummary observations,
-        IReadOnlyDictionary<string, DiagnosticMessage> schemaMessages)
+        IReadOnlyDictionary<string, DiagnosticMessage> schemaMessages,
+        ResolverObservation? aggregateObservation,
+        bool useAggregatedObservations)
     {
         MessageDescriptor readable = pair.Readable!;
         ResolverShapeResult shape = Compare(schemaMessage, readable, schemaMessages);
@@ -265,25 +292,49 @@ public sealed class ProtocolResolver
 
         string token = schemaMessage.Name;
         DiagnosticAnalysis[] tokenAnalyses = FindAnalyses(analyses, token).ToArray();
-        bool hasValidObservation = tokenAnalyses.Any(IsValidObservation);
-        string? direction = tokenAnalyses.Select(analysis => analysis.Direction).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? targetDirection;
-        foreach (DiagnosticAnalysis analysis in tokenAnalyses)
+        bool hasValidObservation = useAggregatedObservations
+            ? aggregateObservation?.FullyValid == true
+            : tokenAnalyses.Any(IsValidObservation);
+        string? direction = useAggregatedObservations
+            ? ObservationDirection(aggregateObservation, targetDirection)
+            : tokenAnalyses.Select(analysis => analysis.Direction).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? targetDirection;
+        if (useAggregatedObservations)
         {
-            bool valid = IsValidObservation(analysis);
-            evidence.Add(new CandidateEvidence
+            if (aggregateObservation is not null)
             {
-                Source = "observation",
-                Build = schema.ClientVersion,
-                Verified = valid,
-                Provenance = "diagnostic analysis",
-                Detail = valid ? "analysis status VALID with valid type URL; direction " + SafeDirection(analysis.Direction) : "analysis status " + analysis.Status + "; type URL valid " + analysis.TypeUrlOk
-            });
+                evidence.Add(ObservationEvidence(schema.ClientVersion, aggregateObservation));
+                AddObservationDiagnostics(aggregateObservation, contradictions, uncertainties);
+            }
+            else
+            {
+                uncertainties.Add(new ResolverUncertainty
+                {
+                    Code = ResolverUncertaintyCode.MissingValidObservation,
+                    Detail = "no VALID analysis supports this token"
+                });
+            }
+        }
+        else
+        {
+            foreach (DiagnosticAnalysis analysis in tokenAnalyses)
+            {
+                bool valid = IsValidObservation(analysis);
+                evidence.Add(new CandidateEvidence
+                {
+                    Source = "observation",
+                    Build = schema.ClientVersion,
+                    Verified = valid,
+                    Provenance = "diagnostic analysis",
+                    Detail = valid ? "analysis status VALID with valid type URL; direction " + SafeDirection(analysis.Direction) : "analysis status " + analysis.Status + "; type URL valid " + analysis.TypeUrlOk
+                });
+            }
         }
 
         string simpleName = SimpleName(readable.Name);
-        if ((simpleName.EndsWith("Request", StringComparison.Ordinal) && tokenAnalyses.Any(analysis => IsDirection(analysis.Direction, "server")))
-            || ((simpleName.EndsWith("Event", StringComparison.Ordinal) || simpleName.EndsWith("Response", StringComparison.Ordinal))
-                && tokenAnalyses.Any(analysis => IsDirection(analysis.Direction, "client"))))
+        bool directionContradiction = useAggregatedObservations
+            ? aggregateObservation is not null && HasDirectionContradiction(simpleName, aggregateObservation)
+            : HasDirectionContradiction(simpleName, tokenAnalyses);
+        if (directionContradiction)
         {
             contradictions.Add(new ResolverContradiction
             {
@@ -384,9 +435,47 @@ public sealed class ProtocolResolver
         return analysis.Status == DiagnosticStatus.Valid && analysis.TypeUrlOk;
     }
 
-    private static MappingCandidate CreateUnknown(DiagnosticSchema buildSchema, DiagnosticMessage schema, IReadOnlyList<DiagnosticAnalysis> analyses, string? targetDirection)
+    private static MappingCandidate CreateUnknown(
+        DiagnosticSchema buildSchema,
+        DiagnosticMessage schema,
+        IReadOnlyList<DiagnosticAnalysis> analyses,
+        string? targetDirection,
+        ResolverObservation? observation,
+        bool useAggregatedObservations,
+        CandidateObservationSummary summary)
     {
-        string? direction = FindAnalyses(analyses, schema.Name).Select(analysis => analysis.Direction).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? targetDirection;
+        string? direction = useAggregatedObservations
+            ? ObservationDirection(observation, targetDirection)
+            : FindAnalyses(analyses, schema.Name).Select(analysis => analysis.Direction).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? targetDirection;
+        List<ResolverContradiction> contradictions = [];
+        List<ResolverUncertainty> uncertainties = [];
+        List<CandidateEvidence> evidence = [];
+        if (useAggregatedObservations)
+        {
+            if (observation is not null)
+            {
+                evidence.Add(ObservationEvidence(buildSchema.ClientVersion, observation));
+                AddObservationDiagnostics(observation, contradictions, uncertainties);
+                if (!observation.FullyValid)
+                {
+                    uncertainties.Add(new ResolverUncertainty
+                    {
+                        Code = ResolverUncertaintyCode.MissingValidObservation,
+                        Detail = "no VALID analysis supports this token"
+                    });
+                }
+            }
+
+            if (!string.Equals(summary.Coverage, "complete", StringComparison.Ordinal) || summary.Dropped > 0)
+            {
+                uncertainties.Add(new ResolverUncertainty
+                {
+                    Code = ResolverUncertaintyCode.PartialObservation,
+                    Detail = "observation coverage is partial"
+                });
+            }
+        }
+
         return new MappingCandidate
         {
             Token = schema.Name,
@@ -395,8 +484,353 @@ public sealed class ProtocolResolver
             ClientVersion = buildSchema.ClientVersion,
             SchemaSha256 = buildSchema.SchemaSha256,
             BuildExact = IsBuildExact(buildSchema),
-            Score = new HeuristicScore { Value = 0, Kind = "heuristic" }
+            Score = new HeuristicScore { Value = 0, Kind = "heuristic" },
+            Evidence = evidence,
+            Contradictions = contradictions,
+            Uncertainties = uncertainties
         };
+    }
+
+    private static Dictionary<string, ResolverObservation> MapObservations(
+        IReadOnlyDictionary<string, DiagnosticMessage> schemaMessages,
+        IReadOnlyList<ResolverObservation> observations)
+    {
+        List<(string Token, ResolverObservation Observation)> mapped = [];
+        foreach (ResolverObservation observation in observations)
+        {
+            if (observation is null)
+            {
+                continue;
+            }
+
+            DiagnosticMessage? message = FindObservationSchemaMessage(schemaMessages, observation.Token);
+            if (message is not null)
+            {
+                mapped.Add((message.Name, observation));
+            }
+        }
+
+        Dictionary<string, ResolverObservation> result = new(StringComparer.Ordinal);
+        foreach (IGrouping<string, (string Token, ResolverObservation Observation)> group in mapped
+            .GroupBy(item => item.Token, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal))
+        {
+            ResolverObservation[] values = group.Select(item => item.Observation).ToArray();
+            if (values.Length == 1)
+            {
+                result.Add(group.Key, values[0] with { Token = group.Key });
+                continue;
+            }
+
+            result.Add(group.Key, new ResolverObservation
+            {
+                Token = group.Key,
+                Occurrences = values.Aggregate(0L, (count, value) => AddCount(count, value.Occurrences)),
+                Directions = values.SelectMany(value => value.Directions)
+                    .GroupBy(direction => direction.Direction, StringComparer.Ordinal)
+                    .OrderBy(grouping => grouping.Key, StringComparer.Ordinal)
+                    .Select(grouping => new ResolverObservationDirection
+                    {
+                        Direction = grouping.Key,
+                        Occurrences = grouping.Aggregate(0L, (count, value) => AddCount(count, value.Occurrences))
+                    }).ToArray(),
+                Statuses = values.SelectMany(value => value.Statuses)
+                    .GroupBy(status => status.Status)
+                    .OrderBy(grouping => StatusName(grouping.Key), StringComparer.Ordinal)
+                    .Select(grouping => new ResolverObservationStatus
+                    {
+                        Status = grouping.Key,
+                        Occurrences = grouping.Aggregate(0L, (count, value) => AddCount(count, value.Occurrences))
+                    }).ToArray(),
+                TypeUrlOkOccurrences = values.Aggregate(0L, (count, value) => AddCount(count, value.TypeUrlOkOccurrences)),
+                Problems = values.SelectMany(value => value.Problems)
+                    .GroupBy(problem => (problem.Code, problem.FieldPath))
+                    .OrderBy(grouping => ProblemName(grouping.Key.Code), StringComparer.Ordinal)
+                    .ThenBy(grouping => grouping.Key.FieldPath, StringComparer.Ordinal)
+                    .Select(grouping => new ResolverObservationProblem
+                    {
+                        Code = grouping.Key.Code,
+                        FieldPath = grouping.Key.FieldPath,
+                        Occurrences = grouping.Aggregate(0L, (count, value) => AddCount(count, value.Occurrences))
+                    }).ToArray(),
+                Truncated = values.Any(value => value.Truncated)
+            });
+        }
+
+        return result;
+    }
+
+    private static DiagnosticMessage? FindObservationSchemaMessage(
+        IReadOnlyDictionary<string, DiagnosticMessage> schemaMessages,
+        string token)
+    {
+        if (schemaMessages.TryGetValue(token, out DiagnosticMessage? exact))
+        {
+            return exact;
+        }
+
+        DiagnosticMessage[] matches = schemaMessages.Values
+            .Where(message => string.Equals(SimpleName(message.Name), SimpleName(token), StringComparison.Ordinal))
+            .ToArray();
+        return matches.Length == 1 ? matches[0] : null;
+    }
+
+    private static string? ObservationDirection(ResolverObservation? observation, string? targetDirection)
+    {
+        if (observation is null)
+        {
+            return targetDirection;
+        }
+
+        ResolverObservationDirection[] directions = observation.Directions.Where(direction => direction.Occurrences > 0).ToArray();
+        if (directions.Length == 0)
+        {
+            return targetDirection;
+        }
+
+        return directions.Length == 1 && IsKnownDirection(directions[0].Direction)
+            ? directions[0].Direction
+            : null;
+    }
+
+    private static bool HasDirectionContradiction(string readableName, ResolverObservation observation)
+    {
+        return observation.Directions.Any(direction => direction.Occurrences > 0
+            && ((readableName.EndsWith("Request", StringComparison.Ordinal) && IsDirection(direction.Direction, "server"))
+                || ((readableName.EndsWith("Event", StringComparison.Ordinal) || readableName.EndsWith("Response", StringComparison.Ordinal))
+                    && IsDirection(direction.Direction, "client"))));
+    }
+
+    private static bool HasDirectionContradiction(string readableName, IReadOnlyList<DiagnosticAnalysis> analyses)
+    {
+        return (readableName.EndsWith("Request", StringComparison.Ordinal) && analyses.Any(analysis => IsDirection(analysis.Direction, "server")))
+            || ((readableName.EndsWith("Event", StringComparison.Ordinal) || readableName.EndsWith("Response", StringComparison.Ordinal))
+                && analyses.Any(analysis => IsDirection(analysis.Direction, "client")));
+    }
+
+    private static CandidateEvidence ObservationEvidence(string build, ResolverObservation observation)
+    {
+        List<string> details = [FormatCount(Math.Max(0, observation.Occurrences)) + " observations"];
+        ResolverObservationDirection[] directions = observation.Directions
+            .Where(direction => direction.Occurrences > 0)
+            .OrderBy(direction => SafeObservationDirection(direction.Direction), StringComparer.Ordinal)
+            .ToArray();
+        details.Add("directions " + (directions.Length == 0
+            ? "none"
+            : string.Join(", ", directions.Select(direction => SafeObservationDirection(direction.Direction) + "=" + FormatCount(direction.Occurrences)))));
+
+        ResolverObservationStatus[] statuses = observation.Statuses
+            .Where(status => status.Occurrences > 0)
+            .OrderBy(status => StatusName(status.Status), StringComparer.Ordinal)
+            .ToArray();
+        details.Add("statuses " + (statuses.Length == 0
+            ? "none"
+            : string.Join(", ", statuses.Select(status => StatusName(status.Status) + "=" + FormatCount(status.Occurrences)))));
+        details.Add("typeUrlOk " + FormatCount(Math.Max(0, observation.TypeUrlOkOccurrences)) + "/" + FormatCount(Math.Max(0, observation.Occurrences)));
+
+        ResolverObservationProblem[] problems = observation.Problems
+            .Where(problem => problem.Occurrences > 0 && Enum.IsDefined(problem.Code))
+            .OrderBy(problem => ProblemName(problem.Code), StringComparer.Ordinal)
+            .ThenBy(problem => SafeFieldPath(problem.FieldPath), StringComparer.Ordinal)
+            .ToArray();
+        details.Add("problems " + (problems.Length == 0
+            ? "none"
+            : string.Join(", ", problems.Select(problem => ProblemName(problem.Code) + "=" + FormatCount(problem.Occurrences)
+                + (SafeFieldPath(problem.FieldPath) is { } path ? "@" + path : string.Empty)))));
+
+        return new CandidateEvidence
+        {
+            Source = "observation",
+            Build = build,
+            Verified = observation.FullyValid,
+            Provenance = "diagnostic report aggregate",
+            Detail = string.Join("; ", details)
+        };
+    }
+
+    private static void AddObservationDiagnostics(
+        ResolverObservation observation,
+        List<ResolverContradiction> contradictions,
+        List<ResolverUncertainty> uncertainties)
+    {
+        ResolverObservationStatus[] statuses = observation.Statuses.Where(status => status.Occurrences > 0).ToArray();
+        ResolverObservationDirection[] directions = observation.Directions.Where(direction => direction.Occurrences > 0).ToArray();
+        ResolverObservationProblem[] problems = observation.Problems
+            .Where(problem => problem.Occurrences > 0 && Enum.IsDefined(problem.Code))
+            .ToArray();
+
+        if (observation.TypeUrlOkOccurrences < observation.Occurrences)
+        {
+            AddContradiction(contradictions, ResolverContradictionCode.ObservationTypeUrlMismatch,
+                FormatCount(Math.Max(0, observation.TypeUrlOkOccurrences)) + " of "
+                + FormatCount(Math.Max(0, observation.Occurrences)) + " observations have valid type URLs");
+        }
+
+        DiagnosticProblemCode[] hardProblems = observation.Problems.Select(problem => problem.Code)
+            .Where(IsHardProblem)
+            .Distinct()
+            .OrderBy(ProblemName, StringComparer.Ordinal)
+            .ToArray();
+        if (hardProblems.Length > 0)
+        {
+            string[] paths = observation.Problems.Where(problem => IsHardProblem(problem.Code))
+                .Select(problem => SafeFieldPath(problem.FieldPath))
+                .Where(path => path is not null)
+                .Cast<string>()
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
+            string detail = string.Join(", ", hardProblems.Select(ProblemName));
+            if (paths.Length > 0)
+            {
+                detail += "; field paths " + string.Join(", ", paths);
+            }
+
+            AddContradiction(contradictions, ResolverContradictionCode.ObservationProblem, detail);
+        }
+
+        DiagnosticStatus[] hardStatuses = observation.Statuses.Select(status => status.Status)
+            .Where(IsHardStatus)
+            .Distinct()
+            .OrderBy(StatusName, StringComparer.Ordinal)
+            .ToArray();
+        if (hardStatuses.Length > 0)
+        {
+            AddContradiction(contradictions, ResolverContradictionCode.ObservationStatusMismatch,
+                "hard statuses " + string.Join(", ", hardStatuses.Select(StatusName)));
+        }
+
+        if (statuses.Length > 1)
+        {
+            uncertainties.Add(new ResolverUncertainty
+            {
+                Code = ResolverUncertaintyCode.MixedObservationStatus,
+                Detail = "multiple diagnostic statuses are present"
+            });
+        }
+
+        if (directions.Length > 1)
+        {
+            uncertainties.Add(new ResolverUncertainty
+            {
+                Code = ResolverUncertaintyCode.AmbiguousObservationDirection,
+                Detail = "multiple observation directions are present"
+            });
+        }
+
+        bool softStatus = statuses.Any(status => IsSoftStatus(status.Status));
+        bool softProblem = problems.Any(problem => IsSoftProblem(problem.Code));
+        if (observation.Truncated || softStatus || softProblem)
+        {
+            uncertainties.Add(new ResolverUncertainty
+            {
+                Code = ResolverUncertaintyCode.ObservationTruncated,
+                Detail = "observation detail is truncated or has a soft limit condition"
+            });
+        }
+    }
+
+    private static bool IsHardProblem(DiagnosticProblemCode code)
+    {
+        return code is DiagnosticProblemCode.UnknownType
+            or DiagnosticProblemCode.UnknownFieldNumber
+            or DiagnosticProblemCode.WireTypeMismatch
+            or DiagnosticProblemCode.PackedNotAllowed
+            or DiagnosticProblemCode.InvalidUtf8
+            or DiagnosticProblemCode.GroupUnsupported
+            or DiagnosticProblemCode.LengthOverflow
+            or DiagnosticProblemCode.VarintOverflow
+            or DiagnosticProblemCode.Malformed
+            or DiagnosticProblemCode.SchemaMessageMissing
+            or DiagnosticProblemCode.SchemaInvalid;
+    }
+
+    private static bool IsSoftProblem(DiagnosticProblemCode code)
+    {
+        return code is DiagnosticProblemCode.DepthExceeded or DiagnosticProblemCode.Truncated or DiagnosticProblemCode.LimitExceeded;
+    }
+
+    private static bool IsHardStatus(DiagnosticStatus status)
+    {
+        return status is DiagnosticStatus.SchemaMismatch
+            or DiagnosticStatus.Malformed
+            or DiagnosticStatus.TrailingBytes
+            or DiagnosticStatus.UnknownType;
+    }
+
+    private static bool IsSoftStatus(DiagnosticStatus status)
+    {
+        return status is DiagnosticStatus.Truncated or DiagnosticStatus.LimitExceeded;
+    }
+
+    private static bool IsKnownDirection(string direction)
+    {
+        return direction is "client" or "server" or "d3b";
+    }
+
+    private static string SafeObservationDirection(string direction)
+    {
+        return direction is "client" or "server" or "d3b" or "unknown" ? direction : "unknown";
+    }
+
+    private static string? SafeFieldPath(string? fieldPath)
+    {
+        return fieldPath is { Length: > 0 and <= 128 }
+            && fieldPath.All(character => char.IsAsciiDigit(character) || character == '.')
+            ? fieldPath
+            : null;
+    }
+
+    private static string StatusName(DiagnosticStatus status)
+    {
+        return status switch
+        {
+            DiagnosticStatus.Valid => "VALID",
+            DiagnosticStatus.SchemaMismatch => "SCHEMA_MISMATCH",
+            DiagnosticStatus.Malformed => "MALFORMED",
+            DiagnosticStatus.Truncated => "TRUNCATED",
+            DiagnosticStatus.TrailingBytes => "TRAILING_BYTES",
+            DiagnosticStatus.UnknownType => "UNKNOWN_TYPE",
+            DiagnosticStatus.LimitExceeded => "LIMIT_EXCEEDED",
+            _ => "UNKNOWN_STATUS"
+        };
+    }
+
+    private static string ProblemName(DiagnosticProblemCode code)
+    {
+        return code switch
+        {
+            DiagnosticProblemCode.UnknownType => "UNKNOWN_TYPE",
+            DiagnosticProblemCode.UnknownFieldNumber => "UNKNOWN_FIELD_NUMBER",
+            DiagnosticProblemCode.WireTypeMismatch => "WIRE_TYPE_MISMATCH",
+            DiagnosticProblemCode.PackedNotAllowed => "PACKED_NOT_ALLOWED",
+            DiagnosticProblemCode.InvalidUtf8 => "INVALID_UTF8",
+            DiagnosticProblemCode.GroupUnsupported => "GROUP_UNSUPPORTED",
+            DiagnosticProblemCode.DepthExceeded => "DEPTH_EXCEEDED",
+            DiagnosticProblemCode.LengthOverflow => "LENGTH_OVERFLOW",
+            DiagnosticProblemCode.VarintOverflow => "VARINT_OVERFLOW",
+            DiagnosticProblemCode.Truncated => "TRUNCATED",
+            DiagnosticProblemCode.Malformed => "MALFORMED",
+            DiagnosticProblemCode.LimitExceeded => "LIMIT_EXCEEDED",
+            DiagnosticProblemCode.SchemaMessageMissing => "SCHEMA_MESSAGE_MISSING",
+            DiagnosticProblemCode.SchemaInvalid => "SCHEMA_INVALID",
+            _ => "UNKNOWN_PROBLEM"
+        };
+    }
+
+    private static string FormatCount(long value)
+    {
+        return value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static long AddCount(long current, long value)
+    {
+        if (value <= 0)
+        {
+            return current;
+        }
+
+        return current > long.MaxValue - value ? long.MaxValue : current + value;
     }
 
     private IEnumerable<ReferenceMessage> ReferencesFor(string token)

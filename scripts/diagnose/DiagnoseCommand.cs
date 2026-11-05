@@ -10,6 +10,7 @@ internal static class DiagnoseCommand
         root.Subcommands.Add(SchemaCommand.Create());
         root.Subcommands.Add(ReplayCommand.Create());
         root.Subcommands.Add(TypesCommand.Create());
+        root.Subcommands.Add(ResolveCommand.Create());
         return root;
     }
 }

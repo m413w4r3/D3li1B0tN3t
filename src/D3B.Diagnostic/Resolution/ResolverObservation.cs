@@ -35,7 +35,7 @@ public sealed record ResolverObservation
                 && statuses.Length == 1
                 && statuses[0].Status == DiagnosticStatus.Valid
                 && statuses[0].Occurrences == Occurrences
-                && !Problems.Any(problem => problem.Occurrences > 0 && IsHardProblem(problem.Code));
+                && !Problems.Any(problem => IsHardProblem(problem.Code));
         }
     }
 

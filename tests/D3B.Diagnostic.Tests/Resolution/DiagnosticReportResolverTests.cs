@@ -29,14 +29,13 @@ public sealed class DiagnosticReportResolverTests
     public void NearShapeResemblanceRemainsCandidate()
     {
         DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
-        LoadedDiagnosticReport report = LoadReport("lok", statuses: [DiagnosticStatus.Malformed]);
-        FileDescriptor readable = ResolverTestData.ReadableFile(
-            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        LoadedDiagnosticReport report = LoadReport("lok");
+        FileDescriptor readable = ResolverTestData.PartialReadableFile("StatusMessage", 1, FieldDescriptorProto.Types.Type.Int64);
 
         MappingCandidate candidate = Assert.Single(Resolve(schema, report, readable).Candidates);
 
         Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
-        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.MissingValidObservation);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.PartialReadable);
     }
 
     [Fact]
@@ -107,6 +106,39 @@ public sealed class DiagnosticReportResolverTests
 
         Assert.Equal(CandidateClassification.Conflict, candidate.Classification);
         Assert.Contains(candidate.Contradictions, contradiction => contradiction.Code == ResolverContradictionCode.ObservationTypeUrlMismatch);
+    }
+
+    [Fact]
+    public void MultipleObservationDirectionsRemainAmbiguous()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        LoadedDiagnosticReport report = LoadReport("lok", statuses: [DiagnosticStatus.Valid, DiagnosticStatus.Valid], directions: ["client", "server"]);
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        MappingCandidate candidate = Assert.Single(Resolve(schema, report, readable).Candidates);
+        CandidateEvidence evidence = Assert.Single(candidate.Evidence, item => item.Source == "observation");
+
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Null(candidate.Direction);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.AmbiguousObservationDirection);
+        Assert.Contains("client=1", evidence.Detail, StringComparison.Ordinal);
+        Assert.Contains("server=1", evidence.Detail, StringComparison.Ordinal);
+        Assert.Contains("VALID=2", evidence.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("client status", evidence.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void UnmatchedReportObservationSurfacesAsUnknown()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+
+        CandidateReport resolved = Resolve(schema, LoadReport("lok"), ResolverTestData.ReadableFile());
+
+        MappingCandidate candidate = Assert.Single(resolved.Candidates);
+        Assert.Equal("lok", candidate.Token);
+        Assert.Equal(CandidateClassification.Unknown, candidate.Classification);
+        Assert.Contains(candidate.Evidence, evidence => evidence.Source == "observation" && evidence.Verified);
     }
 
     [Fact]
@@ -185,6 +217,34 @@ public sealed class DiagnosticReportResolverTests
     }
 
     [Fact]
+    public void FieldDeclarationMismatchTruncatesObservation()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        LoadedDiagnosticReport report = LoadReport("lok", value => value with
+        {
+            Types = value.Types.Select(type => type with
+            {
+                Contradictions = [new DiagnosticReportContradiction
+                {
+                    Code = DiagnosticReportContradictionCode.FieldDeclarationMismatch,
+                    Detail = "FIELD_DECLARATION_MISMATCH field=1 count=1",
+                    Occurrences = 1
+                }]
+            }).ToArray()
+        });
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        CandidateReport resolved = Resolve(schema, report, readable);
+        MappingCandidate candidate = Assert.Single(resolved.Candidates);
+
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.ObservationTruncated);
+        Assert.Equal("partial", resolved.Provenance!.ObservationCoverage);
+        Assert.True(resolved.Provenance.ReportTruncated);
+    }
+
+    [Fact]
     public void UnknownTokenInReportIsRejected()
     {
         DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
@@ -255,7 +315,7 @@ public sealed class DiagnosticReportResolverTests
         IEnumerable<ReferenceCorpus>? references = null,
         IEnumerable<PriorMapping>? pins = null)
     {
-        return DiagnosticReportResolver.Resolve(schema, report, references ?? [], pins ?? []);
+        return DiagnosticReportResolver.Resolve(schema, report, references ?? [], pins ?? [], [readable]);
     }
 
     private static LoadedDiagnosticReport LoadReport(
@@ -264,7 +324,8 @@ public sealed class DiagnosticReportResolverTests
         IReadOnlyList<DiagnosticStatus>? statuses = null,
         IReadOnlyList<DiagnosticProblemCode>? problems = null,
         bool typeUrlOk = true,
-        long droppedFrames = 0)
+        long droppedFrames = 0,
+        IReadOnlyList<string>? directions = null)
     {
         DiagnosticField[] fields = [ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)];
         DiagnosticSchema schema = ResolverTestData.Schema(token, fields);
@@ -276,14 +337,20 @@ public sealed class DiagnosticReportResolverTests
             ProducerVersion = "1.0.0",
         });
         DiagnosticStatus[] statusValues = (statuses ?? [DiagnosticStatus.Valid]).ToArray();
-        foreach (DiagnosticStatus status in statusValues)
+        string[] directionValues = (directions ?? Enumerable.Repeat("server", statusValues.Length).ToArray()).ToArray();
+        if (directionValues.Length != statusValues.Length)
+        {
+            throw new ArgumentException("One direction is required for each status.", nameof(directions));
+        }
+
+        for (int index = 0; index < statusValues.Length; index++)
         {
             aggregator.Observe(new DiagnosticAnalysis
             {
                 CarriedType = token,
                 Message = token,
-                Direction = "server",
-                Status = status,
+                Direction = directionValues[index],
+                Status = statusValues[index],
                 TypeUrlOk = typeUrlOk,
                 Problems = (problems ?? []).Select(problem => new DiagnosticProblem { Code = problem, FieldPath = "1" }).ToArray(),
             });

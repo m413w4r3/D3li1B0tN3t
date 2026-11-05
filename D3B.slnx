@@ -41,6 +41,7 @@
     <File Path="scripts/diagnose/DiagnoseIO.cs" />
     <File Path="scripts/diagnose/ReplayCommand.cs" />
     <File Path="scripts/diagnose/ReplayEngineFallback.cs" />
+    <File Path="scripts/diagnose/ResolveCommand.cs" />
     <File Path="scripts/diagnose/SchemaCommand.cs" />
     <File Path="scripts/diagnose/TypesCommand.cs" />
   </Folder>

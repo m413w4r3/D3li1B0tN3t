@@ -11,6 +11,7 @@
 #:include diagnose/ReplayCommand.cs
 #:include diagnose/ReplayEngineFallback.cs
 #:include diagnose/TypesCommand.cs
+#:include diagnose/ResolveCommand.cs
 
 using System.Globalization;
 using D3B.Scripts.Diagnose;
