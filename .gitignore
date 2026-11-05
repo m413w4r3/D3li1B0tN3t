@@ -20,3 +20,6 @@ Thumbs.db
 
 # Third-party references, never committed (D3)
 vendor/
+
+# Rust build output
+rust/target/
