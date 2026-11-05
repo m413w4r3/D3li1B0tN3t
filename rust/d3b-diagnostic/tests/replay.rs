@@ -192,10 +192,6 @@ fn exercise_streaming_client(stream: UnixStream) -> Result<(), String> {
     }
 
     send_socket_line(&mut client, &json!({"kind":"end"}))?;
-    client
-        .get_mut()
-        .shutdown(Shutdown::Write)
-        .map_err(|error| format!("finish input after end: {error}"))?;
     let summary = receive_socket_line(&mut client, "summary")?;
     if summary["frames"] != 1 || summary["coverage"] != "complete" {
         return Err("summary did not match the replay".to_owned());
