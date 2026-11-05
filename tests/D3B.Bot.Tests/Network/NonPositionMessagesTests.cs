@@ -18,6 +18,8 @@ public sealed class NonPositionMessagesTests
     [Fact]
     public void TheExactBuildAndSideSetIsPinned()
     {
+        Assert.Equal("3.7.13.17", NonPositionMessages.ClientVersion);
+
         string[] expected =
         [
             "hgf:server", "hgg:server", "hgh:server", "hla:server", "hlf:client", "hlw:server", "hmd:server",
