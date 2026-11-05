@@ -39,6 +39,9 @@ schema content.
 3. Zero or more `frame`.
 4. Exactly one `end`.
 
+After `end` the engine writes the summary and exits without waiting for stdin EOF: a client may keep its input
+stream open while it reads the result. The client must not send another line after `end`; bytes after it are not read.
+
 ```json
 {"kind":"hello","protocolVersion":1,"clientVersion":"3.7.13.17","schemaSha256":"<64 lowercase hex>"}
 {"kind":"schema","messages":[...]}
