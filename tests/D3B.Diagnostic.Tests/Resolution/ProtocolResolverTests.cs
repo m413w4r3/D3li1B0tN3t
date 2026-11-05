@@ -12,12 +12,16 @@ public sealed class ProtocolResolverTests
         FileDescriptor readable = ResolverTestData.ReadableFile(
             ResolverTestData.Message("MapInformationRequest",
                 ResolverTestData.ReadableField("map_id", 1, FieldDescriptorProto.Types.Type.Int64)));
-        ReferenceCorpus reference = new()
-        {
-            Source = "external",
-            Build = "other/unknown",
-            Messages = [new ReferenceMessage { Token = "jpe", Name = "com.ankama.game.MapInformationRequest", Source = "external" }]
-        };
+        ReferenceCorpus reference = BillBotMappingLoader.LoadJson(
+            """
+            {
+              ".com.ankama.dofus.server.game.protocol.gamemap.MapInformationRequest": {
+                "full_non_obf_msg_namespace": ".com.ankama.dofus.server.game.protocol.gamemap.MapInformationRequest",
+                "full_obf_msg_namespace": "jpe",
+                "field_mapping": { "unrelated": { "name": "JunkRequest", "token": "junk" } }
+              }
+            }
+            """);
 
         CandidateReport report = ResolverTestData.Resolver(readable, [reference])
             .Resolve(ResolverTestData.Schema("jpe", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger32)),
@@ -38,12 +42,14 @@ public sealed class ProtocolResolverTests
                 ResolverTestData.ReadableField("map_id", 1, FieldDescriptorProto.Types.Type.Int64)),
             ResolverTestData.Message("ContextReadyRequest",
                 ResolverTestData.ReadableField("context_id", 1, FieldDescriptorProto.Types.Type.Int64)));
-        ReferenceCorpus reference = new()
-        {
-            Source = "sns",
-            Build = "other/unknown",
-            Messages = [new ReferenceMessage { Token = "kjt", Name = "com.ankama.game.ContextReadyRequest", Source = "sns" }]
-        };
+        ReferenceCorpus reference = BillBotMappingLoader.LoadJson(
+            """
+            {
+              ".com.ankama.dofus.server.game.protocol.context.ContextReadyRequest": {
+                "full_obf_msg_namespace": "com.ankama.dofus.server.game.protocol.context.kjt"
+              }
+            }
+            """);
         PriorMapping pin = new()
         {
             ReadableFullName = "d3b.game.MapInformationRequest",
@@ -59,6 +65,10 @@ public sealed class ProtocolResolverTests
         Assert.Equal(2, report.Candidates.Count);
         Assert.All(report.Candidates, candidate => Assert.Equal(CandidateClassification.Candidate, candidate.Classification));
         Assert.All(report.Candidates, candidate => Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.AmbiguousReadableShape));
+        Assert.Contains(report.Candidates, candidate => candidate.Readable == "d3b.game.ContextReadyRequest");
+        Assert.Contains(report.Candidates.SelectMany(candidate => candidate.Evidence), evidence =>
+            evidence.Source == "reference" && evidence.Provenance == "billbot:game_mappings_detailed.json");
+        Assert.Contains(report.Candidates.SelectMany(candidate => candidate.Evidence), evidence => evidence.Source == "prior_mapping");
     }
 
     [Fact]
@@ -371,5 +381,37 @@ public sealed class ProtocolResolverTests
         Assert.False(billBot.Messages.Single().BuildExact);
         Assert.True(normalized.Messages.Single().BuildExact);
         Assert.Equal(DiagnosticFieldKind.SignedInteger64, normalized.Messages.Single().Fields.Single().Kind);
+    }
+
+    [Fact]
+    public void BillBotLoaderParsesRealNamespaceMappingEntries()
+    {
+        ReferenceCorpus corpus = BillBotMappingLoader.LoadJson(
+            """
+            {
+              ".com.ankama.dofus.server.game.protocol.gamemap.MapInformationRequest": {
+                "full_non_obf_msg_namespace": ".com.ankama.dofus.server.game.protocol.gamemap.MapInformationRequest",
+                "full_obf_msg_namespace": "com.ankama.dofus.server.game.protocol.jpe",
+                "obf_msg_namespace": "jpe",
+                "field_mapping": { "1": { "name": "JunkRequest", "token": "junk" } }
+              },
+              ".com.ankama.dofus.server.game.protocol.context.ContextReadyRequest": {
+                "obf_msg_namespace": "com.ankama.dofus.server.game.protocol.kjt"
+              }
+            }
+            """);
+
+        Assert.Equal(2, corpus.Messages.Count);
+        Assert.Equal("jpe", corpus.Messages[0].Token);
+        Assert.Equal(".com.ankama.dofus.server.game.protocol.gamemap.MapInformationRequest", corpus.Messages[0].Name);
+        Assert.Equal("kjt", corpus.Messages[1].Token);
+        Assert.Equal(".com.ankama.dofus.server.game.protocol.context.ContextReadyRequest", corpus.Messages[1].Name);
+        Assert.All(corpus.Messages, message =>
+        {
+            Assert.Equal("billbot:game_mappings_detailed.json", message.Source);
+            Assert.Equal("other/unknown", message.Build);
+            Assert.False(message.BuildExact);
+            Assert.Empty(message.Fields);
+        });
     }
 }
