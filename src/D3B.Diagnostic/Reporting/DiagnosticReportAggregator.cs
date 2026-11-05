@@ -684,7 +684,7 @@ public sealed class DiagnosticReportAggregator
 
         foreach (char character in value)
         {
-            if (!(character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or ' ' or '.' or '_' or '+' or '/' or ':' or '(' or ')' or '-'))
+            if (!(character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '+' or '-'))
             {
                 return string.Empty;
             }

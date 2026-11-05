@@ -53,7 +53,11 @@ public sealed class DiagnosticReportResolverTests
         [
             LoadReport("lok", droppedFrames: 1),
             LoadReport("lok", report => report with { Coverage = "partial" }),
-            LoadReport("lok", report => report with { Truncation = report.Truncation with { OutputTruncated = true } }),
+            LoadReport("lok", report => report with
+            {
+                Coverage = "partial",
+                Truncation = report.Truncation with { OutputTruncated = true }
+            }),
         ];
 
         foreach (LoadedDiagnosticReport report in reports)
@@ -354,6 +358,8 @@ public sealed class DiagnosticReportResolverTests
         DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
         LoadedDiagnosticReport report = LoadReport("lok", value => value with
         {
+            Coverage = "partial",
+            Truncation = value.Truncation with { Reasons = ["detail-truncated"] },
             Types = value.Types.Select(type => type with
             {
                 Contradictions = [new DiagnosticReportContradiction

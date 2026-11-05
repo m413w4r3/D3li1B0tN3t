@@ -1,4 +1,5 @@
 using D3B.Diagnostic.Contract;
+using D3B.Diagnostic.Reporting;
 using D3B.Protocol.Readable;
 using Google.Protobuf.Reflection;
 using System.Globalization;
@@ -145,6 +146,7 @@ public sealed class ProtocolResolver
                 .Where(readable => Compare(schemaMessage, readable, schemaMessages).Exact)
                 .ToList();
             HashSet<string> conflictingNames = ConflictingReferenceNames(schemaMessage.Name);
+            PriorMapping[] pinsForToken = PinsFor(schemaMessage.Name).ToArray();
             foreach (ResolverSchemaPair pair in tokenGroup.OrderBy(pair => pair.Readable?.FullName, StringComparer.Ordinal))
             {
                 if (pair.Readable is null)
@@ -171,6 +173,7 @@ public sealed class ProtocolResolver
                     pair,
                     relatedPairs,
                     exactReadables,
+                    pinsForToken,
                     conflictingNames,
                     analyses,
                     targetDirection,
@@ -209,6 +212,7 @@ public sealed class ProtocolResolver
         ResolverSchemaPair pair,
         IReadOnlyList<ResolverSchemaPair> relatedPairs,
         List<MessageDescriptor> exactReadables,
+        IReadOnlyList<PriorMapping> pinsForToken,
         HashSet<string> conflictingNames,
         IReadOnlyList<DiagnosticAnalysis> analyses,
         string? targetDirection,
@@ -288,6 +292,17 @@ public sealed class ProtocolResolver
                     Detail = "prior mapping does not identify this exact build"
                 });
             }
+        }
+
+        if (pinsForToken.Any(pin => pin.BuildExact
+            && string.Equals(pin.Build, schema.ClientVersion, StringComparison.Ordinal)
+            && !string.Equals(pin.ReadableFullName, readable.FullName, StringComparison.Ordinal)))
+        {
+            uncertainties.Add(new ResolverUncertainty
+            {
+                Code = ResolverUncertaintyCode.ConflictingPriorMapping,
+                Detail = "a build-exact pin names a different readable message for this token"
+            });
         }
 
         string token = schemaMessage.Name;
@@ -398,7 +413,8 @@ public sealed class ProtocolResolver
                 && string.Equals(observations.Coverage, "complete", StringComparison.Ordinal)
                 && !uncertainties.Any(uncertainty => uncertainty.Code is ResolverUncertaintyCode.PartialReadable
                     or ResolverUncertaintyCode.BuildMismatchReference
-                    or ResolverUncertaintyCode.PartialObservation)
+                    or ResolverUncertaintyCode.PartialObservation
+                    or ResolverUncertaintyCode.ConflictingPriorMapping)
                 ? CandidateClassification.Verified
                 : CandidateClassification.Candidate;
 
@@ -553,6 +569,15 @@ public sealed class ProtocolResolver
                         FieldPath = grouping.Key.FieldPath,
                         Occurrences = grouping.Aggregate(0L, (count, value) => AddCount(count, value.Occurrences))
                     }).ToArray(),
+                ReportContradictions = values.SelectMany(value => value.ReportContradictions)
+                    .Where(contradiction => contradiction.Occurrences > 0 && IsHardReportContradiction(contradiction.Code))
+                    .GroupBy(contradiction => contradiction.Code)
+                    .OrderBy(grouping => ReportContradictionName(grouping.Key), StringComparer.Ordinal)
+                    .Select(grouping => new ResolverObservationReportContradiction
+                    {
+                        Code = grouping.Key,
+                        Occurrences = grouping.Aggregate(0L, (count, value) => AddCount(count, value.Occurrences))
+                    }).ToArray(),
                 Truncated = values.Any(value => value.Truncated)
             });
         }
@@ -658,12 +683,28 @@ public sealed class ProtocolResolver
         ResolverObservationProblem[] problems = observation.Problems
             .Where(problem => problem.Occurrences > 0 && Enum.IsDefined(problem.Code))
             .ToArray();
+        ResolverObservationReportContradiction[] reportContradictions = observation.ReportContradictions
+            .Where(contradiction => contradiction.Occurrences > 0 && IsHardReportContradiction(contradiction.Code))
+            .GroupBy(contradiction => contradiction.Code)
+            .OrderBy(grouping => ReportContradictionName(grouping.Key), StringComparer.Ordinal)
+            .Select(grouping => new ResolverObservationReportContradiction
+            {
+                Code = grouping.Key,
+                Occurrences = grouping.Aggregate(0L, (count, value) => AddCount(count, value.Occurrences))
+            }).ToArray();
 
         if (observation.TypeUrlOkOccurrences < observation.Occurrences)
         {
             AddContradiction(contradictions, ResolverContradictionCode.ObservationTypeUrlMismatch,
                 FormatCount(Math.Max(0, observation.TypeUrlOkOccurrences)) + " of "
                 + FormatCount(Math.Max(0, observation.Occurrences)) + " observations have valid type URLs");
+        }
+
+        if (reportContradictions.Length > 0)
+        {
+            AddContradiction(contradictions, ResolverContradictionCode.ObservationReportContradiction,
+                "report contradictions " + string.Join(", ", reportContradictions.Select(contradiction =>
+                    ReportContradictionName(contradiction.Code) + "=" + FormatCount(contradiction.Occurrences))));
         }
 
         DiagnosticProblemCode[] hardProblems = observation.Problems.Select(problem => problem.Code)
@@ -743,6 +784,24 @@ public sealed class ProtocolResolver
             or DiagnosticProblemCode.Malformed
             or DiagnosticProblemCode.SchemaMessageMissing
             or DiagnosticProblemCode.SchemaInvalid;
+    }
+
+    private static bool IsHardReportContradiction(DiagnosticReportContradictionCode code)
+    {
+        return code is DiagnosticReportContradictionCode.TypeUrlMismatch
+            or DiagnosticReportContradictionCode.MessageMismatch
+            or DiagnosticReportContradictionCode.FieldDeclarationMismatch;
+    }
+
+    private static string ReportContradictionName(DiagnosticReportContradictionCode code)
+    {
+        return code switch
+        {
+            DiagnosticReportContradictionCode.TypeUrlMismatch => "TYPE_URL_MISMATCH",
+            DiagnosticReportContradictionCode.MessageMismatch => "MESSAGE_MISMATCH",
+            DiagnosticReportContradictionCode.FieldDeclarationMismatch => "FIELD_DECLARATION_MISMATCH",
+            _ => string.Empty
+        };
     }
 
     private static bool IsSoftProblem(DiagnosticProblemCode code)

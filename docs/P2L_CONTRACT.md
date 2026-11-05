@@ -25,7 +25,7 @@ The report is compact UTF-8 JSON with `kind="diagnostic-report"`, `reportVersion
 | `engine` | Engine protocol version, engine name/version, and SNS source commit returned by the local engine handshake. |
 | `provenance` | `source` (`live` or `synthetic`), producer identity/version, and UTC start/completion times. Synthetic tests and demos label this explicitly; they are not live observations. |
 | `session` | `state` (`COMPLETED`, `FAILED`, or `CANCELLED`), optional stable `errorCode`, accepted/analyzed/dropped frame totals, unattributed analysis count, `includeReadable`, and queue item/byte capacities. |
-| `coverage` | `complete` only when the session completed without drops, missing analyses, aggregation/output truncation, or other incomplete accounting; otherwise `partial`. |
+| `coverage` | `complete` only when the session completed without drops, unattributed or missing analyses, aggregation/output truncation, or other incomplete accounting; otherwise `partial`. A complete report has no session error, drops, truncation counts/flags/reasons, or incomplete frame accounting. |
 | `types` | One sorted entry per safely attributed schema token, described below. |
 | `truncation` | Whether JSON output was reduced to fit, the omitted aggregate counts, and stable reasons. |
 
@@ -42,15 +42,15 @@ Each `types[]` entry contains:
 
 The safe shape object contains only optional `varintBytes`, `fixedLength`, `length`, `lengthCapped`, `utf8`, `fieldCount`, `zeroLength`, and `truncated` properties. Numeric values here are structural sizes or counts, never protobuf field values.
 
-The top-level `truncation` object contains `outputTruncated`, `typesOmitted`, `fieldsOmitted`, `nestedFieldsOmitted`, `variantsOmitted`, `problemsOmitted`, `shapeValuesOmitted`, and `reasons`. Stable reasons include `type-limit`, `field-limit`, `nested-limit`, `variant-limit`, `problem-limit`, `shape-limit`, `unattributed-analysis`, `detail-truncated`, `dropped-frame`, `session-incomplete`, and `output-size`. Any omission or output-size reduction forces `coverage="partial"`; the loader does not upgrade partial input.
+The top-level `truncation` object contains `outputTruncated`, `typesOmitted`, `fieldsOmitted`, `nestedFieldsOmitted`, `variantsOmitted`, `problemsOmitted`, `shapeValuesOmitted`, and `reasons`. Stable reasons include `type-limit`, `field-limit`, `nested-limit`, `variant-limit`, `problem-limit`, `shape-limit`, `unattributed-analysis`, `detail-truncated`, `dropped-frame`, `session-incomplete`, `summary-mismatch`, `aggregation-failed`, and `output-size`. Any omission, incomplete accounting, or output-size reduction forces `coverage="partial"`; the loader does not upgrade partial input.
 
 The aggregator first enforces per-session caps. If serialized JSON still exceeds `ReportMaxBytes`, the serializer deterministically removes variants, nested fields, shape values, fields, and finally types until it fits. It marks the result `outputTruncated=true`, adds the applicable reason and `output-size`, and sets partial coverage. If even the required envelope cannot fit, writing fails and the session records the report-write failure in its local logs.
 
-`DiagnosticReportJson.LoadFile` checks the byte limit before and while reading, rejects duplicate or unknown JSON properties and invalid enums, validates the v1 envelope, hashes the exact source bytes, and checks aggregate counts, names, shapes, nesting, and configured bounds. The resolver CLI accepts reports up to 64 MiB; runtime-generated reports default to 4 MiB.
+`DiagnosticReportJson.LoadFile` checks the byte limit before and while reading, rejects duplicate or unknown JSON properties and invalid enums, validates the v1 envelope and complete-coverage accounting, hashes the exact source bytes, and checks aggregate counts, names, shapes, nesting, and configured bounds. Identity metadata accepts only letters, digits, `.`, `_`, `+`, and `-`; separator-delimited and path-like values are discarded by the producer and rejected by the loader. The resolver CLI accepts reports up to 64 MiB; runtime-generated reports default to 4 MiB.
 
 ## Privacy and storage
 
-Reports never contain payload bytes, tickets, account or character identifiers, protobuf numeric field values, string contents, private messages, absolute paths, stack traces, or free-form engine detail. The aggregator accepts only schema tokens and safe schema field names, aggregate counters, observed wire/shape metadata, stable problem codes, and fixed producer-generated contradiction summaries. It discards `DiagnosticProblem.Detail`; arbitrary engine text is not copied to the report. The resolver output is also redacted and does not contain raw frame indices.
+Reports never contain payload bytes, tickets, account or character identifiers, protobuf numeric field values, string contents, private messages, absolute paths, stack traces, or free-form engine detail. The aggregator accepts only schema tokens and safe schema field names, aggregate counters, observed wire/shape metadata, stable problem codes, and fixed producer-generated contradiction summaries. Engine and provenance identities are restricted to letters, digits, `.`, `_`, `+`, and `-`, so paths, addresses, and other separator-delimited values become empty. It discards `DiagnosticProblem.Detail`; arbitrary engine text is not copied to the report. The resolver output is also redacted and does not contain raw frame indices.
 
 On Unix, the writer uses a private `0700` directory and `0600` report file, writes a same-directory temporary file, flushes it, then atomically renames it to a report filename. A failed write cleans up its temporary/final file best-effort. No report is written when the setting is off or writer setup fails.
 
@@ -58,7 +58,7 @@ The relay-facing `GameSession.OnFrame` path only selects eligible frames and enq
 
 ## Resolver semantics and evidence dossier
 
-`diagnose resolve --report ...` verifies the requested client version against the report, exports the supplied schema, and requires exact client-version and schema-SHA identity before resolution. The resolver uses the build schema and readable descriptors for structural comparisons, plus aggregate report facts: occurrence counts, directions, statuses, type-URL matches, safe problem counts, coverage, drops, and truncation. It does not invent per-frame evidence from aggregates or treat report field-shape similarity by itself as proof.
+`diagnose resolve --report ...` verifies the requested client version against the report, exports the supplied schema, and requires exact client-version and schema-SHA identity before resolution. The resolver uses the build schema and readable descriptors for structural comparisons, plus aggregate report facts: occurrence counts, directions, statuses, type-URL matches, safe problem counts, hard report contradictions, coverage, drops, and truncation. `TYPE_URL_MISMATCH`, `MESSAGE_MISMATCH`, and `FIELD_DECLARATION_MISMATCH` remain hard contradictions even when aggregate status and shape otherwise look valid; `DETAIL_TRUNCATED` makes coverage partial. It does not invent per-frame evidence from aggregates or treat report field-shape similarity by itself as proof.
 
 The classifications are:
 
@@ -69,7 +69,7 @@ The classifications are:
 | `CONFLICT` | A hard shape or observation contradiction exists. |
 | `UNKNOWN` | No readable message can be named. |
 
-Incomplete or truncated coverage, dropped frames, mixed/invalid statuses, schema problems, ambiguous directions, partial readable descriptors, and references from other builds cannot strengthen a candidate into `VERIFIED`. The `.jpe` regression remains `CONFLICT` for its int32/int64 shape contradiction. `.kjt` remains `CANDIDATE` when multiple readable messages share the same shape, including when a pin names one of them.
+Incomplete or truncated coverage, dropped frames, mixed/invalid statuses, schema problems, ambiguous directions, partial readable descriptors, and references from other builds cannot strengthen a candidate into `VERIFIED`. A build-exact pin that names a different readable full name leaves an alternative exact-shape candidate unverified with `CONFLICTING_PRIOR_MAPPING`; matching pins remain corroborating evidence. The `.jpe` regression remains `CONFLICT` for its int32/int64 shape contradiction. `.kjt` remains `CANDIDATE` when multiple readable messages share the same shape, including when a pin names one of them.
 
 The resolver writes candidate JSON only. `PromotionGate` refuses every `CANDIDATE`; no candidate is automatically promoted to a production mapping. A later agentic follow-up can use the redacted report and candidate JSON as a structured dossier: the report hash and observation provenance identify the input, while candidate evidence, contradictions, and uncertainty keep the reasoning auditable. This workflow uses local files and the deterministic resolver; it adds no LLM call or network service.
 
