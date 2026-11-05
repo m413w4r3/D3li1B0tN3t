@@ -272,7 +272,7 @@ fn packed_payload_on_declared_unpacked_field_is_rejected() {
 }
 
 #[test]
-fn unpacked_scalar_on_declared_packed_field_is_rejected() {
+fn unpacked_scalar_on_declared_packed_field_is_accepted() {
     let schema = json!({
         "kind":"schema",
         "messages":[message("lok", false, vec![field(1, "values", "INT32", true, true, Value::Null)])],
@@ -286,10 +286,12 @@ fn unpacked_scalar_on_declared_packed_field_is_rejected() {
             &[0x08, 0x01],
         )],
     ))
-    .expect("unpacked mismatch is an analysis");
+    .expect("unpacked encoding is valid for a declared-packed field");
     let value = analysis(&output, 0);
-    assert_eq!(value["status"], "SCHEMA_MISMATCH");
-    assert!(has_problem(&value, "UNPACKED_NOT_ALLOWED"));
+    assert_eq!(value["status"], "VALID");
+    assert_eq!(value["fields"][0]["occurrences"], 1);
+    assert_eq!(value["fields"][0]["problems"], json!([]));
+    assert_eq!(value["problems"], json!([]));
 }
 
 #[test]

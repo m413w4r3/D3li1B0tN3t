@@ -33,10 +33,6 @@ pub fn mismatch_codes(field: &Field, observed: WireType) -> Vec<&'static str> {
         };
     }
 
-    if observed == expected && field.repeated && field.packed {
-        return vec!["UNPACKED_NOT_ALLOWED"];
-    }
-
     if observed == expected {
         return Vec::new();
     }
