@@ -2,6 +2,10 @@ using System.Buffers;
 using System.Diagnostics;
 using D3B.Bot.Network;
 using D3B.Diagnostic.Contract;
+using D3B.Diagnostic.Ipc;
+using D3B.Diagnostic.Observation;
+using D3B.Diagnostic.Reporting;
+using D3B.Diagnostic.Replay;
 using D3B.Network.Relay;
 using D3B.Protocol.Game;
 using Google.Protobuf;
@@ -206,12 +210,12 @@ public sealed class DiagnosticObserverTests : IDisposable
     public void AServiceProviderCanDisposeTheObserverSynchronously()
     {
         var sink = new FakeDiagnosticSink();
-        var observer = CreateObserver(new FakeDiagnosticSessionFactory { Create = () => sink }, false);
-        _ = Start(observer);
+        var factory = new FakeDiagnosticSessionFactory { Create = () => sink };
         var services = new ServiceCollection();
-        services.AddSingleton(observer);
+        services.AddSingleton<DiagnosticObserver>(_ => CreateObserver(factory, false));
         services.AddSingleton<IGameObserver>(provider => provider.GetRequiredService<DiagnosticObserver>());
         ServiceProvider provider = services.BuildServiceProvider();
+        _ = Start(provider.GetRequiredService<DiagnosticObserver>());
 
         Exception? exception = Record.Exception(provider.Dispose);
 
@@ -246,7 +250,47 @@ public sealed class DiagnosticObserverTests : IDisposable
         Assert.True(timer.Elapsed < TimeSpan.FromMilliseconds(250));
     }
 
-    private DiagnosticObserver CreateObserver(FakeDiagnosticSessionFactory factory, bool includeReadable, int queueCapacity = 256, long queueByteCapacity = 16L * 1024 * 1024)
+    [Fact]
+    public async Task ObserverShutdownWaitsForReportWriterBeforeCompleting()
+    {
+        var writer = new BlockingReportWriter();
+        var schema = new DiagnosticSchema
+        {
+            ClientVersion = "3.7.13.17",
+            SchemaSha256 = new string('a', 64),
+            Messages = [new DiagnosticMessage { Name = "opaque.Token" }],
+        };
+        var sidecar = new ObserverTestSidecar();
+        var sessions = new DiagnosticSink(
+            new SidecarOptions
+            {
+                EnginePath = "unused",
+                SocketDirectory = "unused",
+                QueueCapacity = 8,
+                QueueByteCapacity = 1_048_576,
+                HandshakeTimeout = TimeSpan.FromSeconds(2),
+                ResponseTimeout = TimeSpan.FromSeconds(2),
+            },
+            schema,
+            new ObserverTestSidecarFactory(sidecar),
+            _logs,
+            new DiagnosticReportOptions { Enabled = true },
+            writer,
+            TimeProvider.System);
+        var observer = CreateObserver(sessions, false);
+        GameSession session = Start(observer);
+        Show(session, RelayDirection.FromServer, UnknownFrame("opaque.Token", ByteString.CopyFrom(1)));
+
+        Task shutdown = observer.DisposeAsync().AsTask();
+        await writer.Started.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+        Assert.False(shutdown.IsCompleted);
+        writer.Release.TrySetResult();
+        await shutdown.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, writer.Calls);
+    }
+
+    private DiagnosticObserver CreateObserver(IDiagnosticSessionFactory factory, bool includeReadable, int queueCapacity = 256, long queueByteCapacity = 16L * 1024 * 1024)
     {
         IReadOnlySet<string> messageNames = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -292,6 +336,72 @@ public sealed class DiagnosticObserverTests : IDisposable
                 Content = new Any { TypeUrl = typeUrl, Value = payload },
             },
         }.ToByteArray();
+    }
+
+    private sealed class ObserverTestSidecarFactory : IDiagnosticSidecarFactory
+    {
+        private readonly IDiagnosticSidecar _sidecar;
+
+        public ObserverTestSidecarFactory(IDiagnosticSidecar sidecar)
+        {
+            _sidecar = sidecar;
+        }
+
+        public Task<SidecarStartResult> StartAsync(SidecarOptions options, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new SidecarStartResult(_sidecar, null));
+        }
+    }
+
+    private sealed class ObserverTestSidecar : IDiagnosticSidecar
+    {
+        public Task<DiagnosticEngineHello> StartAsync(DiagnosticSchema schema, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new DiagnosticEngineHello
+            {
+                ProtocolVersion = DiagnosticProtocol.ProtocolVersion,
+                Engine = "observer-test",
+                EngineVersion = "1.0",
+            });
+        }
+
+        public Task<DiagnosticAnalysis> AnalyzeAsync(DiagnosticFrame frame, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new DiagnosticAnalysis
+            {
+                Index = frame.Index,
+                Direction = frame.Direction,
+                CarriedType = frame.CarriedType,
+                Message = frame.CarriedType,
+                Status = DiagnosticStatus.Valid,
+            });
+        }
+
+        public Task<DiagnosticSummary> CompleteAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new DiagnosticSummary { Frames = 1, Coverage = "complete" });
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class BlockingReportWriter : IDiagnosticReportWriter
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int Calls;
+
+        public async ValueTask WriteAsync(DiagnosticReport report, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref Calls);
+            Started.TrySetResult();
+            await Release.Task.WaitAsync(cancellationToken);
+        }
     }
 
 }

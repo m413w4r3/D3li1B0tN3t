@@ -12,6 +12,10 @@ public sealed class DiagnosticSink : IDiagnosticSessionFactory
     private readonly DiagnosticSchema _schema;
     private readonly IDiagnosticSidecarFactory _sidecarFactory;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly DiagnosticReportOptions? _reportOptions;
+    private readonly IDiagnosticReportWriter? _reportWriter;
+    private readonly TimeProvider? _timeProvider;
+    private readonly bool _includeReadable;
 
     /// <summary>Creates the per-connection diagnostic session factory.</summary>
     public DiagnosticSink(
@@ -33,11 +37,23 @@ public sealed class DiagnosticSink : IDiagnosticSessionFactory
         _schema = schema;
         _sidecarFactory = sidecarFactory;
         _loggerFactory = loggerFactory;
+        _reportOptions = reportOptions;
+        _reportWriter = reportWriter;
+        _timeProvider = timeProvider;
+        _includeReadable = includeReadable;
     }
 
     /// <inheritdoc/>
     public IDiagnosticSink CreateSession()
     {
-        return new DiagnosticSession(_options, _schema, _sidecarFactory, _loggerFactory.CreateLogger<DiagnosticSession>());
+        return new DiagnosticSession(
+            _options,
+            _schema,
+            _sidecarFactory,
+            _loggerFactory.CreateLogger<DiagnosticSession>(),
+            _reportOptions,
+            _reportWriter,
+            _timeProvider,
+            _includeReadable);
     }
 }

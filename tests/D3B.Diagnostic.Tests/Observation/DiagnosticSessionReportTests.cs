@@ -62,7 +62,31 @@ public sealed class DiagnosticSessionReportTests
         Assert.Equal("complete", report.Coverage);
         Assert.Equal("d3b-diagnostic", report.Engine.Engine);
         Assert.Equal("0.1.0", report.Engine.EngineVersion);
+        Assert.True(report.Session.IncludeReadable);
+        Assert.Equal(8, report.Session.QueueCapacity);
+        Assert.Equal(1_048_576, report.Session.QueueByteCapacity);
         Assert.Equal(hello, session.Snapshot.EngineHello);
+    }
+
+    [Fact]
+    public async Task HandshakeFailureWritesEmptyEngineIdentityAndFailureCode()
+    {
+        var sidecar = new FakeDiagnosticSidecar
+        {
+            Start = _ => throw new DiagnosticSidecarException(DiagnosticErrorCode.ContractInvalid),
+        };
+        var writer = new FakeDiagnosticReportWriter();
+        var session = CreateSession(sidecar, writer);
+
+        await session.DisposeAsync();
+
+        DiagnosticReport report = Assert.Single(writer.Reports);
+        Assert.Equal(DiagnosticReportSessionState.Failed, report.Session.State);
+        Assert.Equal(DiagnosticErrorCode.ContractInvalid, report.Session.ErrorCode);
+        Assert.Equal(string.Empty, report.Engine.Engine);
+        Assert.Equal(string.Empty, report.Engine.EngineVersion);
+        Assert.Equal(string.Empty, report.Engine.SnsCommit);
+        Assert.Null(session.Snapshot.EngineHello);
     }
 
     [Fact]
@@ -102,9 +126,8 @@ public sealed class DiagnosticSessionReportTests
         Assert.True(session.TryEnqueue(Frame(0)));
         var timer = System.Diagnostics.Stopwatch.StartNew();
 
-        Task dispose = session.DisposeAsync().AsTask();
         await writer.Started.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
-        await dispose.WaitAsync(TimeSpan.FromSeconds(6), TestContext.Current.CancellationToken);
+        await session.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
         timer.Stop();
 
         DiagnosticReport report = Assert.Single(writer.Reports);
@@ -154,6 +177,32 @@ public sealed class DiagnosticSessionReportTests
         DiagnosticReport report = Assert.Single(writer.Reports);
         Assert.Equal("partial", report.Coverage);
         Assert.Contains("summary-mismatch", report.Truncation.Reasons);
+    }
+
+    [Fact]
+    public async Task AggregationFailureMarksReportPartialAndContinuesThePump()
+    {
+        var sidecar = SuccessfulSidecar(2);
+        sidecar.Analyze = frame => Task.FromResult(new DiagnosticAnalysis
+        {
+            Index = frame.Index,
+            Direction = frame.Direction,
+            CarriedType = "lok",
+            Message = "lok",
+            Status = DiagnosticStatus.Valid,
+            Fields = frame.Index == 0 ? null! : Array.Empty<DiagnosticFieldAnalysis>(),
+        });
+        var writer = new FakeDiagnosticReportWriter();
+        var session = CreateSession(sidecar, writer);
+        Assert.True(session.TryEnqueue(Frame(0)));
+        Assert.True(session.TryEnqueue(Frame(1)));
+
+        await session.DisposeAsync();
+
+        DiagnosticReport report = Assert.Single(writer.Reports);
+        Assert.Equal(2, session.Snapshot.AnalyzedFrames);
+        Assert.Equal("partial", report.Coverage);
+        Assert.Contains("aggregation-failed", report.Truncation.Reasons);
     }
 
     [Fact]
@@ -234,6 +283,33 @@ public sealed class DiagnosticSessionReportTests
         finally
         {
             Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReportWriterRefusesASymlinkDirectory()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string parent = CreateTemporaryDirectory();
+        string target = Path.Combine(parent, "target");
+        string link = Path.Combine(parent, "link");
+        Directory.CreateDirectory(target);
+        try
+        {
+            Directory.CreateSymbolicLink(link, target);
+            var writer = new AtomicDiagnosticReportWriter(ReportOptions(), link, TimeProvider.System);
+
+            await Assert.ThrowsAsync<IOException>(async () => await writer.WriteAsync(CreateReport(), TestContext.Current.CancellationToken));
+
+            Assert.Empty(Directory.GetFiles(target));
+        }
+        finally
+        {
+            Directory.Delete(parent, recursive: true);
         }
     }
 

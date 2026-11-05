@@ -14,6 +14,7 @@ namespace D3B.Bot.Network;
 /// <summary>Passes selected game frames to the isolated diagnostic sidecar.</summary>
 public sealed partial class DiagnosticObserver : IGameObserver, IDisposable, IAsyncDisposable
 {
+    private static readonly TimeSpan _shutdownTimeout = TimeSpan.FromSeconds(30);
     private readonly IDiagnosticSessionFactory? _sessions;
     private readonly bool _includeReadable;
     private readonly ILogger<DiagnosticObserver> _log;
@@ -21,6 +22,9 @@ public sealed partial class DiagnosticObserver : IGameObserver, IDisposable, IAs
     private readonly long _queueByteCapacity;
     private readonly IReadOnlySet<string> _schemaMessageNames;
     private readonly ConcurrentDictionary<GameSession, SessionObservation> _observations = new();
+    private readonly object _shutdownGate = new();
+    private Task? _shutdownTask;
+    private int _disposed;
 
     /// <summary>Creates an observer for diagnostic sessions.</summary>
     public DiagnosticObserver(IDiagnosticSessionFactory sessions, bool includeReadable, ILogger<DiagnosticObserver> log, IReadOnlySet<string> schemaMessageNames, int queueCapacity = 256, long queueByteCapacity = 16L * 1024 * 1024)
@@ -52,42 +56,64 @@ public sealed partial class DiagnosticObserver : IGameObserver, IDisposable, IAs
     /// <inheritdoc />
     public void Dispose()
     {
+        try
+        {
+            BeginShutdown().GetAwaiter().GetResult();
+        }
+        catch (Exception)
+        {
+        }
     }
 
     /// <inheritdoc />
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        return ValueTask.CompletedTask;
+        try
+        {
+            await BeginShutdown().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+        }
     }
 
     /// <inheritdoc />
     public void OnSessionStarted(GameSession session)
     {
-        if (_sessions is null)
+        if (_sessions is null || Volatile.Read(ref _disposed) != 0)
         {
             return;
         }
 
-        try
+        lock (_shutdownGate)
         {
-            var observation = new SessionObservation(_sessions.CreateSession(), _queueCapacity, _queueByteCapacity);
-            if (!_observations.TryAdd(session, observation))
+            if (_disposed != 0)
             {
-                observation.Complete();
                 return;
             }
 
-            observation.Pump = Task.Run(() => PumpAsync(observation));
-            session.Closed.Register(() => Complete(session, observation));
-        }
-        catch (Exception)
-        {
             try
             {
-                LogSessionStartFailed(_log);
+                var observation = new SessionObservation(session, _sessions.CreateSession(), _queueCapacity, _queueByteCapacity);
+                if (!_observations.TryAdd(session, observation))
+                {
+                    observation.Complete();
+                    _ = DisposeOrphanSinkAsync(observation.Sink);
+                    return;
+                }
+
+                observation.Pump = Task.Run(() => PumpAsync(observation));
+                session.Closed.Register(() => Complete(observation));
             }
             catch (Exception)
             {
+                try
+                {
+                    LogSessionStartFailed(_log);
+                }
+                catch (Exception)
+                {
+                }
             }
         }
     }
@@ -98,7 +124,7 @@ public sealed partial class DiagnosticObserver : IGameObserver, IDisposable, IAs
         SessionObservation? observation = null;
         try
         {
-            if (_sessions is null)
+            if (_sessions is null || Volatile.Read(ref _disposed) != 0)
             {
                 return;
             }
@@ -178,10 +204,9 @@ public sealed partial class DiagnosticObserver : IGameObserver, IDisposable, IAs
         };
     }
 
-    private void Complete(GameSession session, SessionObservation observation)
+    private static void Complete(SessionObservation observation)
     {
         observation.Complete();
-        _observations.TryRemove(session, out _);
     }
 
     private async Task PumpAsync(SessionObservation observation)
@@ -246,12 +271,91 @@ public sealed partial class DiagnosticObserver : IGameObserver, IDisposable, IAs
             {
                 observation.LogFailure(_log);
             }
+
+            try
+            {
+                await observation.Sink.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                observation.LogFailure(_log);
+            }
+            finally
+            {
+                _observations.TryRemove(observation.Session, out _);
+            }
         }
     }
 
     private void LogFailure(SessionObservation observation)
     {
         observation.LogFailure(_log);
+    }
+
+    private Task BeginShutdown()
+    {
+        lock (_shutdownGate)
+        {
+            if (_shutdownTask is not null)
+            {
+                return _shutdownTask;
+            }
+
+            Volatile.Write(ref _disposed, 1);
+            SessionObservation[] observations = _observations.Values.ToArray();
+            foreach (SessionObservation observation in observations)
+            {
+                observation.Complete();
+            }
+
+            Task[] pumps = observations
+                .Select(observation => observation.Pump)
+                .Where(pump => pump is not null)
+                .Cast<Task>()
+                .ToArray();
+            _shutdownTask = WaitForShutdownAsync(pumps);
+            return _shutdownTask;
+        }
+    }
+
+    private async Task WaitForShutdownAsync(Task[] pumps)
+    {
+        try
+        {
+            await Task.WhenAll(pumps).WaitAsync(_shutdownTimeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            try
+            {
+                LogPartialShutdown(_log);
+            }
+            catch (Exception)
+            {
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static async Task DisposeOrphanSinkAsync(IDiagnosticSink sink)
+    {
+        try
+        {
+            sink.Complete();
+        }
+        catch (Exception)
+        {
+        }
+
+        try
+        {
+            await sink.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Diagnostic observation could not start for a game session.")]
@@ -265,6 +369,9 @@ public sealed partial class DiagnosticObserver : IGameObserver, IDisposable, IAs
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Diagnostic:IncludeReadable is enabled; readable payloads may contain sensitive data.")]
     private static partial void LogReadablePayloadsEnabled(ILogger logger);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Diagnostic observer shutdown was partial; some sessions did not finish within the shutdown bound.")]
+    private static partial void LogPartialShutdown(ILogger logger);
 
     private sealed class SessionObservation
     {
@@ -282,8 +389,11 @@ public sealed partial class DiagnosticObserver : IGameObserver, IDisposable, IAs
 
         public IDiagnosticSink Sink { get; }
 
-        public SessionObservation(IDiagnosticSink sink, int capacity, long byteCapacity)
+        public GameSession Session { get; }
+
+        public SessionObservation(GameSession session, IDiagnosticSink sink, int capacity, long byteCapacity)
         {
+            Session = session;
             Sink = sink;
             _byteCapacity = byteCapacity;
             Queue = Channel.CreateBounded<DiagnosticFrame>(new BoundedChannelOptions(capacity)
