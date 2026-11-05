@@ -7102,3 +7102,40 @@ Settled questions leave this table, and the decision that settles one says so.
   are read-only, are from other builds, and can never alone produce `VERIFIED` (D308 promotion rules).
 - **Licence boundary**: the IL2CPP/reference artifacts checked into SNS have no separate provenance statement; none is
   copied. Only MIT-covered source modules are adapted.
+
+## D311: P2K-2 integrates a passive Rust diagnostic engine with a separate promotion gate
+
+*2026-11-05, P2K-2 final. Extends D307 and D308-D310; no live execution.*
+
+- **Delivered**: `rust/d3b-diagnostic` (contract-v1 replay and Unix-socket sidecar, 56 Rust tests, adapted MIT SNS
+  modules with attribution), `D3B.Diagnostic` (schema export, replay client/process, IPC client/process, bounded
+  observer/sink), `DiagnosticObserver`/`DiagnosticModule` in `D3B.Bot`, the deterministic resolver and `PromotionGate`,
+  `scripts/diagnose.cs`, and the contract, architecture, promotion, runbook and type-report docs. The exported
+  `3.7.13.17` schema has 2,414 messages and 805,622 bytes; the build fingerprint is the `.binpb` SHA-256.
+- **Boundaries**: diagnostics are disabled by default and one-way; the observer only forwards exact game type URLs
+  naming exported build-schema messages, rejects payloads over 1 MiB before copying, and bounds both queues by items and
+  bytes. No diagnostic result feeds the latch, `MovementGuard`, `SendGate`, the relay or a send path. The sidecar
+  failure, timeout, crash or queue overflow produces a partial observation and never cuts the player off. No raw payload
+  is persisted or sent externally. P2H/P2I/P2K paths are unchanged from `c73fae2`.
+- **Evidence**: final serialized suite 1,614/1,614 with the real Rust binary; `cargo test` 56/56; build 0 warnings,
+  format and `git diff --check` clean; real schema accepted with `.lok`, `.jpe`, `.kjt`, `.mem`, `.kog` valid; two
+  independent Luna xhigh audits, with the security re-audit approving and the contract findings fixed in `f307b0a`,
+  `b6ffc6f`, `c2651e4`; the detailed record is [P2K2_REPORT.md](P2K2_REPORT.md).
+- **Limits**: no real capture or live session; replay/IPC use synthetic fixtures and the local engine. Offline type
+  analysis is structural: 0 `VERIFIED`, 7 `CANDIDATE`/1 `CONFLICT`/9 `UNKNOWN` for the 17 priority tokens and 19/1/44
+  for the 64 blockers. `.jpe` is a resolver-produced `CONFLICT` (INT32 vs INT64); `.kjt` remains an ambiguous
+  `CANDIDATE`. No mapping, pin or `NonPositionMessages` entry was changed; nothing was pushed or deployed.
+
+## D312: The protocol stays blocked for automatic movement; the diagnostic component is ready
+
+*2026-11-05, P2K-2 final.*
+
+- **Decision**: keep the P2I/P2K translation latch fail-closed and do not authorize a new GO 1 or any movement. The
+  64 P2K blocking types are unresolved; `.jpe` is unresolved and position-affecting; `.kjt` is ambiguous; no mapping
+  was promoted; no new passive GO 1 confirmed `translation_blocked=false`. The diagnostic component itself
+  (replay, local IPC sidecar, schema analysis, resolver, promotion gate) is READY for supervised offline use.
+- **Next permissible action**: a separate owner GO for a passive GO 1 using the new engine, then observation-backed
+  fixtures for the priority types, then RED/GREEN and `ContractAudit` before any mapping promotion; any promoted
+  mapping requires an explicit owner token, an exact-build regeneration and a new session. No live diagnostic run is
+  authorized by this decision.
+- **Boundary**: local commits only; no live client, relay, Ankama connection, movement, harvest or external AI call.
