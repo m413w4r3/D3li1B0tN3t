@@ -122,6 +122,9 @@ echoed in the summary.
 
 ### 2.6 Observed shape (redacted)
 
+Observed wire types are named `VARINT` (0), `I64` (1), `LEN` (2), `GROUP` (3 and 4, always reported with
+`GROUP_UNSUPPORTED`), `I32` (5), and `UNKNOWN` for any other value.
+
 Only structural facts. No value, no string content, no bytes.
 
 | Key | Applies to | Meaning |
