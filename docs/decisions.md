@@ -7152,3 +7152,15 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Boundary**: both audits were read-only source inspections; the parent ran the final serialized suite (1,614/1,614
   with the real Rust binary), cargo tests (56/56), format, CLI smokes and the latch diff. No live client or external
   AI call was made.
+
+## D314: P2K and P2K-2 are merged into master locally
+
+*2026-11-05, owner GO.*
+
+- **Decision**: the owner asked to merge all P2K-2 work into the bot's main branch. `master` was a strict ancestor of
+  `p2k2-integration` (0 divergent commits), so the branch was fast-forwarded from `70c9ec3` to `ff46aac`: P2K
+  (`c73fae2`), the P2K-2 engine, bridge, resolver, gate, CLI, docs and all corrections. The verified tree is unchanged
+  by the fast-forward: 1,614/1,614 C# tests with the real Rust binary, 56/56 Rust tests, both independent audits
+  approved. No push, deployment, live client or external AI call.
+- **Status**: the diagnostic component is READY; automatic movement remains BLOCKED (D312). A remote push or PR needs
+  a separate explicit owner GO.

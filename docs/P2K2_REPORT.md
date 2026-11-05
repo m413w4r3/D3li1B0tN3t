@@ -1,7 +1,7 @@
 # P2K-2 — SniffSniffSquared integration and agentic Dofus 3 protocol resolution
 
-*2026-11-05. Base: P2K preserved at `c73fae2`; plan and contract at `32a4492`; final integration
-`f9e45cecace4c86224827c2313eb403ca5ffb7d3` on branch `p2k2-integration` (local only, not pushed). No Dofus client,
+*2026-11-05. Base: P2K preserved at `c73fae2`; plan and contract at `32a4492`; final code integration
+`f9e45cecace4c86224827c2313eb403ca5ffb7d3`, merged locally into `master` at `ff46aac` (no push). No Dofus client,
 D3B host, relay, Ankama connection, activity, route, harvest or movement was run. Every capture and fixture in this
 report is synthetic; no real session data was read, persisted or transmitted.*
 
@@ -165,7 +165,8 @@ any movement. No automatic external AI call with unredacted data; no raw payload
   resolver, promotion gate, redaction and failure isolation verified by tests and two independent audits.
 - **Protocol ready for automatic movement: BLOCKED.** 64 P2K types remain, `.jpe` is a conflict, `.kjt` is ambiguous,
   no mapping was promoted and no new GO 1 confirmed `translation_blocked=false`. The latch must stay closed.
-- **Delivery**: local commits only; nothing pushed, merged to `master`, published or deployed.
+- **Delivery**: merged locally into `master` at `ff46aac` on the owner's explicit GO (D314); nothing pushed, published
+  or deployed, and no live session was run.
 
 ## Independent audits
 
