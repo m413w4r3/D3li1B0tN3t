@@ -147,7 +147,6 @@ Stable, uppercase, snake-free:
 | `UNKNOWN_FIELD_NUMBER` | field | The tag's number is absent from the message descriptor. |
 | `WIRE_TYPE_MISMATCH` | field | Observed wire type cannot encode the declared kind. |
 | `PACKED_NOT_ALLOWED` | field | A packed LEN arrived for a field the descriptor declares unpacked. |
-| `UNPACKED_NOT_ALLOWED` | field | A scalar wire type arrived for a field the descriptor declares packed and that must be packed under the strict D3B rule. |
 | `INVALID_UTF8` | field | A `STRING` payload is not valid UTF-8. |
 | `GROUP_UNSUPPORTED` | field | Wire type 3 or 4 observed; groups are refused. |
 | `DEPTH_EXCEEDED` | frame | Nesting deeper than 32. |
@@ -163,8 +162,10 @@ Wire compatibility follows protobuf, with D3B's strict packed rule (P2K D307):
 - VARINT encodes INT32/INT64/UINT32/UINT64/SINT32/SINT64/BOOL/ENUM.
 - I32 encodes FIXED32/SFIXED32/FLOAT; I64 encodes FIXED64/SFIXED64/DOUBLE.
 - LEN encodes STRING/BYTES/MESSAGE and packed repeated scalars.
-- Any packable repeated scalar may be packed. A field declared unpacked must be unpacked (D3B strict rule). A
-  non-packable kind (STRING, BYTES, MESSAGE) never accepts a packed value.
+- A repeated packable scalar may arrive packed or unpacked, whatever the descriptor's `packed` option says: protobuf
+  wire compatibility requires a parser to accept both, and D3B's P2K `SchemaPayload` does (`APackedPayloadMayBePackedOrUnpacked`).
+- A repeated packable scalar the descriptor declares unpacked must not arrive packed: that is `PACKED_NOT_ALLOWED`,
+  D3B's stricter fail-closed rule (P2K D307). A non-packable kind (STRING, BYTES, MESSAGE) never accepts a packed value.
 - Unknown fields are walked by their wire type, reported, and make the frame `SCHEMA_MISMATCH`.
 
 ### 2.8 Limits
