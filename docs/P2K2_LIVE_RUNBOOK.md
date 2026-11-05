@@ -14,12 +14,16 @@ run; the listed values are the implemented defaults when a key is omitted:
 | `Diagnostic:EnginePath` | `""` (empty) | Path to the `d3b-diagnostic` executable. This is not a usable path: when diagnostics are enabled, set it to the locally built engine or diagnostic setup degrades. |
 | `Diagnostic:SocketDirectory` | `Environment.SpecialFolder.LocalApplicationData/D3B/diagnostic` | Directory for the private Unix socket; an explicit value overrides this default. |
 | `Diagnostic:QueueCapacity` | `256` | Maximum queued frames; excess observations are dropped and counted. |
-| `Diagnostic:IncludeReadable` | `false` | Include already-readable frames; normally only unknown carried types are observed. |
+| `Diagnostic:QueueByteCapacity` | `16777216` (16 MiB) | Maximum queued payload bytes per session; excess observations are dropped and counted. |
+| `Diagnostic:IncludeReadable` | `false` | Include already-readable frames; normally only unknown carried types are observed. Readable frames can contain sensitive payloads and remain in memory/local socket only; enabling this logs a warning. |
 
 Enabling diagnostics creates a one-way, read-only observation path. It cannot delay, alter, or drop relayed bytes, and
-its output does not feed translation, the P2K latch, movement guards, send gates, or any send path. The queue is bounded;
-overflow is counted and makes coverage partial. A sidecar failure disables diagnostics for that session and also
-marks coverage partial. With diagnostics disabled, D3B starts no sidecar and creates no socket.
+its output does not feed translation, the P2K latch, movement guards, send gates, or any send path. The observer only
+forwards an exact game type URL whose carried token is a message name of the exported build schema, so an arbitrary
+peer-controlled suffix never reaches the engine or a report. A payload over 1 MiB is rejected by length before any
+copy. Queues are bounded by item count and bytes; overflow is counted and makes coverage partial. A sidecar failure
+disables diagnostics for that session and also marks coverage partial. With diagnostics disabled, D3B starts no
+sidecar and creates no socket.
 
 Raw payload bytes exist only in memory and in transit to the local engine. Neither engine nor resolver persists them;
 reports contain redacted structure such as message tokens, field numbers and wire-shape diagnostics, never payload

@@ -11,7 +11,9 @@ shape or a limit requires a new `protocolVersion`. The engine and the C# side re
   data, and never persists a frame.
 - Output is redacted: no payload bytes, no string content, no numeric field values, no account data.
 - Optional properties may be omitted when their value is null; a reader treats an absent optional property as null.
-  Required booleans and strings are always present.
+  A message missing a required property is rejected as a protocol violation; a typed property of the wrong JSON type is
+  rejected too.
+- Required booleans and strings are always present.
 - Ordering is deterministic: schema messages sorted by `name`, fields by `number`; analyses in input order.
 
 ## 2. Replay (Mode A)
@@ -49,12 +51,17 @@ stream open while it reads the result. The client must not send another line aft
 {"kind":"end"}
 ```
 
-- `index`: non-negative, strictly increasing, unique. The analysis echoes it.
+- `index`: non-negative, strictly increasing, unique, at most 9,223,372,036,854,775,807 (the C# model is signed
+  64-bit). The analysis echoes it.
 - `direction`: `"client"`, `"server"` or `"d3b"`.
-- `typeUrl`: the envelope `Any` type URL as observed, or `null` when the frame carries no `Any`.
-- `carriedType`: the build token from the type URL, or `null`.
+- `typeUrl`: the envelope `Any` type URL as observed, or `null` when the frame carries no `Any`; at most 256 bytes.
+- `carriedType`: the build token from the type URL, or `null`; when non-null, 1..128 bytes of `[A-Za-z0-9_.]`.
 - `payloadHex`: the `Any` value bytes, or empty when the frame carries none. Maximum 1,048,576 bytes after decoding.
 - `typeUrlOk` is computed by the engine: `typeUrl == "type.ankama.com/" + carriedType`, exact and case-sensitive.
+
+A replay input that violates the token, type URL, direction or index shape is `CONTRACT_INVALID`. The live observer
+only forwards a token that is a message name of the exported build schema, under the exact game type-URL prefix; an
+arbitrary peer-controlled suffix is never forwarded or reported.
 
 The schema fingerprint must be exactly 64 lowercase hex characters. `clientVersion` is opaque to the engine and is
 echoed in the summary.
@@ -64,7 +71,11 @@ echoed in the summary.
 1. One `hello`.
 2. One `analysis` per input frame, same order.
 3. One `summary`.
-4. `error` only instead of the above on exit 2 or 3.
+4. `error` instead of the above on exit 2 or 3.
+
+Because output is streamed, a contract violation discovered after some analyses have been written produces the
+`error` line after them and exits 2/3. The error line is terminal: no summary follows, and the client must stop
+reading and report the failure rather than treating the partial analyses as a complete run.
 
 ```json
 {"kind":"hello","protocolVersion":1,"engine":"d3b-diagnostic","engineVersion":"0.1.0","snsCommit":"c780035c9020058a772ac8a2eef09555acd5a173"}
@@ -83,6 +94,10 @@ echoed in the summary.
 {"kind":"summary","protocolVersion":1,"clientVersion":"3.7.13.17","schemaSha256":"<hex>",
  "frames":1,"statuses":{"VALID":1},"problems":{},"dropped":0,"coverage":"complete"}
 ```
+
+`summary.problems` counts the entries of each analysis's frame-level `problems` array only; a field-level problem is
+already mirrored there and is not counted a second time. `statuses` counts analyses by status. `coverage` is
+`complete` when no observation was dropped or lost, else `partial`.
 
 ### 2.4 Analysis object
 
@@ -286,7 +301,12 @@ closed. The engine processes frames in order and does not pipeline responses.
 
 ### 4.4 Client obligations (C#)
 
-- The observer only enqueues. The queue is bounded (256 frames by default), drop-newest, and counts drops.
+- The observer only enqueues. Both queues are bounded by item count (`Diagnostic:QueueCapacity`, 256 by default) and by
+  bytes (`Diagnostic:QueueByteCapacity`, 16 MiB by default); the drop-newest path counts every drop.
+- A payload larger than 1 MiB is rejected by length before any copy; the observer never allocates a copy of a
+  relay-accepted frame larger than the engine limit. Only an exact game type URL whose carried token is a message name
+  of the exported build schema is queued. Readable frames are queued only when `Diagnostic:IncludeReadable` is true;
+  that opt-in can carry sensitive payloads locally and is warned about, default false.
 - A dedicated pump sends and receives; no relay thread waits for the sidecar.
 - Connect timeout 2 s, handshake timeout 5 s, response timeout 10 s. A timeout or IO error disables the sidecar for
   the session, records the failure and the count of frames not analysed; the relay continues untouched.
@@ -333,9 +353,10 @@ document per run:
 - `CONFLICT`: at least one hard contradiction (field number/type/repetition/graph mismatch, direction contradiction,
   schema validity failure on the only observation, or sources naming different messages).
 - `VERIFIED`: no contradiction; every field and nested field matches the readable descriptor; exactly one readable
-  message matches unambiguously; the build is exact; at least one reproducible observation or synthetic fixture
-  validates; and at least two independent evidence sources exist, one of them the build's schema or readable
-  descriptor. An external reference from another build is never one of the two.
+  message matches unambiguously; the build is exact; at least one reproducible observation with `status == VALID` and
+  `typeUrlOk == true` (or a validated synthetic fixture) supports it; and at least two independent evidence sources
+  exist, one of them the build's schema or readable descriptor. An external reference from another build is never one
+  of the two. A `VALID` analysis whose `typeUrlOk` is false is not a valid observation.
 - `CANDIDATE`: structurally plausible but one or more of the above is missing or ambiguous.
 - `UNKNOWN`: insufficient evidence to name any readable message.
 
@@ -350,9 +371,12 @@ build they came from. A report never contains a raw payload or a numeric field v
 ### 5.3 Fixture proposal and promotion
 
 For a `VERIFIED` candidate the resolver may propose a synthetic fixture: the schema message name, an expected engine
-status (`VALID`), and the expected redacted field structure. It does not write a mapping. `PromotionGate` refuses any
-candidate that is not `VERIFIED`, has a contradiction, lacks the fixture RED/GREEN pair, fails `ContractAudit`, or lacks
-an explicit owner approval token. It never clears the P2K latch and never edits a production mapping.
+status (`VALID`), and the expected redacted field structure. The fixture payload is generated from zero/empty values
+only, and it is never serialized into a report: a report carries the schema message name, expected status and expected
+field numbers, never payload hex. The resolver does not write a mapping. `PromotionGate` refuses any candidate that is
+not `VERIFIED`, whose structural flags (`ExactShape`, `UniqueShape`, `HasValidObservation`) are not all true, whose
+evidence has no verified item, that has a contradiction, lacks the fixture RED/GREEN pair, fails `ContractAudit`, or
+lacks an explicit owner approval token. It never clears the P2K latch and never edits a production mapping.
 
 ## 6. Versioning
 

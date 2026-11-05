@@ -37,8 +37,9 @@ These invariants are testable and must not regress:
 - **Latch unchanged.** `GameSession` keeps `!IsRead && !IsUnderstood` and the 25-type P2K policy exactly as committed.
   Diagnostic output is not an input to that predicate.
 - **Disabled by default.** No process is started and no socket exists unless diagnostics are explicitly enabled.
-- **Bounded everything.** Frame size, schema size, nesting depth, client queue, IPC message, and response size are
-  bounded; overflow is reported, never silently treated as complete evidence.
+- **Bounded everything.** Frame size, schema size, nesting depth, client queues (items and bytes), IPC message, and
+  response size are bounded; overflow is reported, never silently treated as complete evidence. A payload above the
+  engine limit is rejected by length before any copy, on the relay thread.
 - **Redaction.** Reports contain field numbers, declared/observed wire types, lengths, counts and stable problem
   codes. They never contain payload bytes, string content, numeric values, tickets or account identifiers. Payload
   hex exists only in transit between D3B and the engine.
@@ -108,7 +109,7 @@ References `D3B.Protocol` and `D3B.Network`; `D3B.Bot` references it. No new NuG
 | `D3B.Diagnostic.Replay` | `ReplayCorpus`: reads a contract JSONL corpus into `DiagnosticFrame` records; `ReplayEngineClient`: one-shot stdin/stdout process. A `.d3bcap` is assembled into those records by the caller (`D3B.Bot.Inspection.CaptureFrames` or `scripts/diagnose.cs`), because capture framing lives in `D3B.Bot` and `D3B.Diagnostic` must not depend on it. |
 | `D3B.Diagnostic.Ipc` | `SidecarProcess`, `DiagnosticSidecarClient`, length-prefixed JSON framing, handshake, timeouts, sequence gaps, drop accounting. |
 | `D3B.Diagnostic.Resolution` | `ProtocolResolver`, evidence/contradiction model, classification rules, `PromotionGate`, fixture proposal. |
-| `D3B.Diagnostic.Observation` | `IDiagnosticSink`, bounded queue and drop counters; no dependency on `D3B.Bot`. |
+| `D3B.Diagnostic.Observation` | `IDiagnosticSink`, bounded queue by item count and byte budget, drop counters; no dependency on `D3B.Bot`. |
 
 `D3B.Bot/Network/DiagnosticObserver.cs` implements `IGameObserver` and forwards only frames the engine can use:
 unknown carried types (the P2K blockers) by default, with an option to include understood ones for replay tests. It
