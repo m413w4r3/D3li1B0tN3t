@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace D3B.Diagnostic.Replay;
 
 /// <summary>A redacted replay frame and its payload bytes.</summary>
@@ -18,6 +20,18 @@ public sealed record DiagnosticFrame
         if (payload.Length > 1_048_576)
         {
             throw new ArgumentException("The frame payload exceeds the protocol limit.", nameof(payload));
+        }
+
+        if (typeUrl is not null && Encoding.UTF8.GetByteCount(typeUrl) > 256)
+        {
+            throw new ArgumentException("The frame type URL exceeds the protocol limit.", nameof(typeUrl));
+        }
+
+        if (carriedType is not null
+            && (carriedType.Length is 0 or > 128
+                || !carriedType.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_')))
+        {
+            throw new ArgumentException("The frame carried type is invalid.", nameof(carriedType));
         }
 
         Index = index;

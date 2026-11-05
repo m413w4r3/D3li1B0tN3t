@@ -36,12 +36,15 @@ internal static class ReplayCommand
             var protocolSchema = DiagnoseIO.Stage("schema invalid", () => ProtocolSchema.Load(schemaPath));
             var versionValue = result.GetValue(version)!;
             var diagnosticSchema = DiagnoseIO.Stage("schema invalid", () => DiagnosticSchemaExporter.Export(versionValue, protocolSchema));
+            var buildTokens = diagnosticSchema.Messages.Select(message => message.Name).ToHashSet(StringComparer.Ordinal);
             var corpusFile = result.GetValue(corpus);
             var captureFile = result.GetValue(capture);
             if ((corpusFile is null) == (captureFile is null)) throw new InvalidDataException();
-            IReadOnlyList<DiagnosticFrame> frames = corpusFile is not null
-                ? DiagnoseIO.Stage("corpus invalid or oversized", () => ReadCorpus(corpusFile.FullName))
-                : DiagnoseIO.Stage("capture or mapping invalid", () => ReadCapture(captureFile!.FullName, schemaPath, protocolSchema, versionValue));
+            var frameRead = corpusFile is not null
+                ? DiagnoseIO.Stage("corpus invalid or oversized", () => ReadCorpus(corpusFile.FullName, buildTokens))
+                : DiagnoseIO.Stage("capture or mapping invalid", () => ReadCapture(captureFile!.FullName, schemaPath, protocolSchema, versionValue, buildTokens));
+            IReadOnlyList<DiagnosticFrame> frames = frameRead.Frames;
+            int skippedFrames = frameRead.Skipped;
             var engineFile = result.GetValue(engine)!;
             if (!engineFile.Exists) throw new DiagnoseIO.DiagnoseFailure("engine missing");
             var replay = await DiagnoseIO.StageAsync("engine failed", async () =>
@@ -56,6 +59,18 @@ internal static class ReplayCommand
                     return await ReplayEngineFallback.AnalyzeAsync(engineFile.FullName, ["replay"], diagnosticSchema, frames, cancellationToken);
                 }
             });
+            if (skippedFrames > 0)
+            {
+                replay = replay with
+                {
+                    Summary = replay.Summary with
+                    {
+                        Dropped = checked(replay.Summary.Dropped + skippedFrames),
+                        Coverage = "partial",
+                    },
+                };
+            }
+
             var json = SerializeReplay(replay);
             DiagnoseIO.Write(result.GetValue(output), json);
         }));
@@ -86,18 +101,20 @@ internal static class ReplayCommand
         return Encoding.UTF8.GetString(output.ToArray());
     }
 
-    private static List<DiagnosticFrame> ReadCorpus(string path)
+    private static (List<DiagnosticFrame> Frames, int Skipped) ReadCorpus(string path, IReadOnlySet<string> buildTokens)
     {
         var input = new FileInfo(path);
         if (!input.Exists || input.Length > MaximumCorpusCharacters) throw new InvalidDataException();
         var frames = new List<DiagnosticFrame>();
         long totalCharacters = 0;
+        var inputFrames = 0;
+        var skippedFrames = 0;
         foreach (string line in File.ReadLines(path))
         {
             totalCharacters += line.Length;
             if (line.Length > (DiagnosticProtocol.FramePayloadLimit * 2L) + 4096 || totalCharacters > MaximumCorpusCharacters) throw new InvalidDataException();
             if (string.IsNullOrWhiteSpace(line)) continue;
-            if (frames.Count >= MaximumFrames) throw new InvalidDataException();
+            if (++inputFrames > MaximumFrames) throw new InvalidDataException();
             using var document = JsonDocument.Parse(line);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) throw new InvalidDataException();
@@ -108,17 +125,27 @@ internal static class ReplayCommand
             if (direction is not ("client" or "server")) throw new InvalidDataException();
             var typeUrl = ReadOptionalString(root, "typeUrl");
             var carried = ReadOptionalString(root, "carriedType");
-            if (!ValidToken(carried) || (typeUrl is not null && (typeUrl.Length > 1024 || typeUrl.Any(char.IsControl)))) throw new InvalidDataException();
             var hex = root.GetProperty("payloadHex").GetString();
             if (hex is null) throw new InvalidDataException();
             if (hex.Length > DiagnosticProtocol.FramePayloadLimit * 2) throw new InvalidDataException();
             if (hex.Any(character => !(character is >= '0' and <= '9' or >= 'a' and <= 'f'))) throw new InvalidDataException();
+            if (!DiagnosticFrameEligibility.IsEligible(typeUrl, carried, buildTokens))
+            {
+                skippedFrames++;
+                continue;
+            }
+
             frames.Add(new DiagnosticFrame(frames.Count, direction, typeUrl, carried, Convert.FromHexString(hex)));
         }
-        return frames;
+        return (frames, skippedFrames);
     }
 
-    private static List<DiagnosticFrame> ReadCapture(string path, string schemaPath, ProtocolSchema schema, string version)
+    private static (List<DiagnosticFrame> Frames, int Skipped) ReadCapture(
+        string path,
+        string schemaPath,
+        ProtocolSchema schema,
+        string version,
+        IReadOnlySet<string> buildTokens)
     {
         var captureFile = new FileInfo(path);
         if (!captureFile.Exists || captureFile.Length > MaximumCaptureBytes) throw new InvalidDataException();
@@ -130,6 +157,7 @@ internal static class ReplayCommand
         var captured = CaptureFrames.Read(path, translation);
         if (captured.IsTruncated || captured.Frames.Count > MaximumFrames) throw new InvalidDataException();
         var result = new List<DiagnosticFrame>();
+        var skippedFrames = 0;
         foreach (var item in captured.Frames)
         {
             var decoded = item.Frame;
@@ -140,12 +168,23 @@ internal static class ReplayCommand
                 GameMessage.ContentOneofCase.Event => decoded.Envelope.Event.Content,
                 _ => null,
             };
-            if (content is null) continue;
+            if (content is null)
+            {
+                skippedFrames++;
+                continue;
+            }
+
             var direction = item.Source switch { FrameSource.Client => "client", FrameSource.Server => "server", _ => "d3b" };
-            if (content.Value.Length > DiagnosticProtocol.FramePayloadLimit || !ValidToken(decoded.CarriedType)) throw new InvalidDataException();
+            if (content.Value.Length > DiagnosticProtocol.FramePayloadLimit) throw new InvalidDataException();
+            if (!DiagnosticFrameEligibility.IsEligible(content.TypeUrl, decoded.CarriedType, buildTokens))
+            {
+                skippedFrames++;
+                continue;
+            }
+
             result.Add(new DiagnosticFrame(result.Count, direction, content.TypeUrl, decoded.CarriedType, content.Value.ToByteArray()));
         }
-        return result;
+        return (result, skippedFrames);
     }
 
     private static string? ReadOptionalString(JsonElement root, string name)
@@ -153,10 +192,5 @@ internal static class ReplayCommand
         if (!root.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
         if (value.ValueKind != JsonValueKind.String) throw new InvalidDataException();
         return value.GetString();
-    }
-
-    private static bool ValidToken(string? token)
-    {
-        return token is null || (token.Length is > 0 and <= 1024 && token.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-'));
     }
 }

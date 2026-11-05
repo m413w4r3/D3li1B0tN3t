@@ -24,6 +24,7 @@ public sealed class PromotionGateTests
         {
             case "NOT_VERIFIED":
                 candidate = candidate with { Classification = CandidateClassification.Candidate };
+                report = ReplaceCandidate(report, candidate);
                 break;
             case "CONTRADICTION":
                 candidate = candidate with
@@ -33,6 +34,7 @@ public sealed class PromotionGateTests
                         new ResolverContradiction { Code = ResolverContradictionCode.FieldTypeMismatch }
                     }
                 };
+                report = ReplaceCandidate(report, candidate);
                 break;
             case "BUILD_MISMATCH":
                 report = report with { SchemaSha256 = "different-schema" };
@@ -45,6 +47,7 @@ public sealed class PromotionGateTests
                 break;
             case "NO_FIXTURE":
                 candidate = candidate with { FixtureProposal = null };
+                report = ReplaceCandidate(report, candidate);
                 break;
             case "NO_AUDIT":
                 context = context with { ContractAuditFailures = null };
@@ -82,20 +85,68 @@ public sealed class PromotionGateTests
     }
 
     [Fact]
-    public void RefusesForgedVerifiedCandidateWithoutSupportingEvidence()
+    public void RefusesDetachedCandidateNotPresentInReport()
+    {
+        MappingCandidate candidate = CreateCandidate() with { Token = "other" };
+
+        PromotionDecision decision = PromotionGate.Evaluate(candidate, CreateReport(CreateCandidate()), CreateContext());
+
+        Assert.False(decision.Allowed);
+        Assert.Contains("NOT_VERIFIED", decision.RefusalCodes);
+    }
+
+    [Fact]
+    public void DoesNotTrustDetachedCandidateFlagsWhenReportCandidateIsUnverified()
+    {
+        MappingCandidate reportCandidate = CreateCandidate() with
+        {
+            Classification = CandidateClassification.Candidate,
+            ExactShape = false,
+            UniqueShape = false,
+            HasValidObservation = false
+        };
+        MappingCandidate detachedCandidate = CreateCandidate();
+
+        PromotionDecision decision = PromotionGate.Evaluate(detachedCandidate, CreateReport(reportCandidate), CreateContext());
+
+        Assert.False(decision.Allowed);
+        Assert.Contains("NOT_VERIFIED", decision.RefusalCodes);
+    }
+
+    [Fact]
+    public void RefusesEvidenceWithoutDistinctSchemaOrReadableSource()
     {
         MappingCandidate candidate = CreateCandidate() with
         {
-            ExactShape = false,
-            UniqueShape = false,
-            HasValidObservation = false,
-            Evidence = Array.Empty<CandidateEvidence>()
+            Evidence = new[]
+            {
+                new CandidateEvidence { Source = "reference", Verified = true },
+                new CandidateEvidence { Source = "prior_mapping", Verified = true }
+            }
         };
 
         PromotionDecision decision = PromotionGate.Evaluate(candidate, CreateReport(candidate), CreateContext());
 
         Assert.False(decision.Allowed);
         Assert.Contains("NOT_VERIFIED", decision.RefusalCodes);
+    }
+
+    [Fact]
+    public void AllowsReportCandidateWithDistinctVerifiedSchemaAndReadableEvidence()
+    {
+        MappingCandidate candidate = CreateCandidate() with
+        {
+            Evidence = new[]
+            {
+                new CandidateEvidence { Source = "schema", Verified = true },
+                new CandidateEvidence { Source = "readable", Verified = true }
+            }
+        };
+
+        PromotionDecision decision = PromotionGate.Evaluate(candidate, CreateReport(candidate), CreateContext());
+
+        Assert.True(decision.Allowed);
+        Assert.Empty(decision.RefusalCodes);
     }
 
     private static MappingCandidate CreateCandidate()
@@ -109,7 +160,11 @@ public sealed class PromotionGateTests
             ExactShape = true,
             UniqueShape = true,
             HasValidObservation = true,
-            Evidence = new[] { new CandidateEvidence { Source = "observation", Verified = true } },
+            Evidence = new[]
+            {
+                new CandidateEvidence { Source = "schema", Verified = true },
+                new CandidateEvidence { Source = "observation", Verified = true }
+            },
             ClientVersion = "3.7.13.17",
             SchemaSha256 = new string('a', 64),
             FixtureProposal = new SyntheticFixtureProposal
@@ -132,6 +187,11 @@ public sealed class PromotionGateTests
             Observations = new CandidateObservationSummary { Frames = 1, Coverage = "complete", Dropped = 0 },
             Candidates = new[] { candidate }
         };
+    }
+
+    private static CandidateReport ReplaceCandidate(CandidateReport report, MappingCandidate candidate)
+    {
+        return report with { Candidates = new[] { candidate } };
     }
 
     private static PromotionContext CreateContext()
