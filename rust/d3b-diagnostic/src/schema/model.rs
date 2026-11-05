@@ -250,6 +250,7 @@ fn required_bool(value: &Value, key: &str) -> Result<bool, &'static str> {
 
 fn optional_string(value: &Value, key: &str) -> Result<Option<String>, &'static str> {
     match value.get(key) {
+        None => Ok(None),
         Some(Value::Null) => Ok(None),
         Some(Value::String(value)) => Ok(Some(value.clone())),
         _ => Err("SCHEMA_INVALID"),

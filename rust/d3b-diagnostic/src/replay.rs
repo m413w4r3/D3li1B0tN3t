@@ -233,6 +233,7 @@ fn parse_frame(value: &Value) -> Result<FrameInput, ReplayError> {
 
 fn optional_input_string(value: &Value, key: &str) -> Result<Option<String>, ReplayError> {
     match value.get(key) {
+        None => Ok(None),
         Some(Value::Null) => Ok(None),
         Some(Value::String(value)) => Ok(Some(value.clone())),
         _ => Err(ReplayError::contract("CONTRACT_INVALID")),
