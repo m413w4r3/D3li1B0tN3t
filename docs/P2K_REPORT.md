@@ -181,6 +181,19 @@ Results on this branch:
 - `dotnet build D3B.slnx`: 0 warnings, 0 errors.
 - `dotnet format D3B.slnx --verify-no-changes`: clean.
 
+### P2K-2 audit follow-up (2026-11-05)
+
+The historical P2K result above remains 1,465 passed. This follow-up adds three tests (+3), bringing the serialized suite
+to **1,468 passed, 0 failed, 0 skipped**; production behavior is unchanged.
+
+- The unreadable unknown-type and listed-message fixtures now use a truncated varint on known field 1. The listed-message
+  extra-field case remains separate.
+- `SchemaPayloadTests` now verifies that an explicitly unpacked repeated field rejects packed input, truncated and
+  11-byte `int64` varints are refused, and a real proto2 group descriptor's StartGroup/EndGroup payload is refused.
+- `NonPositionMessagesTests.TheExactBuildAndSideSetIsPinned` asserts the exact client version literal `3.7.13.17`.
+
+The proto2 group descriptor was constructible with Google.Protobuf, so the test exercises the real group-field path.
+
 ## E. Independent review
 
 Two independent, read-only reviews were run on the current working tree: a Claude review and a GPT-6 Luna xhigh

@@ -187,8 +187,8 @@ public sealed class NonPositionTranslationTests
     {
         var (relay, session, connection) = Session(NonPositionMessages.ClientVersion, obfuscation => AddBoolMessage(obfuscation, "knb"));
 
-        // A field 2 tag with no value: the schema's parser refuses it.
-        connection.ServerRaw(Event("knb", 0x10));
+        // Field 1 is a varint; its continuation bit is set without a following byte.
+        connection.ServerRaw(Event("knb", 0x08, 0x80));
 
         Assert.True(session.IsMovementTranslationBlocked);
         await Assert.ThrowsAsync<RelayInjectionException>(() => session.SendAsync(

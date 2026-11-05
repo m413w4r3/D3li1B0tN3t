@@ -254,7 +254,7 @@ public sealed class ProtocolTranslationTests
     public void AnUnknownCarriedTypeWhosePayloadDoesNotParseIsNotSchemaValid()
     {
         var translation = Translate(obfuscation => obfuscation.AddSchemaMessage("unknown_current", (1, FieldDescriptorProto.Types.Type.Int64)));
-        var decoded = translation.DecodeGame(GameEventFrame(new MapCurrentEvent { MapId = 1 }, "unknown_current", extra: [0x12, 0x7F]));
+        var decoded = translation.DecodeGame(GameEventFrame(new MapCurrentEvent { MapId = 1 }, "unknown_current", extra: [0x08, 0x80]));
 
         Assert.Equal(TranslationProblemKind.UnknownCarriedType, decoded.ProblemKind);
         Assert.False(decoded.IsSchemaValid);

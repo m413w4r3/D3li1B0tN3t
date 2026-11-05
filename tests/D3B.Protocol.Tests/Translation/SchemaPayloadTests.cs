@@ -19,6 +19,11 @@ public sealed class SchemaPayloadTests
         });
         file.MessageType.Add(new DescriptorProto
         {
+            Name = "int64_scalar",
+            Field = { new FieldDescriptorProto { Name = "value", Number = 1, Type = FieldDescriptorProto.Types.Type.Int64, Label = FieldDescriptorProto.Types.Label.Optional } },
+        });
+        file.MessageType.Add(new DescriptorProto
+        {
             Name = "nested",
             Field = { new FieldDescriptorProto { Name = "inner", Number = 1, Type = FieldDescriptorProto.Types.Type.Message, TypeName = ".scalar", Label = FieldDescriptorProto.Types.Label.Optional } },
         });
@@ -26,6 +31,21 @@ public sealed class SchemaPayloadTests
         {
             Name = "packed",
             Field = { new FieldDescriptorProto { Name = "values", Number = 1, Type = FieldDescriptorProto.Types.Type.Int32, Label = FieldDescriptorProto.Types.Label.Repeated } },
+        });
+        file.MessageType.Add(new DescriptorProto
+        {
+            Name = "unpacked",
+            Field =
+            {
+                new FieldDescriptorProto
+                {
+                    Name = "values",
+                    Number = 1,
+                    Type = FieldDescriptorProto.Types.Type.Int32,
+                    Label = FieldDescriptorProto.Types.Label.Repeated,
+                    Options = new FieldOptions { Packed = false },
+                },
+            },
         });
         file.MessageType.Add(new DescriptorProto
         {
@@ -114,6 +134,41 @@ public sealed class SchemaPayloadTests
         Assert.True(IsValid("packed", 0x08, 0x01, 0x08, 0x02));
         Assert.True(IsValid("packed", 0x0A, 0x02, 0x08, 0x01));
         Assert.False(IsValid("packed", 0x0A, 0x02, 0x08));
+    }
+
+    [Fact]
+    public void APackedPayloadIsRefusedWhenTheFieldIsDeclaredUnpacked()
+    {
+        Assert.True(IsValid("unpacked", 0x08, 0x01, 0x08, 0x02));
+        Assert.False(IsValid("unpacked", 0x0A, 0x02, 0x01, 0x02));
+    }
+
+    [Fact]
+    public void AMalformedVarintIsRefused()
+    {
+        Assert.False(IsValid("int64_scalar", 0x08, 0x80));
+        Assert.False(IsValid("int64_scalar", 0x08, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80));
+    }
+
+    [Fact]
+    public void AGroupFieldIsRefused()
+    {
+        var file = new FileDescriptorProto { Name = "group_payload.proto", Syntax = "proto2" };
+        var message = new DescriptorProto { Name = "Container" };
+        message.NestedType.Add(new DescriptorProto { Name = "Item" });
+        message.Field.Add(new FieldDescriptorProto
+        {
+            Name = "item",
+            Number = 1,
+            Type = FieldDescriptorProto.Types.Type.Group,
+            TypeName = ".Container.Item",
+            Label = FieldDescriptorProto.Types.Label.Optional,
+        });
+        file.MessageType.Add(message);
+
+        var descriptor = FileDescriptor.BuildFromByteStrings([file.ToByteString()])[0].MessageTypes.Single();
+
+        Assert.False(SchemaPayload.IsValid(descriptor, [0x0B, 0x0C]));
     }
 
     [Fact]
