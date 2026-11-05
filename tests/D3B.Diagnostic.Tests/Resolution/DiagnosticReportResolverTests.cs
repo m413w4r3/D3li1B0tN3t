@@ -407,13 +407,78 @@ public sealed class DiagnosticReportResolverTests
     }
 
     [Fact]
+    public void DirectResolverRejectsOverflowingCompleteFrameAccounting()
+    {
+        const long maximum = long.MaxValue;
+        LoadedDiagnosticReport valid = LoadReport("lok");
+        DiagnosticReportType type = WithOccurrenceCount(Assert.Single(valid.Report.Types), maximum);
+        DiagnosticReportType otherType = type with { Token = "jot", Message = "jot" };
+        LoadedDiagnosticReport overflowing = valid with
+        {
+            Report = valid.Report with
+            {
+                Session = valid.Report.Session with { EnqueuedFrames = maximum, AnalyzedFrames = maximum },
+                Types = [type, otherType],
+            },
+        };
+        DiagnosticSchema schema = new()
+        {
+            ClientVersion = ResolverTestData.ClientVersion,
+            SchemaSha256 = ResolverTestData.SchemaHash,
+            Messages =
+            [
+                new DiagnosticMessage { Name = "lok", Fields = [ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)] },
+                new DiagnosticMessage { Name = "jot", Fields = [ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)] },
+            ],
+        };
+
+        DiagnosticReportResolutionException exception = Assert.Throws<DiagnosticReportResolutionException>(
+            () => Resolve(schema, overflowing, ResolverTestData.ReadableFile(
+                ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)))));
+
+        Assert.Equal("diagnostic report is invalid for the build schema", exception.Message);
+    }
+
+    [Fact]
+    public void PublicResolverRevalidatesEveryIdentityAndSourceField()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        LoadedDiagnosticReport valid = LoadReport("lok");
+        LoadedDiagnosticReport[] invalid =
+        [
+            valid with { Report = valid.Report with { ClientVersion = "/home/user" } },
+            valid with { Report = valid.Report with { Engine = valid.Report.Engine with { Engine = "/home/user" } } },
+            valid with { Report = valid.Report with { Engine = valid.Report.Engine with { Engine = "sns" } } },
+            valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = "user@host" } } },
+            valid with { Report = valid.Report with { Engine = valid.Report.Engine with { EngineVersion = "1.2" } } },
+            valid with { Report = valid.Report with { Engine = valid.Report.Engine with { SnsCommit = "user@host" } } },
+            valid with { Report = valid.Report with { Engine = valid.Report.Engine with { SnsCommit = "synthetic" } } },
+            valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { Producer = "/home/user" } } },
+            valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { ProducerVersion = "user@host" } } },
+            valid with { Report = valid.Report with { Provenance = valid.Report.Provenance with { Source = "local/path" } } },
+        ];
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        foreach (LoadedDiagnosticReport report in invalid)
+        {
+            DiagnosticReportResolutionException exception = Assert.Throws<DiagnosticReportResolutionException>(
+                () => Resolve(schema, report, readable));
+
+            Assert.Equal("diagnostic report is invalid for the build schema", exception.Message);
+            Assert.DoesNotContain("/home/user", exception.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("user@host", exception.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void UnsafeEngineIdentityValuesAreAbsentFromReportResolutionProvenance()
     {
         DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
         LoadedDiagnosticReport report = LoadReport("lok", engine: new DiagnosticEngineHello
         {
             ProtocolVersion = 1,
-            Engine = "sns",
+            Engine = "d3b-diagnostic",
             EngineVersion = "/private/engine",
             SnsCommit = "user@host",
         });
@@ -475,9 +540,9 @@ public sealed class DiagnosticReportResolverTests
 
         Assert.Equal(report.Sha256, first.Provenance!.ReportSha256);
         Assert.Equal(CandidateReportJson.Serialize(first), CandidateReportJson.Serialize(second));
-        Assert.Equal("sns", first.Provenance.Engine);
-        Assert.Equal("1.0", first.Provenance.EngineVersion);
-        Assert.Equal("abc123", first.Provenance.SnsCommit);
+        Assert.Equal("d3b-diagnostic", first.Provenance.Engine);
+        Assert.Equal("1.0.0", first.Provenance.EngineVersion);
+        Assert.Equal("abcdef0", first.Provenance.SnsCommit);
         Assert.Equal("live", first.Provenance.ObservationSource);
     }
 
@@ -521,7 +586,7 @@ public sealed class DiagnosticReportResolverTests
         {
             ClientVersion = ResolverTestData.ClientVersion,
             SchemaSha256 = ResolverTestData.SchemaHash,
-            Engine = engine ?? new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "sns", EngineVersion = "1.0", SnsCommit = "abc123" },
+            Engine = engine ?? new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "1.0.0", SnsCommit = "abcdef0" },
             ProducerVersion = "1.0.0",
         });
         DiagnosticStatus[] statusValues = (statuses ?? [DiagnosticStatus.Valid]).ToArray();
@@ -560,5 +625,22 @@ public sealed class DiagnosticReportResolverTests
 
         byte[] bytes = DiagnosticReportJson.SerializeToUtf8Bytes(report, new DiagnosticReportOptions());
         return DiagnosticReportJson.Load(bytes, new DiagnosticReportOptions());
+    }
+
+    private static DiagnosticReportType WithOccurrenceCount(DiagnosticReportType type, long count)
+    {
+        return type with
+        {
+            Occurrences = count,
+            Directions = type.Directions.Select(direction => direction with { Occurrences = count }).ToArray(),
+            Statuses = type.Statuses.Select(status => status with { Occurrences = count }).ToArray(),
+            TypeUrlOkOccurrences = count,
+            TypeUrlMismatchOccurrences = 0,
+            Variants = type.Variants.Select(variant => variant with
+            {
+                Occurrences = count,
+                Statuses = variant.Statuses.Select(status => status with { Occurrences = count }).ToArray(),
+            }).ToArray(),
+        };
     }
 }

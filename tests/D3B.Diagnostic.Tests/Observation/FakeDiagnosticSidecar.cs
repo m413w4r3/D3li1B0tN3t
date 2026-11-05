@@ -17,7 +17,7 @@ internal sealed class FakeDiagnosticSidecar : IDiagnosticSidecar
         ProtocolVersion = DiagnosticProtocol.ProtocolVersion,
         Engine = "d3b-diagnostic",
         EngineVersion = "0.1.0",
-        SnsCommit = "abc123",
+        SnsCommit = "abcdef0",
     };
 
     public Func<CancellationToken, Task<DiagnosticEngineHello>>? Start { get; set; }

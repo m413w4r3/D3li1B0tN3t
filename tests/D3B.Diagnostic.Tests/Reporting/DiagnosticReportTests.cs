@@ -182,12 +182,70 @@ public sealed class DiagnosticReportTests
     }
 
     [Fact]
+    public void LoaderRejectsCompleteCoverageWhenFrameOccurrenceSumOverflows()
+    {
+        const long maximum = long.MaxValue;
+        DiagnosticReport report = Build(
+            [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid), Analysis("pkg.Beta", "server", DiagnosticStatus.Valid)]);
+        DiagnosticReport overflowing = report with
+        {
+            Session = report.Session with { EnqueuedFrames = maximum, AnalyzedFrames = maximum },
+            Types = report.Types.Select(type => WithOccurrenceCount(type, maximum)).ToArray(),
+        };
+
+        Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(
+            DiagnosticReportJson.SerializeToUtf8Bytes(overflowing, new DiagnosticReportOptions())));
+    }
+
+    [Fact]
+    public void LoaderRejectsOverflowingPerTypeDirectionTotal()
+    {
+        const long maximum = long.MaxValue;
+        DiagnosticReport report = Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]);
+        DiagnosticReportType type = WithOccurrenceCount(Assert.Single(report.Types), maximum) with
+        {
+            Directions =
+            [
+                new DiagnosticReportDirectionCount { Direction = "server", Occurrences = maximum },
+                new DiagnosticReportDirectionCount { Direction = "client", Occurrences = 1 },
+            ],
+        };
+        DiagnosticReport overflowing = report with
+        {
+            Session = report.Session with { EnqueuedFrames = maximum, AnalyzedFrames = maximum },
+            Types = [type],
+        };
+
+        Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(
+            DiagnosticReportJson.SerializeToUtf8Bytes(overflowing, new DiagnosticReportOptions())));
+    }
+
+    [Fact]
     public void LoaderRejectsUnsafeEngineIdentitySeparators()
     {
         string valid = DiagnosticReportJson.Serialize(Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]), new DiagnosticReportOptions());
 
         AssertRejected(root => root["engine"]!["engineVersion"] = "/private/engine");
         AssertRejected(root => root["engine"]!["snsCommit"] = "user@host");
+
+        void AssertRejected(Action<JsonObject> mutate)
+        {
+            JsonObject candidate = JsonNode.Parse(valid)!.AsObject();
+            mutate(candidate);
+            Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(Encoding.UTF8.GetBytes(candidate.ToJsonString())));
+        }
+    }
+
+    [Fact]
+    public void LoaderRejectsEngineValuesOutsideFieldSpecificFormats()
+    {
+        string valid = DiagnosticReportJson.Serialize(Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]), new DiagnosticReportOptions());
+
+        AssertRejected(root => root["engine"]!["engine"] = "sns");
+        AssertRejected(root => root["engine"]!["engine"] = "192.168.0.1");
+        AssertRejected(root => root["engine"]!["engineVersion"] = "1.2");
+        AssertRejected(root => root["engine"]!["engineVersion"] = "192.168.0.1");
+        AssertRejected(root => root["engine"]!["snsCommit"] = "synthetic");
 
         void AssertRejected(Action<JsonObject> mutate)
         {
@@ -230,7 +288,7 @@ public sealed class DiagnosticReportTests
                 Engine = new DiagnosticEngineHello
                 {
                     ProtocolVersion = 1,
-                    Engine = "sns",
+                    Engine = "192.168.0.1",
                     EngineVersion = "/private/engine",
                     SnsCommit = "user@host",
                 },
@@ -239,6 +297,7 @@ public sealed class DiagnosticReportTests
         string json = DiagnosticReportJson.Serialize(report, new DiagnosticReportOptions());
 
         Assert.Equal(string.Empty, report.Engine.EngineVersion);
+        Assert.Equal(string.Empty, report.Engine.Engine);
         Assert.Equal(string.Empty, report.Engine.SnsCommit);
         Assert.DoesNotContain("/private/engine", json, StringComparison.Ordinal);
         Assert.DoesNotContain("user@host", json, StringComparison.Ordinal);
@@ -251,7 +310,7 @@ public sealed class DiagnosticReportTests
             [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
             context: Context() with
             {
-                Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "sns", EngineVersion = "1.2", SnsCommit = "abc123" },
+                Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "1.2.3", SnsCommit = "abcdef0" },
                 Producer = "D3B.Diagnostic",
                 ProducerVersion = "0.4.0",
                 IncludeReadable = true,
@@ -260,8 +319,9 @@ public sealed class DiagnosticReportTests
             },
             outcome: Outcome() with { State = DiagnosticReportSessionState.Completed, EnqueuedFrames = 1, AnalyzedFrames = 1 });
 
-        Assert.Equal("sns", report.Engine.Engine);
-        Assert.Equal("abc123", report.Engine.SnsCommit);
+        Assert.Equal("d3b-diagnostic", report.Engine.Engine);
+        Assert.Equal("1.2.3", report.Engine.EngineVersion);
+        Assert.Equal("abcdef0", report.Engine.SnsCommit);
         Assert.Equal("0.4.0", report.Provenance.ProducerVersion);
         Assert.True(report.Session.IncludeReadable);
         Assert.Equal(8, report.Session.QueueCapacity);
@@ -385,11 +445,28 @@ public sealed class DiagnosticReportTests
         {
             ClientVersion = "3.7.12",
             SchemaSha256 = new string('a', 64),
-            Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "sns", EngineVersion = "1.0", SnsCommit = "abc" },
+            Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "1.0.0", SnsCommit = "abcdef0" },
             ProducerVersion = "1.0.0",
             StartedAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture),
             QueueCapacity = 4,
             QueueByteCapacity = 4096,
+        };
+    }
+
+    private static DiagnosticReportType WithOccurrenceCount(DiagnosticReportType type, long count)
+    {
+        return type with
+        {
+            Occurrences = count,
+            Directions = type.Directions.Select(direction => direction with { Occurrences = count }).ToArray(),
+            Statuses = type.Statuses.Select(status => status with { Occurrences = count }).ToArray(),
+            TypeUrlOkOccurrences = count,
+            TypeUrlMismatchOccurrences = 0,
+            Variants = type.Variants.Select(variant => variant with
+            {
+                Occurrences = count,
+                Statuses = variant.Statuses.Select(status => status with { Occurrences = count }).ToArray(),
+            }).ToArray(),
         };
     }
 

@@ -47,7 +47,7 @@ public sealed class DiagnosticSessionReportTests
             ProtocolVersion = 1,
             Engine = "d3b-diagnostic",
             EngineVersion = "0.1.0",
-            SnsCommit = "abc123",
+            SnsCommit = "abcdef0",
         };
         var sidecar = SuccessfulSidecar(1);
         sidecar.Hello = hello;
@@ -236,7 +236,7 @@ public sealed class DiagnosticSessionReportTests
                 ProtocolVersion = 1,
                 Engine = "\u0001ENGINE-DETAIL-CANARY",
                 EngineVersion = "0.1.0",
-                SnsCommit = "abc123",
+                SnsCommit = "abcdef0",
             };
             var sidecar = SuccessfulSidecar(1);
             sidecar.Hello = hello;
@@ -481,7 +481,7 @@ public sealed class DiagnosticSessionReportTests
             {
                 ClientVersion = "3.7.13.17",
                 SchemaSha256 = ReplayTestData.SchemaHash,
-                Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "0.1.0", SnsCommit = "abc123" },
+                Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "0.1.0", SnsCommit = "abcdef0" },
                 StartedAtUtc = DateTimeOffset.UnixEpoch,
             });
         return aggregator.Build(new DiagnosticReportBuildOutcome
