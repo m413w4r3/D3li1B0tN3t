@@ -187,20 +187,20 @@ public sealed class DiagnosticReportAggregator
             Kind = "diagnostic-report",
             ReportVersion = 1,
             ProtocolVersion = DiagnosticProtocol.ProtocolVersion,
-            ClientVersion = SafeIdentity(_context.ClientVersion),
+            ClientVersion = SafeIdentity(_context.ClientVersion, DiagnosticReportJson.IsSafeIdentity),
             SchemaSha256 = GetSchemaHash(),
             Engine = new DiagnosticReportEngine
             {
                 ProtocolVersion = _context.Engine.ProtocolVersion,
-                Engine = SafeIdentity(_context.Engine.Engine),
-                EngineVersion = SafeIdentity(_context.Engine.EngineVersion),
-                SnsCommit = SafeIdentity(_context.Engine.SnsCommit),
+                Engine = SafeIdentity(_context.Engine.Engine, DiagnosticReportJson.IsSafeEngine),
+                EngineVersion = SafeIdentity(_context.Engine.EngineVersion, DiagnosticReportJson.IsSafeEngineVersion),
+                SnsCommit = SafeIdentity(_context.Engine.SnsCommit, DiagnosticReportJson.IsSafeSnsCommit),
             },
             Provenance = new DiagnosticReportProvenance
             {
                 Source = "live",
-                Producer = SafeIdentity(string.IsNullOrEmpty(_context.Producer) ? "D3B.Diagnostic" : _context.Producer),
-                ProducerVersion = SafeIdentity(_context.ProducerVersion),
+                Producer = SafeIdentity(string.IsNullOrEmpty(_context.Producer) ? "D3B.Diagnostic" : _context.Producer, DiagnosticReportJson.IsSafeIdentity),
+                ProducerVersion = SafeIdentity(_context.ProducerVersion, DiagnosticReportJson.IsSafeIdentity),
                 StartedAtUtc = _context.StartedAtUtc,
                 CompletedAtUtc = outcome.CompletedAtUtc,
             },
@@ -675,22 +675,9 @@ public sealed class DiagnosticReportAggregator
         return value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F');
     }
 
-    private static string SafeIdentity(string? value)
+    private static string SafeIdentity(string? value, Func<string?, bool> isSafe)
     {
-        if (value is null || value.Length > 128)
-        {
-            return string.Empty;
-        }
-
-        foreach (char character in value)
-        {
-            if (!(character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '+' or '-'))
-            {
-                return string.Empty;
-            }
-        }
-
-        return value;
+        return isSafe(value) ? value ?? string.Empty : string.Empty;
     }
 
     private static int DirectionOrder(string direction)

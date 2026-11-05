@@ -176,7 +176,7 @@ public sealed class DiagnosticReportResolverTests
         {
             ClientVersion = ResolverTestData.ClientVersion,
             SchemaSha256 = ResolverTestData.SchemaHash,
-            Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "sns", EngineVersion = "1.0", SnsCommit = "abc123" },
+            Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "1.0.0", SnsCommit = "abcdef0" },
             ProducerVersion = "1.0.0",
             StartedAtUtc = DateTimeOffset.UnixEpoch,
         });
