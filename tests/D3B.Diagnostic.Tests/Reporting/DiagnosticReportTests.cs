@@ -92,10 +92,10 @@ public sealed class DiagnosticReportTests
                 [Field(1, [DiagnosticWireType.Varint]), Field(2, [DiagnosticWireType.Len], nested: [Field(1, [DiagnosticWireType.Len])])],
                 [new DiagnosticProblem { Code = DiagnosticProblemCode.Malformed }, new DiagnosticProblem { Code = DiagnosticProblemCode.Truncated }]),
              Analysis("pkg.Alpha", "server", DiagnosticStatus.Malformed, [Field(3, [DiagnosticWireType.I32])]),
-             Analysis("pkg.Beta", "server", DiagnosticStatus.Valid)] , options);
+             Analysis("pkg.Beta", "server", DiagnosticStatus.Valid)], options);
 
         Assert.Equal(1, report.Truncation.TypesOmitted);
-        Assert.Equal(1, report.Truncation.FieldsOmitted);
+        Assert.Equal(2, report.Truncation.FieldsOmitted);
         Assert.True(report.Truncation.NestedFieldsOmitted > 0);
         Assert.True(report.Truncation.VariantsOmitted > 0);
         Assert.True(report.Truncation.ProblemsOmitted > 0);
@@ -159,7 +159,7 @@ public sealed class DiagnosticReportTests
                 Fields = [new DiagnosticFieldAnalysis { Number = 1, Name = "canaryField", Problems = [DiagnosticProblemCode.Malformed] }],
                 Problems = [new DiagnosticProblem { Code = DiagnosticProblemCode.Malformed, Detail = "canaryDetail" }],
             }],
-            context: Context() with { Engine = new DiagnosticEngineHello { Engine = "canary\nengine", EngineVersion = "safe?", SnsCommit = "raw" } });
+            context: Context() with { Engine = new DiagnosticEngineHello { Engine = "canary\nengine", EngineVersion = "safe?", SnsCommit = "raw\ncommit" } });
 
         string json = DiagnosticReportJson.Serialize(report, new DiagnosticReportOptions());
         Assert.Equal(1, report.Session.UnattributedAnalyses);
@@ -322,7 +322,7 @@ public sealed class DiagnosticReportTests
     {
         return new DiagnosticReportBuildOutcome
         {
-                State = DiagnosticReportSessionState.Completed,
+            State = DiagnosticReportSessionState.Completed,
             Coverage = "complete",
             CompletedAtUtc = DateTimeOffset.Parse("2026-01-01T00:01:00Z", System.Globalization.CultureInfo.InvariantCulture),
         };
