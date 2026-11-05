@@ -199,17 +199,24 @@ public static class DiagnosticReportJson
 
     internal static bool IsValidReportObject(DiagnosticReport report)
     {
+        return IsValidReportObject(report, _maximumValidationOptions);
+    }
+
+    internal static bool IsValidReportObject(DiagnosticReport report, DiagnosticReportOptions options)
+    {
         try
         {
-            if (report is null || report.Coverage is not ("complete" or "partial"))
+            if (report is null || options is null || report.Coverage is not ("complete" or "partial"))
             {
                 return false;
             }
 
+            options.Validate();
+
             // Resolver input may be downgraded to partial when complete-session accounting disagrees.
             DiagnosticReport candidate = report with { Coverage = "partial" };
             JsonElement root = JsonSerializer.SerializeToElement(candidate, DiagnosticReportJsonContext.Protocol.DiagnosticReport);
-            ValidateReport(candidate, root, _maximumValidationOptions);
+            ValidateReport(candidate, root, options);
             return true;
         }
         catch (Exception exception) when (exception is DiagnosticReportException

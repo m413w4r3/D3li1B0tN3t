@@ -118,6 +118,20 @@ public sealed class DiagnosticReportTests
     }
 
     [Fact]
+    public void DirectReportObjectValidationEnforcesConfiguredSerializedByteLimit()
+    {
+        DiagnosticMessage[] messages = Enumerable.Range(0, 2048)
+            .Select(index => Message($"pkg.Type{index:D4}"))
+            .ToArray();
+        DiagnosticReport report = Build(
+            [.. messages.Select(message => Analysis(message.Name, "server", DiagnosticStatus.Valid))],
+            schema: new DiagnosticSchema { Messages = messages });
+
+        Assert.True(DiagnosticReportJson.IsValidReportObject(report, new DiagnosticReportOptions { MaxBytes = 4 * 1024 * 1024 }));
+        Assert.False(DiagnosticReportJson.IsValidReportObject(report, new DiagnosticReportOptions { MaxBytes = 65_536 }));
+    }
+
+    [Fact]
     public void ReportJsonIsByteDeterministicAndRoundTrips()
     {
         DiagnosticReport report = Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid, [Field(1, [DiagnosticWireType.Varint], [1, 2])])]);
@@ -247,6 +261,7 @@ public sealed class DiagnosticReportTests
         AssertRejected(root => root["engine"]!["engineVersion"] = "192.168.0.1");
         AssertRejected(root => root["engine"]!["engineVersion"] = "1.2.3+192.0.2.1");
         AssertRejected(root => root["engine"]!["engineVersion"] = "1.2.3-192.0.2.1");
+        AssertRejected(root => root["engine"]!["engineVersion"] = "1.2.3-a192.0.2.1b");
         AssertRejected(root => root["engine"]!["snsCommit"] = "synthetic");
 
         void AssertRejected(Action<JsonObject> mutate)
@@ -266,6 +281,7 @@ public sealed class DiagnosticReportTests
         AssertRejected(root => root["provenance"]!["producerVersion"] = "192.0.2.1");
         AssertRejected(root => root["provenance"]!["producerVersion"] = "1.2.3+192.0.2.1");
         AssertRejected(root => root["provenance"]!["producerVersion"] = "1.2.3-192.0.2.1");
+        AssertRejected(root => root["provenance"]!["producerVersion"] = "1.2.3-a192.0.2.1b");
         AssertRejected(root => root["clientVersion"] = "3.7.preview");
 
         void AssertRejected(Action<JsonObject> mutate)
@@ -274,6 +290,29 @@ public sealed class DiagnosticReportTests
             mutate(candidate);
             Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(Encoding.UTF8.GetBytes(candidate.ToJsonString())));
         }
+    }
+
+    [Fact]
+    public void EngineVersionIsLimitedTo128CharactersAndOverlongValuesAreSanitized()
+    {
+        string accepted = $"1.2.3-{new string('a', 122)}";
+        string rejected = $"1.2.3-{new string('a', 123)}";
+        string valid = DiagnosticReportJson.Serialize(Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]), new DiagnosticReportOptions());
+
+        Assert.True(DiagnosticReportJson.IsSafeEngineVersion(accepted));
+        Assert.False(DiagnosticReportJson.IsSafeEngineVersion(rejected));
+
+        JsonObject candidate = JsonNode.Parse(valid)!.AsObject();
+        candidate["engine"]!["engineVersion"] = rejected;
+        Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(Encoding.UTF8.GetBytes(candidate.ToJsonString())));
+
+        DiagnosticReport report = Build(
+            [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
+            context: Context() with
+            {
+                Engine = Context().Engine with { EngineVersion = rejected },
+            });
+        Assert.Equal(string.Empty, report.Engine.EngineVersion);
     }
 
     [Fact]
@@ -342,6 +381,13 @@ public sealed class DiagnosticReportTests
                 {
                     Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "1.2.3-192.0.2.1", SnsCommit = "abcdef0" },
                     ProducerVersion = "1.2.3+192.0.2.1",
+                }),
+            Build(
+                [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
+                context: Context() with
+                {
+                    Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "d3b-diagnostic", EngineVersion = "1.2.3-a192.0.2.1b", SnsCommit = "abcdef0" },
+                    ProducerVersion = "1.2.3-a192.0.2.1b",
                 }),
         ];
 
