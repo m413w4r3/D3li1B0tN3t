@@ -7164,3 +7164,27 @@ Settled questions leave this table, and the decision that settles one says so.
   approved. No push, deployment, live client or external AI call.
 - **Status**: the diagnostic component is READY; automatic movement remains BLOCKED (D312). A remote push or PR needs
   a separate explicit owner GO.
+
+## D315: P2L reports are bounded evidence for passive diagnosis only
+
+*2026-11-05, P2L L4. Extends D309 and D311; offline synthetic integration and documentation only.*
+
+- **Report contract**: keep report v1 opt-in, bounded, redacted, and private. Aggregates retain counts, safe field/wire
+  shapes, variants, stable problems, contradictions, coverage, and build/engine/session provenance; payloads,
+  credentials, values, string contents, private messages, and free-form engine details are excluded. Output reduction
+  marks partial coverage.
+- **Resolver evidence**: require exact client-version and schema-SHA identity. Resolver observations are aggregate facts;
+  no per-frame index or evidence is fabricated. `.jpe` remains `CONFLICT`, `.kjt` remains an ambiguous `CANDIDATE`, and
+  `PromotionGate` refuses every candidate. The `diagnose resolve` CLI writes candidate JSON only and does not promote
+  mappings.
+- **Lifecycle**: report aggregation and writing remain off `GameSession.OnFrame`; the asynchronous observer/session pump
+  owns the report write. Synchronous and asynchronous observer disposal both flush within their shutdown bound. Report
+  settings remain disabled by default.
+- **Deployment and GO 1**: deployment is staged offline first. Touching the installed apphost or Ankama configuration
+  requires a separate owner GO, a complete apphost backup, and verified private modes/manifests. GO 1 is passive and
+  supervised only; no activity, profile, schedule, movement, harvest, mapping change during the session, GO 2, or push
+  is authorized here.
+- **Evidence and boundary**: the deterministic synthetic chain covers report aggregation, bounded JSON, atomic private
+  write/load, resolver classifications, and candidate refusal. The configured local Rust replay produces a synthetic
+  report with aggregate evidence. Neither is live-client acceptance; no live client, host, relay, Ankama connection,
+  external service, or installed file was used.
