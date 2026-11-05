@@ -55,7 +55,8 @@ internal static class ReplayCommand
                 }
                 catch (DiagnosticProtocolException exception) when (exception.Message == "The engine summary problem counts are inconsistent.")
                 {
-                    // Rust v1 counts frame problem codes while the C# validator also counts field problem codes.
+                    // Legacy fallback for an engine binary that still counted a field problem twice; current Rust and
+                    // C# both count analysis-level problems only.
                     return await ReplayEngineFallback.AnalyzeAsync(engineFile.FullName, ["replay"], diagnosticSchema, frames, cancellationToken);
                 }
             });

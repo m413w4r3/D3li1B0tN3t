@@ -7139,3 +7139,16 @@ Settled questions leave this table, and the decision that settles one says so.
   mapping requires an explicit owner token, an exact-build regeneration and a new session. No live diagnostic run is
   authorized by this decision.
 - **Boundary**: local commits only; no live client, relay, Ankama connection, movement, harvest or external AI call.
+
+## D313: Both final independent audits approve the diagnostic component
+
+*2026-11-05, P2K-2 final.*
+
+- **Decision**: the security/latch re-audit approved at `9542125` (one residual MINOR: the hex-encoded IPC frame
+  ceiling is about 0.5 MiB) and the contract/privacy/resolver re-audit approved at `f9e45ce`, closing the CLI
+  token-leak BLOCKER and the promotion-gate MAJOR. The only remaining NIT was a stale replay-fallback comment,
+  corrected after the audit. No blocker remains for the diagnostic component. The movement status is unchanged:
+  BLOCKED (D312).
+- **Boundary**: both audits were read-only source inspections; the parent ran the final serialized suite (1,614/1,614
+  with the real Rust binary), cargo tests (56/56), format, CLI smokes and the latch diff. No live client or external
+  AI call was made.

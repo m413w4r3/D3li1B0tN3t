@@ -173,6 +173,7 @@ Two read-only Luna xhigh audits ran on `1c6d4c3`: a security/latch audit and a c
 initially rejected real defects (pre-copy payload size and byte budget; peer-controlled token serialization; summary
 problem counting; empty-analysis acceptance; promotion-gate trust; output cap; `typeUrlOk`). The fixes are in
 `f307b0a`, `b6ffc6f`, `c2651e4` and the contract/doc commits `fd40b52`/`566ac55`. The security re-audit at `9542125`
-returned **APPROVE** with one residual MINOR (hex-encoded IPC frame ceiling). The contract re-audit's final verdict is
-recorded from `f9e45ce`; see the session record. The parent verified the final suite, cargo tests, format, CLI smokes
-and the unchanged latch diff.
+returned **APPROVE** with one residual MINOR (hex-encoded IPC frame ceiling). The contract/privacy re-audit at
+`f9e45ce` returned **APPROVE**, closing the CLI token-leak BLOCKER and the promotion-gate MAJOR; its only remaining
+NIT was a stale replay-fallback comment, corrected in the final docs commit. The audits were source-inspection only;
+the parent ran the final suite, cargo tests, format, CLI smokes and verified the unchanged latch diff.
