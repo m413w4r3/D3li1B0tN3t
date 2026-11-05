@@ -100,6 +100,32 @@ public sealed class ProtocolResolverTests
     }
 
     [Fact]
+    public void ConflictingBuildExactPinKeepsAlternativeExactShapeAsCandidate()
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("PinnedName",
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.String)),
+            ResolverTestData.Message("StatusEvent",
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        PriorMapping pin = new()
+        {
+            ReadableFullName = "d3b.game.PinnedName",
+            ObfuscatedToken = "lok",
+            Build = ResolverTestData.ClientVersion,
+            BuildExact = true
+        };
+
+        CandidateReport report = ResolverTestData.Resolver(readable, pins: [pin])
+            .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)),
+                [ResolverTestData.Analysis("lok", "server")], "server");
+        MappingCandidate alternative = Assert.Single(report.Candidates, candidate => candidate.Readable == "d3b.game.StatusEvent");
+
+        Assert.Equal(CandidateClassification.Candidate, alternative.Classification);
+        Assert.Contains(alternative.Uncertainties,
+            uncertainty => uncertainty.Code == ResolverUncertaintyCode.ConflictingPriorMapping);
+    }
+
+    [Fact]
     public void ExactShapeWithoutValidObservationIsOnlyCandidate()
     {
         FileDescriptor readable = ResolverTestData.ReadableFile(

@@ -1,4 +1,5 @@
 using D3B.Diagnostic.Contract;
+using D3B.Diagnostic.Reporting;
 
 namespace D3B.Diagnostic.Resolution;
 
@@ -17,6 +18,8 @@ public sealed record ResolverObservation
     public long TypeUrlOkOccurrences { get; init; }
     /// <summary>Aggregated schema problem counts.</summary>
     public IReadOnlyList<ResolverObservationProblem> Problems { get; init; } = Array.Empty<ResolverObservationProblem>();
+    /// <summary>Hard contradictions recorded by the diagnostic report.</summary>
+    public IReadOnlyList<ResolverObservationReportContradiction> ReportContradictions { get; init; } = Array.Empty<ResolverObservationReportContradiction>();
     /// <summary>Whether report or analysis detail was truncated.</summary>
     public bool Truncated { get; init; }
     /// <summary>Whether every occurrence is a complete valid observation.</summary>
@@ -35,6 +38,7 @@ public sealed record ResolverObservation
                 && statuses.Length == 1
                 && statuses[0].Status == DiagnosticStatus.Valid
                 && statuses[0].Occurrences == Occurrences
+                && !ReportContradictions.Any(contradiction => contradiction.Occurrences > 0 && IsHardReportContradiction(contradiction.Code))
                 && !Problems.Any(problem => IsHardProblem(problem.Code) || IsSoftProblem(problem.Code));
         }
     }
@@ -59,6 +63,13 @@ public sealed record ResolverObservation
         return code is DiagnosticProblemCode.DepthExceeded
             or DiagnosticProblemCode.Truncated
             or DiagnosticProblemCode.LimitExceeded;
+    }
+
+    private static bool IsHardReportContradiction(DiagnosticReportContradictionCode code)
+    {
+        return code is DiagnosticReportContradictionCode.TypeUrlMismatch
+            or DiagnosticReportContradictionCode.MessageMismatch
+            or DiagnosticReportContradictionCode.FieldDeclarationMismatch;
     }
 }
 
@@ -88,5 +99,14 @@ public sealed record ResolverObservationProblem
     /// <summary>Sanitized field path, when present.</summary>
     public string? FieldPath { get; init; }
     /// <summary>Number of occurrences with this problem.</summary>
+    public long Occurrences { get; init; }
+}
+
+/// <summary>Count of one hard contradiction recorded by a diagnostic report.</summary>
+public sealed record ResolverObservationReportContradiction
+{
+    /// <summary>Stable report contradiction code.</summary>
+    public DiagnosticReportContradictionCode Code { get; init; }
+    /// <summary>Number of report occurrences with this contradiction.</summary>
     public long Occurrences { get; init; }
 }

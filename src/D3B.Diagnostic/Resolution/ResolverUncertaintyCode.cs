@@ -29,5 +29,8 @@ public enum ResolverUncertaintyCode
     ObservationTruncated,
     /// <summary>Several known observation directions are present.</summary>
     [JsonStringEnumMemberName("AMBIGUOUS_OBSERVATION_DIRECTION")]
-    AmbiguousObservationDirection
+    AmbiguousObservationDirection,
+    /// <summary>A build-exact pin names a different readable message.</summary>
+    [JsonStringEnumMemberName("CONFLICTING_PRIOR_MAPPING")]
+    ConflictingPriorMapping
 }

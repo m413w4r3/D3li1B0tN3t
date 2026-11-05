@@ -7,6 +7,11 @@ namespace D3B.Diagnostic.Tests.Resolution;
 
 public sealed class DiagnosticReportResolverTests
 {
+    private static readonly string[] _incompleteReasons =
+    [
+        "unattributed-analysis", "summary-mismatch", "aggregation-failed", "dropped-frame", "session-incomplete"
+    ];
+
     [Fact]
     public void FullyValidExactBuildReportVerifiesWithAggregateEvidence()
     {
@@ -48,7 +53,11 @@ public sealed class DiagnosticReportResolverTests
         [
             LoadReport("lok", droppedFrames: 1),
             LoadReport("lok", report => report with { Coverage = "partial" }),
-            LoadReport("lok", report => report with { Truncation = report.Truncation with { OutputTruncated = true } }),
+            LoadReport("lok", report => report with
+            {
+                Coverage = "partial",
+                Truncation = report.Truncation with { OutputTruncated = true }
+            }),
         ];
 
         foreach (LoadedDiagnosticReport report in reports)
@@ -57,6 +66,37 @@ public sealed class DiagnosticReportResolverTests
 
             Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
             Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.PartialObservation);
+        }
+    }
+
+    [Fact]
+    public void UnattributedAnalysesAndIncompleteReasonsForcePartialEffectiveCoverage()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        LoadedDiagnosticReport complete = LoadReport("lok");
+        LoadedDiagnosticReport[] reports =
+        [
+            complete with { Report = complete.Report with { Session = complete.Report.Session with { UnattributedAnalyses = 1 } } },
+            complete with { Report = complete.Report with { Session = complete.Report.Session with { DroppedFrames = 1 } } },
+            .. _incompleteReasons.Select(reason => complete with
+                {
+                    Report = complete.Report with
+                    {
+                        Truncation = complete.Report.Truncation with { Reasons = [reason] }
+                    }
+                })
+        ];
+
+        foreach (LoadedDiagnosticReport report in reports)
+        {
+            CandidateReport resolved = Resolve(schema, report, readable);
+            MappingCandidate candidate = Assert.Single(resolved.Candidates);
+
+            Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+            Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.PartialObservation);
+            Assert.Equal("partial", resolved.Provenance!.ObservationCoverage);
         }
     }
 
@@ -123,6 +163,54 @@ public sealed class DiagnosticReportResolverTests
 
         Assert.Equal(CandidateClassification.Conflict, candidate.Classification);
         Assert.Contains(candidate.Contradictions, contradiction => contradiction.Code == ResolverContradictionCode.ObservationTypeUrlMismatch);
+        ResolverContradiction reportContradiction = Assert.Single(candidate.Contradictions,
+            contradiction => contradiction.Code == ResolverContradictionCode.ObservationReportContradiction);
+        Assert.Contains("TYPE_URL_MISMATCH", reportContradiction.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MessageMismatchInACompleteValidReportForcesConflict()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        var aggregator = new DiagnosticReportAggregator(schema, new DiagnosticReportOptions(), new DiagnosticReportBuildContext
+        {
+            ClientVersion = ResolverTestData.ClientVersion,
+            SchemaSha256 = ResolverTestData.SchemaHash,
+            Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "sns", EngineVersion = "1.0", SnsCommit = "abc123" },
+            ProducerVersion = "1.0.0",
+            StartedAtUtc = DateTimeOffset.UnixEpoch,
+        });
+        aggregator.Observe(new DiagnosticAnalysis
+        {
+            CarriedType = "lok",
+            Message = "outside.schema.UnrelatedMessage",
+            Direction = "server",
+            Status = DiagnosticStatus.Valid,
+            TypeUrlOk = true,
+            Fields = [new DiagnosticFieldAnalysis { Number = 1, Name = "obfuscated", DeclaredKind = DiagnosticFieldKind.SignedInteger64 }],
+        });
+        DiagnosticReport report = aggregator.Build(new DiagnosticReportBuildOutcome
+        {
+            State = DiagnosticReportSessionState.Completed,
+            Coverage = "complete",
+            EnqueuedFrames = 1,
+            AnalyzedFrames = 1,
+            CompletedAtUtc = DateTimeOffset.UnixEpoch.AddMinutes(1),
+        });
+        LoadedDiagnosticReport loaded = DiagnosticReportJson.Load(DiagnosticReportJson.SerializeToUtf8Bytes(report, new DiagnosticReportOptions()));
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        MappingCandidate candidate = Assert.Single(Resolve(schema, loaded, readable).Candidates);
+
+        Assert.Equal("complete", loaded.Report.Coverage);
+        Assert.Contains(Assert.Single(loaded.Report.Types).Contradictions,
+            contradiction => contradiction.Code == DiagnosticReportContradictionCode.MessageMismatch);
+        Assert.Equal(CandidateClassification.Conflict, candidate.Classification);
+        ResolverContradiction resolverContradiction = Assert.Single(candidate.Contradictions,
+            contradiction => contradiction.Code == ResolverContradictionCode.ObservationReportContradiction);
+        Assert.Contains("MESSAGE_MISMATCH", resolverContradiction.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("outside.schema.UnrelatedMessage", resolverContradiction.Detail, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -234,7 +322,7 @@ public sealed class DiagnosticReportResolverTests
     }
 
     [Fact]
-    public void FieldDeclarationMismatchTruncatesObservation()
+    public void FieldDeclarationMismatchIsAReportContradiction()
     {
         DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
         LoadedDiagnosticReport report = LoadReport("lok", value => value with
@@ -255,10 +343,92 @@ public sealed class DiagnosticReportResolverTests
         CandidateReport resolved = Resolve(schema, report, readable);
         MappingCandidate candidate = Assert.Single(resolved.Candidates);
 
+        Assert.Equal(CandidateClassification.Conflict, candidate.Classification);
+        ResolverContradiction contradiction = Assert.Single(candidate.Contradictions,
+            item => item.Code == ResolverContradictionCode.ObservationReportContradiction);
+        Assert.Contains("FIELD_DECLARATION_MISMATCH", contradiction.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.ObservationTruncated);
+        Assert.Equal("complete", resolved.Provenance!.ObservationCoverage);
+        Assert.False(resolved.Provenance.ReportTruncated);
+    }
+
+    [Fact]
+    public void DetailTruncatedContradictionMakesCoveragePartial()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        LoadedDiagnosticReport report = LoadReport("lok", value => value with
+        {
+            Coverage = "partial",
+            Truncation = value.Truncation with { Reasons = ["detail-truncated"] },
+            Types = value.Types.Select(type => type with
+            {
+                Contradictions = [new DiagnosticReportContradiction
+                {
+                    Code = DiagnosticReportContradictionCode.DetailTruncated,
+                    Detail = "DETAIL_TRUNCATED count=1",
+                    Occurrences = 1
+                }]
+            }).ToArray()
+        });
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        CandidateReport resolved = Resolve(schema, report, readable);
+        MappingCandidate candidate = Assert.Single(resolved.Candidates);
+
         Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
         Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.ObservationTruncated);
         Assert.Equal("partial", resolved.Provenance!.ObservationCoverage);
         Assert.True(resolved.Provenance.ReportTruncated);
+    }
+
+    [Fact]
+    public void ConflictingBuildExactPinPreventsAlternativeExactShapeFromVerifying()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        LoadedDiagnosticReport report = LoadReport("lok");
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("PinnedName", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.String)),
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        PriorMapping pin = new()
+        {
+            ObfuscatedToken = "lok",
+            ReadableFullName = "d3b.game.PinnedName",
+            Build = ResolverTestData.ClientVersion,
+            BuildExact = true,
+        };
+
+        CandidateReport resolved = Resolve(schema, report, readable, pins: [pin]);
+        MappingCandidate alternative = Assert.Single(resolved.Candidates, candidate => candidate.Readable == "d3b.game.StatusMessage");
+
+        Assert.Equal(CandidateClassification.Candidate, alternative.Classification);
+        Assert.Contains(alternative.Uncertainties,
+            uncertainty => uncertainty.Code == ResolverUncertaintyCode.ConflictingPriorMapping);
+    }
+
+    [Fact]
+    public void UnsafeEngineIdentityValuesAreAbsentFromReportResolutionProvenance()
+    {
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        LoadedDiagnosticReport report = LoadReport("lok", engine: new DiagnosticEngineHello
+        {
+            ProtocolVersion = 1,
+            Engine = "sns",
+            EngineVersion = "/private/engine",
+            SnsCommit = "user@host",
+        });
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusMessage", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        CandidateReport resolved = Resolve(schema, report, readable);
+        string json = CandidateReportJson.Serialize(resolved);
+
+        Assert.Equal(string.Empty, report.Report.Engine.EngineVersion);
+        Assert.Equal(string.Empty, report.Report.Engine.SnsCommit);
+        Assert.Equal(string.Empty, resolved.Provenance!.EngineVersion);
+        Assert.Equal(string.Empty, resolved.Provenance.SnsCommit);
+        Assert.DoesNotContain("/private/engine", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("user@host", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -342,7 +512,8 @@ public sealed class DiagnosticReportResolverTests
         IReadOnlyList<DiagnosticProblemCode>? problems = null,
         bool typeUrlOk = true,
         long droppedFrames = 0,
-        IReadOnlyList<string>? directions = null)
+        IReadOnlyList<string>? directions = null,
+        DiagnosticEngineHello? engine = null)
     {
         DiagnosticField[] fields = [ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)];
         DiagnosticSchema schema = ResolverTestData.Schema(token, fields);
@@ -350,7 +521,7 @@ public sealed class DiagnosticReportResolverTests
         {
             ClientVersion = ResolverTestData.ClientVersion,
             SchemaSha256 = ResolverTestData.SchemaHash,
-            Engine = new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "sns", EngineVersion = "1.0", SnsCommit = "abc123" },
+            Engine = engine ?? new DiagnosticEngineHello { ProtocolVersion = 1, Engine = "sns", EngineVersion = "1.0", SnsCommit = "abc123" },
             ProducerVersion = "1.0.0",
         });
         DiagnosticStatus[] statusValues = (statuses ?? [DiagnosticStatus.Valid]).ToArray();

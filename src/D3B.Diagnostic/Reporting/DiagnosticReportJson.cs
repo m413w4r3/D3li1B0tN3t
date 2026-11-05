@@ -681,6 +681,44 @@ public static class DiagnosticReportJson
                 throw new DiagnosticReportException(InvalidReportMessage);
             }
         }
+
+        if (HasInconsistentCompleteCoverage(report))
+        {
+            throw new DiagnosticReportException(InvalidReportMessage);
+        }
+    }
+
+    private static bool HasInconsistentCompleteCoverage(DiagnosticReport report)
+    {
+        if (report.Coverage != "complete")
+        {
+            return false;
+        }
+
+        DiagnosticReportSession session = report.Session;
+        DiagnosticReportTruncation truncation = report.Truncation;
+        long accountedAnalyses = session.UnattributedAnalyses;
+        foreach (DiagnosticReportType type in report.Types)
+        {
+            accountedAnalyses = SaturatingAdd(accountedAnalyses, type.Occurrences);
+        }
+
+        return accountedAnalyses != session.AnalyzedFrames
+            || session.State != DiagnosticReportSessionState.Completed
+            || session.ErrorCode is not null
+            || session.EnqueuedFrames != session.AnalyzedFrames
+            || session.DroppedFrames != 0
+            || session.UnattributedAnalyses != 0
+            || truncation.OutputTruncated
+            || truncation.TypesOmitted != 0
+            || truncation.FieldsOmitted != 0
+            || truncation.NestedFieldsOmitted != 0
+            || truncation.VariantsOmitted != 0
+            || truncation.ProblemsOmitted != 0
+            || truncation.ShapeValuesOmitted != 0
+            || truncation.Reasons.Count > 0
+            || report.Types.Any(type => type.DetailTruncated
+                || type.Contradictions.Any(contradiction => contradiction.Code == DiagnosticReportContradictionCode.DetailTruncated));
     }
 
     private static void ValidateEngine(DiagnosticReportEngine engine, JsonElement element)
@@ -740,6 +778,7 @@ public static class DiagnosticReportJson
     {
         "type-limit", "field-limit", "nested-limit", "variant-limit", "problem-limit", "shape-limit",
         "unattributed-analysis", "detail-truncated", "output-size", "session-incomplete", "dropped-frame",
+        "summary-mismatch", "aggregation-failed",
     };
 
     private static void ValidateType(DiagnosticReportType type, JsonElement element, DiagnosticReportOptions options, DiagnosticReportTruncation truncation)
@@ -865,7 +904,9 @@ public static class DiagnosticReportJson
             variantTotal = SaturatingAdd(variantTotal, variant.Occurrences);
         }
 
-        if (variantTotal > type.Occurrences || (truncation.VariantsOmitted == 0 && variantTotal != type.Occurrences))
+        bool aggregationFailed = truncation.Reasons.Contains("aggregation-failed", StringComparer.Ordinal);
+        if (variantTotal > type.Occurrences
+            || (!aggregationFailed && truncation.VariantsOmitted == 0 && variantTotal != type.Occurrences))
         {
             throw new DiagnosticReportException(InvalidReportMessage);
         }
@@ -987,7 +1028,7 @@ public static class DiagnosticReportJson
 
     private static bool IsSafeIdentity(string? value)
     {
-        return value is not null && value.Length <= 128 && value.All(character => character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or ' ' or '.' or '_' or '+' or '/' or ':' or '(' or ')' or '-');
+        return value is not null && value.Length <= 128 && value.All(character => character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '+' or '-');
     }
 
     private static bool IsSafeToken(string? value)

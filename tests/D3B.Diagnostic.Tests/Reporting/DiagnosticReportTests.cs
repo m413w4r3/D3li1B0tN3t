@@ -147,6 +147,57 @@ public sealed class DiagnosticReportTests
     }
 
     [Fact]
+    public void LoaderRejectsCompleteCoverageWithIncompleteSessionAccounting()
+    {
+        string valid = DiagnosticReportJson.Serialize(Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]), new DiagnosticReportOptions());
+
+        AssertRejected(root => root["session"]!["unattributedAnalyses"] = 1);
+        AssertRejected(root => root["session"]!["droppedFrames"] = 1);
+        AssertRejected(root => root["session"]!["errorCode"] = "IO_ERROR");
+        AssertRejected(root => root["session"]!["state"] = "FAILED");
+        AssertRejected(root => root["truncation"]!["outputTruncated"] = true);
+        AssertRejected(root => root["truncation"]!["typesOmitted"] = 1);
+        AssertRejected(root => root["truncation"]!["reasons"]!.AsArray().Add("session-incomplete"));
+
+        void AssertRejected(Action<JsonObject> mutate)
+        {
+            JsonObject candidate = JsonNode.Parse(valid)!.AsObject();
+            mutate(candidate);
+            Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(Encoding.UTF8.GetBytes(candidate.ToJsonString())));
+        }
+    }
+
+    [Fact]
+    public void LoaderRejectsCompleteCoverageWhenTypedOccurrencesExceedAnalyzedFrames()
+    {
+        string valid = DiagnosticReportJson.Serialize(
+            Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid), Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]),
+            new DiagnosticReportOptions());
+        JsonObject candidate = JsonNode.Parse(valid)!.AsObject();
+        candidate["session"]!["enqueuedFrames"] = 1;
+        candidate["session"]!["analyzedFrames"] = 1;
+
+        Assert.Equal(2, candidate["types"]![0]!["occurrences"]!.GetValue<int>());
+        Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(Encoding.UTF8.GetBytes(candidate.ToJsonString())));
+    }
+
+    [Fact]
+    public void LoaderRejectsUnsafeEngineIdentitySeparators()
+    {
+        string valid = DiagnosticReportJson.Serialize(Build([Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)]), new DiagnosticReportOptions());
+
+        AssertRejected(root => root["engine"]!["engineVersion"] = "/private/engine");
+        AssertRejected(root => root["engine"]!["snsCommit"] = "user@host");
+
+        void AssertRejected(Action<JsonObject> mutate)
+        {
+            JsonObject candidate = JsonNode.Parse(valid)!.AsObject();
+            mutate(candidate);
+            Assert.Throws<DiagnosticReportException>(() => DiagnosticReportJson.Load(Encoding.UTF8.GetBytes(candidate.ToJsonString())));
+        }
+    }
+
+    [Fact]
     public void UnattributedAndUnsafeEngineStringsNeverReachTheReport()
     {
         DiagnosticReport report = Build(
@@ -167,6 +218,30 @@ public sealed class DiagnosticReportTests
         Assert.DoesNotContain("canary", json, StringComparison.Ordinal);
         Assert.DoesNotContain("safe?", json, StringComparison.Ordinal);
         Assert.DoesNotContain("raw", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnsafeEngineIdentitySeparatorsAreRemovedFromTheReport()
+    {
+        DiagnosticReport report = Build(
+            [Analysis("pkg.Alpha", "server", DiagnosticStatus.Valid)],
+            context: Context() with
+            {
+                Engine = new DiagnosticEngineHello
+                {
+                    ProtocolVersion = 1,
+                    Engine = "sns",
+                    EngineVersion = "/private/engine",
+                    SnsCommit = "user@host",
+                },
+            });
+
+        string json = DiagnosticReportJson.Serialize(report, new DiagnosticReportOptions());
+
+        Assert.Equal(string.Empty, report.Engine.EngineVersion);
+        Assert.Equal(string.Empty, report.Engine.SnsCommit);
+        Assert.DoesNotContain("/private/engine", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("user@host", json, StringComparison.Ordinal);
     }
 
     [Fact]

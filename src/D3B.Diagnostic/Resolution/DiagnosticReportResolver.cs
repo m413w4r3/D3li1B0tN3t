@@ -68,7 +68,8 @@ public static class DiagnosticReportResolver
         string effectiveCoverage = source.Coverage;
         if (source.Session.State != DiagnosticReportSessionState.Completed
             || source.Session.ErrorCode is not null
-            || truncated)
+            || truncated
+            || HasIncompleteCoverage(source))
         {
             effectiveCoverage = "partial";
         }
@@ -94,9 +95,16 @@ public static class DiagnosticReportResolver
                 FieldPath = problem.FieldPath,
                 Occurrences = problem.Occurrences
             }).ToArray(),
+            ReportContradictions = type.Contradictions
+                .Where(contradiction => IsHardReportContradiction(contradiction.Code))
+                .Select(contradiction => new ResolverObservationReportContradiction
+                {
+                    Code = contradiction.Code,
+                    Occurrences = contradiction.Occurrences
+                }).ToArray(),
             Truncated = truncated
                 || type.DetailTruncated
-                || type.Contradictions.Any(contradiction => contradiction.Code == DiagnosticReportContradictionCode.FieldDeclarationMismatch)
+                || type.Contradictions.Any(contradiction => contradiction.Code == DiagnosticReportContradictionCode.DetailTruncated)
         }).ToArray();
 
         CandidateObservationSummary summary = new()
@@ -183,7 +191,22 @@ public static class DiagnosticReportResolver
             || truncation.Reasons.Any(reason => reason is "type-limit" or "field-limit" or "nested-limit" or "variant-limit"
                 or "problem-limit" or "shape-limit" or "detail-truncated" or "output-size")
             || report.Types.Any(type => type.DetailTruncated
-                || type.Contradictions.Any(contradiction => contradiction.Code == DiagnosticReportContradictionCode.FieldDeclarationMismatch));
+                || type.Contradictions.Any(contradiction => contradiction.Code == DiagnosticReportContradictionCode.DetailTruncated));
+    }
+
+    private static bool HasIncompleteCoverage(DiagnosticReport report)
+    {
+        return report.Session.UnattributedAnalyses > 0
+            || report.Session.DroppedFrames > 0
+            || report.Truncation.Reasons.Any(reason => reason is "unattributed-analysis" or "summary-mismatch"
+                or "aggregation-failed" or "dropped-frame" or "session-incomplete");
+    }
+
+    private static bool IsHardReportContradiction(DiagnosticReportContradictionCode code)
+    {
+        return code is DiagnosticReportContradictionCode.TypeUrlMismatch
+            or DiagnosticReportContradictionCode.MessageMismatch
+            or DiagnosticReportContradictionCode.FieldDeclarationMismatch;
     }
 
     private static bool IsSha256(string? value)
