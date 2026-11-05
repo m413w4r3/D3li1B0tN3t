@@ -3,7 +3,7 @@ use std::path::Path;
 
 use d3b_diagnostic::error::ReplayError;
 use d3b_diagnostic::ipc::serve;
-use d3b_diagnostic::replay::{replay, write_error, write_output};
+use d3b_diagnostic::replay::{replay, write_error};
 
 fn main() {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
@@ -26,18 +26,19 @@ fn main() {
 
     let stdin = io::stdin();
     let mut input = stdin.lock();
-    match replay(&mut input, pretty) {
+    let result = {
+        let stdout = io::stdout();
+        let mut out = stdout.lock();
+        replay(&mut input, &mut out, pretty)
+    };
+    match result {
         Ok(output) => {
-            let stdout = io::stdout();
-            let mut out = stdout.lock();
-            if write_output(&mut out, &output).is_err() {
-                eprintln!("code=INTERNAL_ERROR");
-                std::process::exit(3);
-            }
             let _ = writeln!(io::stderr().lock(), "{}", output.stderr_summary);
         }
         Err(error) => {
             let exit_code = error.exit_code();
+            // The client may be waiting for the response to an earlier line, so it needs an error
+            // response to release that read even when the contract fails after streaming began.
             report_error(error, pretty);
             std::process::exit(exit_code);
         }

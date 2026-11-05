@@ -14,7 +14,6 @@ const MAX_ANALYSIS_OUTPUT: usize = 1_048_576;
 
 #[derive(Debug)]
 pub struct ReplayOutput {
-    pub lines: Vec<Vec<u8>>,
     pub stderr_summary: String,
 }
 
@@ -31,7 +30,11 @@ pub(crate) struct FrameInput {
     pub(crate) payload_hex: String,
 }
 
-pub fn replay<R: BufRead>(reader: &mut R, pretty: bool) -> Result<ReplayOutput, ReplayError> {
+pub fn replay<R: BufRead, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    pretty: bool,
+) -> Result<ReplayOutput, ReplayError> {
     let first = read_json_line(reader)?.ok_or_else(|| ReplayError::contract("CONTRACT_INVALID"))?;
     require_kind(&first, "hello")?;
     let hello = parse_hello(&first)?;
@@ -41,9 +44,8 @@ pub fn replay<R: BufRead>(reader: &mut R, pretty: bool) -> Result<ReplayOutput, 
     require_kind(&schema_line, "schema")?;
     let schema = Schema::parse(&schema_line).map_err(ReplayError::contract)?;
 
-    let mut output_lines = Vec::<Vec<u8>>::new();
     let mut summary = Summary::default();
-    output_lines.push(serialize_value(
+    let hello_line = serialize_value(
         &json!({
             "kind": "hello",
             "protocolVersion": PROTOCOL_VERSION,
@@ -52,7 +54,8 @@ pub fn replay<R: BufRead>(reader: &mut R, pretty: bool) -> Result<ReplayOutput, 
             "snsCommit": SNS_COMMIT,
         }),
         pretty,
-    )?);
+    )?;
+    write_line(writer, &hello_line)?;
 
     let mut previous_index = None;
     let mut ended = false;
@@ -72,7 +75,6 @@ pub fn replay<R: BufRead>(reader: &mut R, pretty: bool) -> Result<ReplayOutput, 
                 }
                 previous_index = Some(frame.index);
                 let (serialized, value) = analyze_frame(&schema, &frame, "index", pretty)?;
-                output_lines.push(serialized);
                 let status = value
                     .get("status")
                     .and_then(Value::as_str)
@@ -82,6 +84,7 @@ pub fn replay<R: BufRead>(reader: &mut R, pretty: bool) -> Result<ReplayOutput, 
                     .and_then(Value::as_array)
                     .map(Vec::as_slice)
                     .unwrap_or(&[]);
+                write_line(writer, &serialized)?;
                 summary.observe(status, problems);
             }
             "end" => {
@@ -101,25 +104,24 @@ pub fn replay<R: BufRead>(reader: &mut R, pretty: bool) -> Result<ReplayOutput, 
         return Err(ReplayError::contract("CONTRACT_INVALID"));
     }
 
-    output_lines.push(serialize_value(
+    let summary_line = serialize_value(
         &summary.to_value(&hello.client_version, &hello.schema_sha256),
         pretty,
-    )?);
+    )?;
+    write_line(writer, &summary_line)?;
     Ok(ReplayOutput {
-        lines: output_lines,
         stderr_summary: summary.stderr_line(),
     })
 }
 
-pub fn write_output<W: Write>(writer: &mut W, output: &ReplayOutput) -> Result<(), ReplayError> {
-    for line in &output.lines {
-        writer
-            .write_all(line)
-            .map_err(|_| ReplayError::internal())?;
-        writer
-            .write_all(b"\n")
-            .map_err(|_| ReplayError::internal())?;
-    }
+fn write_line<W: Write>(writer: &mut W, line: &[u8]) -> Result<(), ReplayError> {
+    writer
+        .write_all(line)
+        .map_err(|_| ReplayError::internal())?;
+    writer
+        .write_all(b"\n")
+        .map_err(|_| ReplayError::internal())?;
+    writer.flush().map_err(|_| ReplayError::internal())?;
     Ok(())
 }
 
@@ -373,5 +375,8 @@ pub fn write_error<W: Write>(writer: &mut W, code: &str, pretty: bool) -> Result
     writer
         .write_all(&error_line(code, pretty))
         .map_err(|_| ReplayError::internal())?;
-    writer.write_all(b"\n").map_err(|_| ReplayError::internal())
+    writer
+        .write_all(b"\n")
+        .map_err(|_| ReplayError::internal())?;
+    writer.flush().map_err(|_| ReplayError::internal())
 }

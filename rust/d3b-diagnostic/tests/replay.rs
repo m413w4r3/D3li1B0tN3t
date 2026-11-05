@@ -1,13 +1,25 @@
-use std::io::Cursor;
-use std::io::Write;
+use std::io::{Cursor, Write};
 use std::process::{Command, Stdio};
 
 use d3b_diagnostic::error::ReplayError;
-use d3b_diagnostic::replay::{replay, ReplayOutput};
+use d3b_diagnostic::replay::replay;
 use d3b_diagnostic::schema::model::{Kind, Schema, MAX_FIELDS_PER_MESSAGE, MAX_SCHEMA_MESSAGES};
 use d3b_diagnostic::schema::walker::{analyze_payload, MAX_DEPTH};
 use d3b_diagnostic::wire::reader::{Reader, WireType};
 use serde_json::{json, Value};
+
+#[cfg(unix)]
+use std::io::{BufRead, BufReader};
+#[cfg(unix)]
+use std::net::Shutdown;
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
+#[cfg(unix)]
+use std::sync::mpsc;
+#[cfg(unix)]
+use std::thread;
+#[cfg(unix)]
+use std::time::Duration;
 
 const FINGERPRINT: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -88,11 +100,23 @@ fn corpus(schema: Value, frames: &[Value]) -> String {
     format!("{}\n", lines.join("\n"))
 }
 
-fn run(input: &str) -> Result<ReplayOutput, ReplayError> {
-    replay(&mut Cursor::new(input.as_bytes()), false)
+#[derive(Debug)]
+struct CapturedReplay {
+    lines: Vec<Vec<u8>>,
 }
 
-fn analysis(output: &ReplayOutput, index: usize) -> Value {
+fn run(input: &str) -> Result<CapturedReplay, ReplayError> {
+    let mut stdout = Vec::new();
+    replay(&mut Cursor::new(input.as_bytes()), &mut stdout, false)?;
+    let lines = stdout
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(<[u8]>::to_vec)
+        .collect();
+    Ok(CapturedReplay { lines })
+}
+
+fn analysis(output: &CapturedReplay, index: usize) -> Value {
     serde_json::from_slice(output.lines.get(index + 1).expect("analysis output exists"))
         .expect("analysis output is JSON")
 }
@@ -102,6 +126,81 @@ fn has_problem(value: &Value, code: &str) -> bool {
         .get("problems")
         .and_then(Value::as_array)
         .is_some_and(|problems| problems.iter().any(|problem| problem["code"] == code))
+}
+
+#[cfg(unix)]
+fn send_socket_line(client: &mut BufReader<UnixStream>, value: &Value) -> Result<(), String> {
+    let serialized = line(value);
+    client
+        .get_mut()
+        .write_all(serialized.as_bytes())
+        .map_err(|error| format!("write protocol line: {error}"))?;
+    client
+        .get_mut()
+        .write_all(b"\n")
+        .map_err(|error| format!("write protocol newline: {error}"))?;
+    client
+        .get_mut()
+        .flush()
+        .map_err(|error| format!("flush protocol line: {error}"))
+}
+
+#[cfg(unix)]
+fn receive_socket_line(
+    client: &mut BufReader<UnixStream>,
+    expected_kind: &str,
+) -> Result<Value, String> {
+    let mut serialized = String::new();
+    let bytes = client
+        .read_line(&mut serialized)
+        .map_err(|error| format!("read {expected_kind}: {error}"))?;
+    if bytes == 0 {
+        return Err(format!("engine closed before {expected_kind}"));
+    }
+    let value = serde_json::from_str::<Value>(&serialized)
+        .map_err(|error| format!("parse {expected_kind}: {error}"))?;
+    if value["kind"] != expected_kind {
+        return Err(format!(
+            "expected {expected_kind}, received {}",
+            value["kind"]
+        ));
+    }
+    Ok(value)
+}
+
+#[cfg(unix)]
+fn exercise_streaming_client(stream: UnixStream) -> Result<(), String> {
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .map_err(|error| format!("set client read timeout: {error}"))?;
+    let mut client = BufReader::new(stream);
+    send_socket_line(&mut client, &hello())?;
+    send_socket_line(&mut client, &lok_schema())?;
+
+    let engine_hello = receive_socket_line(&mut client, "hello")?;
+    if engine_hello["protocolVersion"] != 1 || engine_hello["engine"] != "d3b-diagnostic" {
+        return Err("engine hello did not match protocol v1".to_owned());
+    }
+
+    send_socket_line(
+        &mut client,
+        &frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]),
+    )?;
+    let analysis = receive_socket_line(&mut client, "analysis")?;
+    if analysis["index"] != 0 || analysis["status"] != "VALID" {
+        return Err("frame analysis did not match its input".to_owned());
+    }
+
+    send_socket_line(&mut client, &json!({"kind":"end"}))?;
+    client
+        .get_mut()
+        .shutdown(Shutdown::Write)
+        .map_err(|error| format!("finish input after end: {error}"))?;
+    let summary = receive_socket_line(&mut client, "summary")?;
+    if summary["frames"] != 1 || summary["coverage"] != "complete" {
+        return Err("summary did not match the replay".to_owned());
+    }
+    Ok(())
 }
 
 fn encode_length_field(number: u8, bytes: &[u8]) -> Vec<u8> {
@@ -128,6 +227,49 @@ fn valid_lok_payload_produces_two_fields() {
     assert_eq!(value["fields"].as_array().map(Vec::len), Some(2));
     assert_eq!(value["fields"][0]["name"], "geei");
     assert_eq!(value["fields"][1]["name"], "geej");
+}
+
+#[cfg(unix)]
+#[test]
+fn replay_streams_each_response_before_the_next_request() {
+    let (server_stream, client_stream) = UnixStream::pair().expect("Unix socket pair is created");
+    let client_control = client_stream
+        .try_clone()
+        .expect("client control stream is cloned");
+    let server_input = server_stream
+        .try_clone()
+        .expect("server input stream is cloned");
+    let server_thread = thread::spawn(move || {
+        let mut reader = BufReader::new(server_input);
+        let mut writer = server_stream;
+        replay(&mut reader, &mut writer, false)
+    });
+
+    let (result_sender, result_receiver) = mpsc::channel();
+    let client_thread = thread::spawn(move || {
+        let result = exercise_streaming_client(client_stream);
+        let _ = result_sender.send(result);
+    });
+    let client_result = match result_receiver.recv_timeout(Duration::from_secs(8)) {
+        Ok(result) => result,
+        Err(error) => {
+            let _ = client_control.shutdown(Shutdown::Both);
+            let _ = client_thread.join();
+            let _ = server_thread.join();
+            panic!("streaming client did not finish within its deadline: {error}");
+        }
+    };
+    drop(client_control);
+
+    let server_result = server_thread
+        .join()
+        .expect("replay server thread does not panic");
+    client_thread
+        .join()
+        .expect("streaming client thread does not panic");
+    client_result.expect("hello and analysis arrive before their next input lines");
+    let output = server_result.expect("streamed replay succeeds");
+    assert!(output.stderr_summary.starts_with("frames=1 "));
 }
 
 #[test]
@@ -707,6 +849,44 @@ fn binary_writes_only_counts_and_stable_codes_to_stderr() {
     assert!(!stderr.contains(secret));
     assert!(!stdout.contains(secret));
     assert!(!stdout.contains(&hex(&payload)));
+}
+
+#[test]
+fn contract_error_after_streaming_starts_writes_an_error_line() {
+    let duplicate_index = frame(0, json!("lok"), json!("type.ankama.com/lok"), &[0x08, 0x01]);
+    let input = corpus(lok_schema(), &[duplicate_index.clone(), duplicate_index]);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_d3b-diagnostic"))
+        .arg("replay")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("diagnostic binary starts");
+    child
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(input.as_bytes())
+        .expect("input writes");
+    let result = child
+        .wait_with_output()
+        .expect("binary output is available");
+
+    assert_eq!(result.status.code(), Some(2));
+    let stdout = String::from_utf8(result.stdout).expect("error output is UTF-8");
+    let lines = stdout.lines().collect::<Vec<_>>();
+    assert_eq!(lines.len(), 3);
+    assert_eq!(
+        serde_json::from_str::<Value>(lines[0]).unwrap()["kind"],
+        "hello"
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(lines[1]).unwrap()["kind"],
+        "analysis"
+    );
+    let error = serde_json::from_str::<Value>(lines[2]).unwrap();
+    assert_eq!(error["kind"], "error");
+    assert_eq!(error["code"], "CONTRACT_INVALID");
 }
 
 #[test]
