@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\D3B.Network\D3B.Network.csproj" />
+    <ProjectReference Include="..\D3B.Protocol\D3B.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="D3B.Diagnostic.Tests" />
+  </ItemGroup>
+
+</Project>

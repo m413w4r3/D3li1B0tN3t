@@ -145,6 +145,7 @@
     <Project Path="src/D3B.Bot/D3B.Bot.csproj" />
     <Project Path="src/D3B.Core/D3B.Core.csproj" />
     <Project Path="src/D3B.Data/D3B.Data.csproj" />
+    <Project Path="src/D3B.Diagnostic/D3B.Diagnostic.csproj" />
     <Project Path="src/D3B.Engine/D3B.Engine.csproj" />
     <Project Path="src/D3B.Host/D3B.Host.csproj" />
     <Project Path="src/D3B.Network/D3B.Network.csproj" />
@@ -156,6 +157,7 @@
     <Project Path="tests/D3B.Bot.Tests/D3B.Bot.Tests.csproj" />
     <Project Path="tests/D3B.Core.Tests/D3B.Core.Tests.csproj" />
     <Project Path="tests/D3B.Data.Tests/D3B.Data.Tests.csproj" />
+    <Project Path="tests/D3B.Diagnostic.Tests/D3B.Diagnostic.Tests.csproj" />
     <Project Path="tests/D3B.Engine.Tests/D3B.Engine.Tests.csproj" />
     <Project Path="tests/D3B.Network.Tests/D3B.Network.Tests.csproj" />
     <Project Path="tests/D3B.Protocol.Tests/D3B.Protocol.Tests.csproj" />
