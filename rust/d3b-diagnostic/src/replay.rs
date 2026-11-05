@@ -92,9 +92,6 @@ pub fn replay<R: BufRead, W: Write>(
                     return Err(ReplayError::contract("CONTRACT_INVALID"));
                 }
                 ended = true;
-                if read_json_line(reader)?.is_some() {
-                    return Err(ReplayError::contract("CONTRACT_INVALID"));
-                }
                 break;
             }
             _ => return Err(ReplayError::contract("CONTRACT_INVALID")),
