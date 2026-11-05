@@ -7039,3 +7039,66 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Boundary**: No installed/live client, host, relay, Ankama connection, activity, route, harvest or movement was run;
   only in-process test hosts and fake relays from the suite. No GO 2, no `p2j move`, no push. The installed apphost and mapping were not changed. BLOCKED for a new GO 1 until the 64 remaining
   types are resolved; the latch remains fail-closed for all of them.
+
+## D308: A passive Rust diagnostic engine, one-way and disabled by default
+
+*2026-11-05, P2K-2. Extends D307; no live execution.*
+
+- **Problem**: P2K left 64 of 89 GO 1 types blocking. The manual loop (log type, read schema, compare an external
+  reference, edit a list) does not scale and cannot distinguish a plausible name from a proven mapping.
+- **Decision**: add a passive diagnostic path beside the relay. `GameSession` keeps its exact P2I/P2K predicate and
+  shows frames to an optional `IGameObserver`. A new observer copies only the frames the engine can analyse into a
+  bounded, drop-counting queue; a dedicated pump sends them to an optional Rust sidecar over a private Unix socket; a
+  deterministic C# resolver turns analyses and reference material into candidates with evidence, contradictions and
+  uncertainty. The Rust engine is derived from SniffSniffSquared's generic wire/schema modules, adapted with
+  attribution; PostgreSQL, pcap, dashboard, HDV and brisage are excluded.
+- **Boundaries**: the diagnostic path is one-way and cannot alter, delay or drop a relayed byte. It is disabled by
+  default, starts no process and opens no socket unless explicitly enabled. It never persists raw payloads and emits
+  redacted structure only. No diagnostic result feeds `MovementGuard`, `SendGate`, the translation latch or a send
+  path. A sidecar failure disables diagnostics and marks the observation partial; it never cuts the player off.
+- **Promotion**: discovery, verification, promotion and deployment stay separate. A candidate never authorizes
+  movement; promotion requires `VERIFIED`, a reproducible fixture, a green `ContractAudit`, an independent review and
+  an explicit owner GO, and it never clears the latch of an existing session.
+- **Evidence**: the contract and gates are specified in [P2K2_ARCHITECTURE.md](P2K2_ARCHITECTURE.md),
+  [P2K2_CONTRACT.md](P2K2_CONTRACT.md) and [P2K2_PROMOTION.md](P2K2_PROMOTION.md). The SNS inventory, exact commit and
+  module classification are recorded below (D310).
+- **Boundary**: no live client, host, relay, Ankama connection, activity, route, harvest or movement is run in P2K-2.
+  No mapping is promoted during the mission. No push.
+
+## D309: A versioned, bounded, redacted diagnostic contract
+
+*2026-11-05, P2K-2. Implements D308.*
+
+- **Decision**: the C# side and the Rust engine speak contract version 1: JSONL over stdin/stdout for replay, and
+  length-prefixed JSON over a Unix domain socket for the live-simulated mode. The schema travels in-band as a compact
+  JSON projection of the build's `FileDescriptorSet`, while the fingerprint stays the SHA-256 of the original `.binpb`.
+  The engine never reads the schema file itself and never depends on pcap.
+- **Redaction**: engine output carries field numbers, declared and observed wire types, repetition, counts, lengths,
+  varint widths, UTF-8 validity and stable problem codes. It carries no payload bytes, string content, numeric values
+  or account data. Payload hex exists only between D3B and the engine, is bounded to 1 MiB, and is never written by
+  the engine.
+- **Failure semantics**: queue overflow drops and is counted; a sidecar timeout, crash or wrong version disables
+  diagnostics for the session; the report then says `partial` and cannot support `VERIFIED`. Limits are explicit
+  (frame, schema, depth, output); exceeding one is reported as `LIMIT_EXCEEDED`, never as success.
+- **Evidence**: [P2K2_CONTRACT.md](P2K2_CONTRACT.md) is normative; changing an enum, shape or limit requires
+  `protocolVersion` 2.
+
+## D310: Reuse SniffSniffSquared under MIT, as adapted modules rather than a dependency
+
+*2026-11-05, P2K-2. Extends D3's reference rule for this mission, with the owner's explicit instruction.*
+
+- **Decision**: SniffSniffSquared is frozen at `c780035c9020058a772ac8a2eef09555acd5a173` (MIT, copyright (c) 2026
+  Miouzora). Its generic `pb.rs` wire reader, its `schema.rs` walk approach and its `dump.rs` wire-over-schema mismatch
+  stance are adapted into the new `rust/d3b-diagnostic` crate, with a per-file provenance header, a `NOTICE` file and
+  an entry in `THIRD-PARTY-NOTICES.md`. Its pcap, PostgreSQL, dashboard, HDV, brisage, key-map and domain interpreters
+  are not reused.
+- **Why not a dependency**: SNS's only manifest is a binary crate with private modules and heavy app dependencies
+  (`pcap`, `pnet`, `postgres`, `dotenvy`); none of that belongs on the diagnostic path. The local Rust toolchain is
+  1.83, while SNS is edition 2024, so the adapted crate is edition 2021; the adaptation is recorded, not hidden.
+- **Why not a C# rewrite**: the mission asks for a real Rust diagnostic component; duplicating the wire reader and
+  schema walk in C# would create two decoders with no shared contract. The C# side keeps schema ownership and
+  translation; Rust owns schema-vs-wire analysis behind the versioned contract.
+- **Provenance**: external mapping corpora (SNS `reference/Mapping.v2.json`, BillBot `game_mappings_detailed.json`)
+  are read-only, are from other builds, and can never alone produce `VERIFIED` (D308 promotion rules).
+- **Licence boundary**: the IL2CPP/reference artifacts checked into SNS have no separate provenance statement; none is
+  copied. Only MIT-covered source modules are adapted.
