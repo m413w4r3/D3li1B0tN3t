@@ -209,10 +209,13 @@ fn parse_field(value: &Value) -> Result<Field, &'static str> {
     let repeated = required_bool(value, "repeated")?;
     let packed = required_bool(value, "packed")?;
     let message_type = optional_string(value, "messageType")?;
-    let _enum_type = optional_string(value, "enumType")?;
+    let enum_type = optional_string(value, "enumType")?;
     let _oneof = optional_string(value, "oneof")?;
     let _has_presence = required_bool(value, "hasPresence")?;
 
+    if kind != Kind::Enum && enum_type.is_some() {
+        return Err("SCHEMA_INVALID");
+    }
     if kind == Kind::Message && message_type.is_none() {
         return Err("SCHEMA_INVALID");
     }
