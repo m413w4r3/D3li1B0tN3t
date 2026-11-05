@@ -44,7 +44,8 @@ public sealed class ProtocolResolver
         DiagnosticSchema buildSchema,
         IReadOnlyList<DiagnosticAnalysis> analyses,
         string? targetDirection,
-        DiagnosticSummary? observationSummary = null)
+        DiagnosticSummary? observationSummary = null,
+        IReadOnlyList<ResolverObservation>? observations = null)
     {
         ArgumentNullException.ThrowIfNull(buildSchema);
         ArgumentNullException.ThrowIfNull(analyses);
@@ -119,7 +120,7 @@ public sealed class ProtocolResolver
             selected.Add(new ResolverSchemaPair(fallback, null, null, null));
         }
 
-        CandidateObservationSummary observations = MakeObservationSummary(analyses, observationSummary);
+        CandidateObservationSummary summary = MakeObservationSummary(analyses, observationSummary);
         List<MappingCandidate> candidates = [];
         foreach (IGrouping<string, ResolverSchemaPair> tokenGroup in selected.GroupBy(pair => pair.Schema.Name, StringComparer.Ordinal))
         {
@@ -150,7 +151,7 @@ public sealed class ProtocolResolver
                     conflictingNames,
                     analyses,
                     targetDirection,
-                    observations,
+                    summary,
                     schemaMessages));
             }
         }
@@ -165,7 +166,7 @@ public sealed class ProtocolResolver
         {
             ClientVersion = buildSchema.ClientVersion,
             SchemaSha256 = buildSchema.SchemaSha256,
-            Observations = observations,
+            Observations = summary,
             Candidates = ordered,
             Summary = new CandidateSummary
             {

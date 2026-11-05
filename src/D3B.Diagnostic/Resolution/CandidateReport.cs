@@ -30,4 +30,8 @@ public sealed record CandidateReport
 
     /// <summary>Classification counts.</summary>
     public CandidateSummary Summary { get; init; } = new();
+
+    /// <summary>Provenance for a report-backed resolution.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ResolutionProvenance? Provenance { get; init; }
 }
