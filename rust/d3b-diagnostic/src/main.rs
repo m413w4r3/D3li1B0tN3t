@@ -1,10 +1,20 @@
 use std::io::{self, Write};
+use std::path::Path;
 
 use d3b_diagnostic::error::ReplayError;
+use d3b_diagnostic::ipc::serve;
 use d3b_diagnostic::replay::{replay, write_error, write_output};
 
 fn main() {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "serve")
+    {
+        serve_command(&arguments);
+        return;
+    }
+
     let pretty = match arguments.as_slice() {
         [command] if command == "replay" => false,
         [command, option] if command == "replay" && option == "--pretty" => true,
@@ -34,9 +44,35 @@ fn main() {
     }
 }
 
+fn serve_command(arguments: &[String]) {
+    let [_, option, path] = arguments else {
+        report_serve_error("CONTRACT_INVALID");
+        std::process::exit(2);
+    };
+    if option != "--socket" || path.is_empty() {
+        report_serve_error("CONTRACT_INVALID");
+        std::process::exit(2);
+    }
+
+    match serve(Path::new(path)) {
+        Ok(output) => {
+            eprintln!("{}", output.stderr_line);
+            std::process::exit(output.exit_code);
+        }
+        Err(error) => {
+            report_serve_error(error.code);
+            std::process::exit(error.exit_code());
+        }
+    }
+}
+
 fn report_error(error: ReplayError, pretty: bool) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
     let _ = write_error(&mut out, error.code, pretty);
     eprintln!("code={}", error.code);
+}
+
+fn report_serve_error(code: &str) {
+    eprintln!("code={code}");
 }

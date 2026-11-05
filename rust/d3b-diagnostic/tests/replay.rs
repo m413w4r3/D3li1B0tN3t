@@ -652,9 +652,10 @@ fn binary_writes_only_counts_and_stable_codes_to_stderr() {
 }
 
 #[test]
-fn serve_subcommand_is_rejected_with_exit_two() {
+fn replay_unknown_option_keeps_its_existing_error_behavior() {
     let result = Command::new(env!("CARGO_BIN_EXE_d3b-diagnostic"))
-        .arg("serve")
+        .arg("replay")
+        .arg("--unknown")
         .output()
         .expect("diagnostic binary starts");
     assert_eq!(result.status.code(), Some(2));
