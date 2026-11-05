@@ -18,17 +18,17 @@ pub struct ReplayOutput {
     pub stderr_summary: String,
 }
 
-struct HelloInput {
-    client_version: String,
-    schema_sha256: String,
+pub(crate) struct HelloInput {
+    pub(crate) client_version: String,
+    pub(crate) schema_sha256: String,
 }
 
-struct FrameInput {
-    index: u64,
-    direction: String,
-    type_url: Option<String>,
-    carried_type: Option<String>,
-    payload_hex: String,
+pub(crate) struct FrameInput {
+    pub(crate) index: u64,
+    pub(crate) direction: String,
+    pub(crate) type_url: Option<String>,
+    pub(crate) carried_type: Option<String>,
+    pub(crate) payload_hex: String,
 }
 
 pub fn replay<R: BufRead>(reader: &mut R, pretty: bool) -> Result<ReplayOutput, ReplayError> {
@@ -71,30 +71,8 @@ pub fn replay<R: BufRead>(reader: &mut R, pretty: bool) -> Result<ReplayOutput, 
                     return Err(ReplayError::contract("CONTRACT_INVALID"));
                 }
                 previous_index = Some(frame.index);
-                let payload = decode_payload(&frame.payload_hex)?;
-                let message = frame
-                    .carried_type
-                    .as_deref()
-                    .and_then(|name| schema.message(name));
-                let analysis = analyze_payload(&schema, message, &payload);
-                let type_url_ok = match (frame.type_url.as_deref(), frame.carried_type.as_deref()) {
-                    (Some(type_url), Some(carried_type)) => {
-                        type_url == format!("type.ankama.com/{carried_type}")
-                    }
-                    _ => false,
-                };
-                let analysis_value = analysis_value(
-                    &frame,
-                    type_url_ok,
-                    message.map(|item| item.name.as_str()),
-                    analysis,
-                );
-                let serialized = serialize_analysis(analysis_value, pretty)?;
+                let (serialized, value) = analyze_frame(&schema, &frame, "index", pretty)?;
                 output_lines.push(serialized);
-                // The just-serialized object is redacted; retain its counts only.
-                let value: Value =
-                    serde_json::from_slice(output_lines.last().ok_or_else(ReplayError::internal)?)
-                        .map_err(|_| ReplayError::internal())?;
                 let status = value
                     .get("status")
                     .and_then(Value::as_str)
@@ -174,7 +152,7 @@ fn require_kind(value: &Value, expected: &str) -> Result<(), ReplayError> {
     }
 }
 
-fn parse_hello(value: &Value) -> Result<HelloInput, ReplayError> {
+pub(crate) fn parse_hello(value: &Value) -> Result<HelloInput, ReplayError> {
     let version = value
         .get("protocolVersion")
         .and_then(Value::as_u64)
@@ -205,8 +183,15 @@ fn parse_hello(value: &Value) -> Result<HelloInput, ReplayError> {
 }
 
 fn parse_frame(value: &Value) -> Result<FrameInput, ReplayError> {
+    parse_frame_with_key(value, "index")
+}
+
+pub(crate) fn parse_frame_with_key(
+    value: &Value,
+    sequence_key: &str,
+) -> Result<FrameInput, ReplayError> {
     let index = value
-        .get("index")
+        .get(sequence_key)
         .and_then(Value::as_u64)
         .ok_or_else(|| ReplayError::contract("CONTRACT_INVALID"))?;
     let direction = value
@@ -229,6 +214,40 @@ fn parse_frame(value: &Value) -> Result<FrameInput, ReplayError> {
         carried_type,
         payload_hex,
     })
+}
+
+pub(crate) fn analyze_frame(
+    schema: &Schema,
+    frame: &FrameInput,
+    sequence_key: &str,
+    pretty: bool,
+) -> Result<(Vec<u8>, Value), ReplayError> {
+    let payload = decode_payload(&frame.payload_hex)?;
+    let message = frame
+        .carried_type
+        .as_deref()
+        .and_then(|name| schema.message(name));
+    let analysis = analyze_payload(schema, message, &payload);
+    let type_url_ok = match (frame.type_url.as_deref(), frame.carried_type.as_deref()) {
+        (Some(type_url), Some(carried_type)) => {
+            type_url == format!("type.ankama.com/{carried_type}")
+        }
+        _ => false,
+    };
+    let mut value = analysis_value(
+        frame,
+        type_url_ok,
+        message.map(|item| item.name.as_str()),
+        analysis,
+    );
+    if sequence_key != "index" {
+        let object = value.as_object_mut().ok_or_else(ReplayError::internal)?;
+        let index = object.remove("index").ok_or_else(ReplayError::internal)?;
+        object.insert(sequence_key.to_owned(), index);
+    }
+    let bytes = serialize_analysis(value, pretty)?;
+    let redacted_value = serde_json::from_slice(&bytes).map_err(|_| ReplayError::internal())?;
+    Ok((bytes, redacted_value))
 }
 
 fn optional_input_string(value: &Value, key: &str) -> Result<Option<String>, ReplayError> {
