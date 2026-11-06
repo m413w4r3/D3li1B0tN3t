@@ -7188,3 +7188,12 @@ Settled questions leave this table, and the decision that settles one says so.
   write/load, resolver classifications, and candidate refusal. The configured local Rust replay produces a synthetic
   report with aggregate evidence. Neither is live-client acceptance; no live client, host, relay, Ankama connection,
   external service, or installed file was used.
+
+## D316: P2L is ready for a supervised passive GO 1, pending owner approval
+
+*2026-11-06, final P2L mission record. Extends D315; code SHA `8cfa4f03d0a988caef4d35fc8476c7e9cc651cf5` on integrated branch `p2l`.*
+
+- **Verdict**: `READY FOR P2L LIVE DIAGNOSTIC — AWAITING OWNER GO`. The report contract, bounded aggregation, private writer, report-backed resolver, fail-closed identity/accounting rules, and synthetic integration chain passed V1. A1 privacy/redaction APPROVE on `8cfa4f0`; A2 network/latch/isolation APPROVE on `0be6019` for L5f, with L5g accessibility-only covered by the A1 delta APPROVE and V1. All earlier REJECT findings and delta outcomes are recorded in [P2L_REPORT.md](P2L_REPORT.md).
+- **Delivery**: L1/L2/L3/L4 and L5 through L5g are integrated. V1 evidence includes Rust 56/56, targeted 121/121, Bot diagnostic 16/16, IPC 18/18, integration 3/3, and serialized suite 1705/1705, with build and format checks green. The report and resolver remain opt-in/local; candidates cannot be promoted automatically.
+- **Deployment boundary**: the exact-SHA apphost and Rust engine are staged with verified manifests, hashes, and private modes; the engine and apphost are NOT installed. The 369-file pre-P2L apphost backup and Ankama version backup were verified. GO 1 preflight was rechecked on 2026-11-06 for client `3.7.13.17`, data identity, modes, process/listener absence, and backup match.
+- **Safety boundary**: no push, live client, host, relay, or Ankama session; no movement, harvest, mapping change or promotion, or configuration change occurred. GO 1 is a future passive supervised session only, requires a separate owner GO, and must follow [P2L_LIVE_RUNBOOK.md](P2L_LIVE_RUNBOOK.md). 64 blocking types remain; `.jpe` is `CONFLICT`, `.kjt` is ambiguous, and no live acceptance is claimed.
