@@ -1,5 +1,6 @@
 using D3B.Diagnostic.Contract;
 using D3B.Diagnostic.Resolution;
+using D3B.Protocol.Mapping;
 using Google.Protobuf.Reflection;
 
 namespace D3B.Diagnostic.Tests.Resolution;
@@ -72,7 +73,7 @@ public sealed class ProtocolResolverTests
     }
 
     [Fact]
-    public void ExactObservedShapeAndPinIsVerifiedWithSyntheticFixture()
+    public void ExactObservedShapeAndShapeOnlyPinRemainsCandidateWithoutSemanticProof()
     {
         FileDescriptor readable = ResolverTestData.ReadableFile(
             ResolverTestData.Message("StatusEvent",
@@ -90,13 +91,304 @@ public sealed class ProtocolResolverTests
                 [ResolverTestData.Analysis("lok", "server")], "server");
 
         MappingCandidate candidate = report.Candidates.Single();
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Null(candidate.FixtureProposal);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofMissing");
+        Assert.Contains(candidate.Evidence, evidence => evidence.Source == "prior_mapping" && evidence.Verified);
+    }
+
+    [Theory]
+    [InlineData("IL2CPP")]
+    [InlineData("BEHAVIORAL")]
+    [InlineData("AUDITED_PIN")]
+    [InlineData("AUDITED_REFERENCE")]
+    public void ValidMatchingSemanticProofVerifiesExactObservedShape(string kind)
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusEvent",
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        ReferenceCorpus reference = CorpusWithProof(kind);
+
+        CandidateReport report = ResolverTestData.Resolver(readable, [reference])
+            .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)),
+                [ResolverTestData.Analysis("lok", "server")], "server");
+
+        MappingCandidate candidate = Assert.Single(report.Candidates);
         Assert.Equal(CandidateClassification.Verified, candidate.Classification);
         Assert.NotNull(candidate.FixtureProposal);
-        Assert.True(candidate.FixtureProposal.Synthetic);
-        Assert.Equal("VALID", candidate.FixtureProposal.ExpectedStatus);
-        Assert.Equal([1], candidate.FixtureProposal.ExpectedFieldNumbers);
-        Assert.Equal("0800", candidate.FixtureProposal.PayloadHex);
-        Assert.Contains(candidate.Evidence, evidence => evidence.Source == "prior_mapping" && evidence.Verified);
+        Assert.Equal("d3b.game.StatusEvent", GetCandidateProperty(candidate, "SemanticIdentity"));
+        object? proof = GetCandidateProperty(candidate, "Proof");
+        Assert.NotNull(proof);
+        Assert.Equal(kind, GetProofKind(proof!));
+    }
+
+    [Theory]
+    [InlineData("kind", "UNKNOWN")]
+    [InlineData("kind", "")]
+    [InlineData("source", "")]
+    [InlineData("artifactSha256", "not-a-digest")]
+    [InlineData("token", "other")]
+    [InlineData("readable", "d3b.game.OtherEvent")]
+    [InlineData("build", "3.7.12.99")]
+    [InlineData("schemaSha256", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")]
+    public void InvalidSemanticProofFailsClosed(string property, string value)
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusEvent",
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        ReferenceCorpus reference = CorpusWithProof("IL2CPP", property, value);
+
+        MappingCandidate candidate = Assert.Single(ResolverTestData.Resolver(readable, [reference])
+            .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)),
+                [ResolverTestData.Analysis("lok", "server")], "server")
+            .Candidates);
+
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Null(candidate.FixtureProposal);
+        Assert.Null(GetCandidateProperty(candidate, "SemanticIdentity"));
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofInvalid");
+    }
+
+    [Fact]
+    public void OneInvalidProofCannotBeOverriddenByAnotherMatchingProof()
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusEvent",
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        ReferenceCorpus valid = CorpusWithProof("AUDITED_REFERENCE");
+        ReferenceCorpus invalid = CorpusWithProof("IL2CPP", "readable", "d3b.game.OtherEvent");
+
+        MappingCandidate candidate = Assert.Single(ResolverTestData.Resolver(readable, [valid, invalid])
+            .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)),
+                [ResolverTestData.Analysis("lok", "server")], "server")
+            .Candidates);
+
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofInvalid");
+    }
+
+    [Fact]
+    public void PinSemanticProofFieldsAreConvertedToCandidateProof()
+    {
+        using TemporaryDirectory directory = new();
+        string path = Path.Combine(directory.Path, "pins.json");
+        File.WriteAllText(path, $$"""
+            {
+              "clientVersion": "{{ResolverTestData.ClientVersion}}",
+              "messages": [{
+                "readable": "d3b.game.StatusEvent",
+                "obfuscated": "lok",
+                "semanticProofKind": "AUDITED_PIN",
+                "semanticProofSource": "resolver-test",
+                "semanticProofSchemaSha256": "{{ResolverTestData.SchemaHash}}",
+                "semanticProofArtifactSha256": "{{new string('b', 64)}}"
+              }]
+            }
+            """);
+        PinnedPairs pins = PinnedPairsFile.Read(path, ResolverTestData.ClientVersion);
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusEvent",
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+
+        MappingCandidate candidate = Assert.Single(ResolverTestData.Resolver(readable, pins: PriorMapping.From(pins))
+            .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)),
+                [ResolverTestData.Analysis("lok", "server")], "server")
+            .Candidates);
+
+        Assert.Equal(CandidateClassification.Verified, candidate.Classification);
+        object? proof = GetCandidateProperty(candidate, "Proof");
+        Assert.NotNull(proof);
+        Assert.Equal("AUDITED_PIN", GetProofKind(proof!));
+    }
+
+    [Fact]
+    public void CandidateJsonIncludesSemanticFlagsAndProofWithoutObservationDetails()
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusEvent",
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        DiagnosticAnalysis analysis = ResolverTestData.Analysis("lok", "server") with
+        {
+            Problems = [new DiagnosticProblem { Code = DiagnosticProblemCode.UnknownType, Detail = "PRIVATE_PAYLOAD_SENTINEL" }]
+        };
+        CandidateReport report = ResolverTestData.Resolver(readable, [CorpusWithProof("BEHAVIORAL")])
+            .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)), [analysis], "server");
+        string json = CandidateReportJson.Serialize(report);
+        using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(json);
+        System.Text.Json.JsonElement root = document.RootElement;
+        System.Text.Json.JsonElement candidate = root.GetProperty("candidates")[0];
+
+        Assert.Equal(2, root.GetProperty("protocolVersion").GetInt32());
+        Assert.True(candidate.GetProperty("exactShape").GetBoolean());
+        Assert.True(candidate.GetProperty("uniqueShape").GetBoolean());
+        Assert.True(candidate.GetProperty("hasValidObservation").GetBoolean());
+        Assert.Equal("d3b.game.StatusEvent", candidate.GetProperty("semanticIdentity").GetString());
+        Assert.Equal("BEHAVIORAL", candidate.GetProperty("proof").GetProperty("kind").GetString());
+        Assert.DoesNotContain("PRIVATE_PAYLOAD_SENTINEL", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReverseShapeAmbiguityCoversTheObservedPlacementCellsAliases()
+    {
+        CandidateReport report = ResolveAliases(["hgf", "imf"], "PlacementCells");
+
+        Assert.Equal(2, report.Candidates.Count);
+        Assert.All(report.Candidates, candidate =>
+        {
+            Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+            Assert.True(candidate.ExactShape);
+            Assert.False(candidate.UniqueShape);
+            Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "AmbiguousSchemaToken");
+        });
+    }
+
+    [Fact]
+    public void ReverseShapeAmbiguityCoversTheObservedThreeTokenFightTurnAliases()
+    {
+        CandidateReport report = ResolveAliases(["kkn", "klu", "kmj"], "FightTurnFinishRequest");
+
+        Assert.Equal(3, report.Candidates.Count);
+        Assert.All(report.Candidates, candidate =>
+        {
+            Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+            Assert.False(candidate.UniqueShape);
+            Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "AmbiguousSchemaToken");
+        });
+    }
+
+    [Fact]
+    public void UnobservedExactSchemaCompetitorBlocksObservedCandidateUniqueness()
+    {
+        CandidateReport report = ResolveAliases(["observed", "unobserved"], "StatusEvent");
+        MappingCandidate observed = Assert.Single(report.Candidates, candidate => candidate.Token == "observed");
+
+        Assert.Equal(CandidateClassification.Candidate, observed.Classification);
+        Assert.False(observed.UniqueShape);
+        Assert.Contains(observed.Uncertainties, uncertainty => uncertainty.Code.ToString() == "AmbiguousSchemaToken");
+    }
+
+    [Fact]
+    public void ShapeOnlyBillBotAndSnsHintsNeverSupplySemanticProof()
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusEvent",
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
+        ReferenceCorpus[] references =
+        [
+            BillBotMappingLoader.LoadJson("{\"d3b.game.StatusEvent\":\"lok\"}"),
+            SnsMappingLoader.LoadJson("{\"lok\":\"d3b.game.StatusEvent\"}")
+        ];
+
+        foreach (ReferenceCorpus reference in references)
+        {
+            MappingCandidate candidate = Assert.Single(ResolverTestData.Resolver(readable, [reference])
+                .Resolve(schema, [ResolverTestData.Analysis("lok", "server")], "server")
+                .Candidates);
+            Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+            Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofMissing");
+            Assert.Null(GetCandidateProperty(candidate, "Proof"));
+        }
+    }
+
+    [Fact]
+    public void NormalizedReferenceWithoutSemanticProofRemainsCandidate()
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusEvent",
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        ReferenceCorpus reference = ReferenceCorpusJsonLoader.Load("""
+            {
+              "source": "normalized-test",
+              "build": "3.7.13.17",
+              "buildExact": true,
+              "messages": [{ "token": "lok", "name": "d3b.game.StatusEvent" }]
+            }
+            """);
+
+        MappingCandidate candidate = Assert.Single(ResolverTestData.Resolver(readable, [reference])
+            .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)),
+                [ResolverTestData.Analysis("lok", "server")], "server")
+            .Candidates);
+
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofMissing");
+        Assert.Null(GetCandidateProperty(candidate, "Proof"));
+    }
+
+    private static CandidateReport ResolveAliases(string[] tokens, string readableName)
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message(readableName,
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        DiagnosticField[] fields = [ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)];
+        DiagnosticSchema schema = ResolverTestData.Schema(tokens[0], fields) with
+        {
+            Messages = tokens.Select(token => new DiagnosticMessage { Name = token, Fields = fields }).ToArray()
+        };
+
+        return ResolverTestData.Resolver(readable)
+            .Resolve(schema, [ResolverTestData.Analysis(tokens[0], readableName.EndsWith("Request", StringComparison.Ordinal) ? "client" : "server")],
+                readableName.EndsWith("Request", StringComparison.Ordinal) ? "client" : "server");
+    }
+
+    private static ReferenceCorpus CorpusWithProof(string kind, string? changedProperty = null, string? changedValue = null)
+    {
+        Dictionary<string, object?> proof = new(StringComparer.Ordinal)
+        {
+            ["kind"] = kind,
+            ["token"] = "lok",
+            ["readable"] = "d3b.game.StatusEvent",
+            ["build"] = ResolverTestData.ClientVersion,
+            ["schemaSha256"] = ResolverTestData.SchemaHash,
+            ["source"] = "resolver-test",
+            ["artifactSha256"] = new string('b', 64)
+        };
+        if (changedProperty is not null)
+        {
+            proof[changedProperty] = changedValue;
+        }
+
+        string json = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            source = "resolver-proof-test",
+            build = ResolverTestData.ClientVersion,
+            buildExact = true,
+            messages = new[]
+            {
+                new { token = "lok", name = "d3b.game.StatusEvent", semanticProof = proof }
+            }
+        });
+        return ReferenceCorpusJsonLoader.Load(json);
+    }
+
+    private static object? GetCandidateProperty(MappingCandidate candidate, string name)
+    {
+        return typeof(MappingCandidate).GetProperty(name)?.GetValue(candidate);
+    }
+
+    private static string GetProofKind(object proof)
+    {
+        return proof.GetType().GetProperty("Kind")?.GetValue(proof)?.ToString()?.ToUpperInvariant() ?? string.Empty;
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "d3b-p2m-resolver-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -275,7 +567,8 @@ public sealed class ProtocolResolverTests
             .Resolve(schema, [ResolverTestData.Analysis("envelope", "server")], "server");
 
         MappingCandidate candidate = report.Candidates.Single(item => item.Token == "envelope" && item.Readable == "d3b.game.EnvelopeEvent");
-        Assert.Equal(CandidateClassification.Verified, candidate.Classification);
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofMissing");
     }
 
     [Fact]

@@ -66,11 +66,44 @@ public sealed class PinnedPairsFileTests
     }
 
     [Fact]
+    public void PinsReadOptionalSemanticProofFields()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = PinnedPairsFile.PathOf(directory.Path, "1.2.3.4");
+        File.WriteAllText(path, """
+            {
+              "clientVersion": "1.2.3.4",
+              "messages": [{
+                "readable": "d3b.game.StatusEvent",
+                "obfuscated": "lok",
+                "semanticProofKind": "AUDITED_PIN",
+                "semanticProofSource": "protocol-audit",
+                "semanticProofSchemaSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "semanticProofArtifactSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }]
+            }
+            """);
+
+        var pins = PinnedPairsFile.Read(path, "1.2.3.4");
+        var pin = Assert.Single(pins.Messages);
+
+        Assert.Equal("AUDITED_PIN", GetProperty(pin, "SemanticProofKind"));
+        Assert.Equal("protocol-audit", GetProperty(pin, "SemanticProofSource"));
+        Assert.Equal(new string('a', 64), GetProperty(pin, "SemanticProofSchemaSha256"));
+        Assert.Equal(new string('b', 64), GetProperty(pin, "SemanticProofArtifactSha256"));
+    }
+
+    [Fact]
     public void TheBuildPinsAuthenticationRequestToKnc()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Pins", "3.7.12.12.json");
         var pins = PinnedPairsFile.Read(path, "3.7.12.12");
 
         Assert.Contains(pins.Messages, pin => pin.Readable == "d3b.game.AuthenticationRequest" && pin.Obfuscated == "knc");
+    }
+
+    private static string? GetProperty(object instance, string name)
+    {
+        return instance.GetType().GetProperty(name)?.GetValue(instance) as string;
     }
 }

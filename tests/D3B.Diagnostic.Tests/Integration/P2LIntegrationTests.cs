@@ -95,7 +95,8 @@ public sealed class P2LIntegrationTests
 
         MappingCandidate verified = Assert.Single(resolved.Candidates, candidate =>
             candidate.Token == "fixture.Alpha" && candidate.Readable == "d3b.game.AlphaMessage");
-        Assert.Equal(CandidateClassification.Verified, verified.Classification);
+        Assert.Equal(CandidateClassification.Candidate, verified.Classification);
+        Assert.Contains(verified.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofMissing");
         CandidateEvidence verifiedObservation = Assert.Single(verified.Evidence, evidence => evidence.Source == "observation");
         Assert.Contains("2 observations", verifiedObservation.Detail, StringComparison.Ordinal);
         Assert.DoesNotContain("frame", verifiedObservation.Detail, StringComparison.OrdinalIgnoreCase);
@@ -198,7 +199,8 @@ public sealed class P2LIntegrationTests
         CandidateReport exactResolution = DiagnosticReportResolver.Resolve(schema, loaded, [], [], [exactReadable]);
         MappingCandidate exactCandidate = Assert.Single(exactResolution.Candidates, candidate =>
             candidate.Token == "lok" && candidate.Readable == "d3b.game.ExactLok");
-        Assert.Equal(CandidateClassification.Verified, exactCandidate.Classification);
+        Assert.Equal(CandidateClassification.Candidate, exactCandidate.Classification);
+        Assert.Contains(exactCandidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofMissing");
         CandidateEvidence aggregateEvidence = Assert.Single(exactCandidate.Evidence, evidence => evidence.Source == "observation");
         Assert.Contains("1 observations", aggregateEvidence.Detail, StringComparison.Ordinal);
         Assert.DoesNotContain("frame", aggregateEvidence.Detail, StringComparison.OrdinalIgnoreCase);

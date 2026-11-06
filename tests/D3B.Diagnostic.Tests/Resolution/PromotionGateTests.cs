@@ -1,3 +1,4 @@
+using D3B.Diagnostic.Contract;
 using D3B.Diagnostic.Resolution;
 
 namespace D3B.Diagnostic.Tests.Resolution;
@@ -114,7 +115,34 @@ public sealed class PromotionGateTests
     }
 
     [Fact]
-    public void RefusesEvidenceWithoutDistinctSchemaOrReadableSource()
+    public void RefusesStructuralOnlyVerifiedCandidateWithNoSemanticProof()
+    {
+        MappingCandidate candidate = CreateCandidate();
+        SetCandidateProperty(candidate, "Proof", null);
+        SetCandidateProperty(candidate, "SemanticIdentity", null);
+
+        PromotionDecision decision = PromotionGate.Evaluate(candidate, CreateReport(candidate), CreateContext());
+
+        Assert.Contains("NO_SEMANTIC_PROOF", decision.RefusalCodes);
+    }
+
+    [Fact]
+    public void DetachedCandidateProofCannotOverrideUnprovenReportCandidate()
+    {
+        MappingCandidate detachedCandidate = CreateCandidateWithReferenceProof();
+        Assert.NotNull(GetCandidateProperty(detachedCandidate, "Proof"));
+        MappingCandidate reportCandidate = detachedCandidate with { Classification = CandidateClassification.Candidate };
+        SetCandidateProperty(reportCandidate, "Proof", null);
+        SetCandidateProperty(reportCandidate, "SemanticIdentity", null);
+
+        PromotionDecision decision = PromotionGate.Evaluate(detachedCandidate, CreateReport(reportCandidate), CreateContext());
+
+        Assert.False(decision.Allowed);
+        Assert.Contains("NO_SEMANTIC_PROOF", decision.RefusalCodes);
+    }
+
+    [Fact]
+    public void DoesNotRequireDistinctSchemaOrReadableEvidenceWhenProofMatches()
     {
         MappingCandidate candidate = CreateCandidate() with
         {
@@ -127,12 +155,12 @@ public sealed class PromotionGateTests
 
         PromotionDecision decision = PromotionGate.Evaluate(candidate, CreateReport(candidate), CreateContext());
 
-        Assert.False(decision.Allowed);
-        Assert.Contains("NOT_VERIFIED", decision.RefusalCodes);
+        Assert.True(decision.Allowed);
+        Assert.Empty(decision.RefusalCodes);
     }
 
     [Fact]
-    public void AllowsReportCandidateWithDistinctVerifiedSchemaAndReadableEvidence()
+    public void DistinctSchemaAndReadableEvidenceCannotReplaceSemanticProof()
     {
         MappingCandidate candidate = CreateCandidate() with
         {
@@ -142,6 +170,19 @@ public sealed class PromotionGateTests
                 new CandidateEvidence { Source = "readable", Verified = true }
             }
         };
+        SetCandidateProperty(candidate, "Proof", null);
+        SetCandidateProperty(candidate, "SemanticIdentity", null);
+
+        PromotionDecision decision = PromotionGate.Evaluate(candidate, CreateReport(candidate), CreateContext());
+
+        Assert.False(decision.Allowed);
+        Assert.Contains("NO_SEMANTIC_PROOF", decision.RefusalCodes);
+    }
+
+    [Fact]
+    public void MatchingProofAllowsPromotionWhenEveryOtherGatePasses()
+    {
+        MappingCandidate candidate = CreateCandidateWithReferenceProof();
 
         PromotionDecision decision = PromotionGate.Evaluate(candidate, CreateReport(candidate), CreateContext());
 
@@ -151,31 +192,7 @@ public sealed class PromotionGateTests
 
     private static MappingCandidate CreateCandidate()
     {
-        return new MappingCandidate
-        {
-            Token = "lok",
-            Readable = "d3b.game.MapInformationRequest",
-            Classification = CandidateClassification.Verified,
-            BuildExact = true,
-            ExactShape = true,
-            UniqueShape = true,
-            HasValidObservation = true,
-            Evidence = new[]
-            {
-                new CandidateEvidence { Source = "schema", Verified = true },
-                new CandidateEvidence { Source = "observation", Verified = true }
-            },
-            ClientVersion = "3.7.13.17",
-            SchemaSha256 = new string('a', 64),
-            FixtureProposal = new SyntheticFixtureProposal
-            {
-                SchemaMessage = "lok",
-                ExpectedStatus = "VALID",
-                ExpectedFieldNumbers = new[] { 1 },
-                Synthetic = true,
-                PayloadHex = "0800"
-            }
-        };
+        return CreateCandidateWithReferenceProof();
     }
 
     private static CandidateReport CreateReport(MappingCandidate candidate)
@@ -206,5 +223,50 @@ public sealed class PromotionGateTests
             OwnerApprovalToken = "P2K2-PROMOTE:lok:3.7.13.17",
             LiveSessionActive = false
         };
+    }
+
+    private static MappingCandidate CreateCandidateWithReferenceProof()
+    {
+        string json = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            source = "promotion-test",
+            build = "3.7.13.17",
+            buildExact = true,
+            messages = new[]
+            {
+                new
+                {
+                    token = "lok",
+                    name = "d3b.game.MapInformationRequest",
+                    semanticProof = new
+                    {
+                        token = "lok",
+                        readable = "d3b.game.MapInformationRequest",
+                        build = "3.7.13.17",
+                        schemaSha256 = new string('a', 64),
+                        kind = "AUDITED_REFERENCE",
+                        source = "promotion-test",
+                        artifactSha256 = new string('b', 64)
+                    }
+                }
+            }
+        });
+        Google.Protobuf.Reflection.FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("MapInformationRequest",
+                ResolverTestData.ReadableField("value", 1, Google.Protobuf.Reflection.FieldDescriptorProto.Types.Type.Int64)));
+        CandidateReport report = ResolverTestData.Resolver(readable, [ReferenceCorpusJsonLoader.Load(json)])
+            .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)),
+                [ResolverTestData.Analysis("lok", "client")], "client");
+        return Assert.Single(report.Candidates);
+    }
+
+    private static object? GetCandidateProperty(MappingCandidate candidate, string propertyName)
+    {
+        return typeof(MappingCandidate).GetProperty(propertyName)?.GetValue(candidate);
+    }
+
+    private static void SetCandidateProperty(MappingCandidate candidate, string propertyName, object? value)
+    {
+        typeof(MappingCandidate).GetProperty(propertyName)?.SetValue(candidate, value);
     }
 }
