@@ -22,7 +22,26 @@ The operational split was derived by comparing the 86 observed tokens and their 
 
 Of the 4,995 candidate rows, 4,965 have `uniqueShape=false` and 30 have `uniqueShape=true`. All 5,284 pair rows have `semanticIdentity: null` and `proof: null`. The 241 conflicts remain conflicts even where other readable alternatives are candidates. `UNKNOWN` means the resolver returned no named readable candidate for that row; it does not mean the schema token was absent from the observation.
 
-The eight former P2K nested-field aliases are `ifg`, `ipe`, `ira`, `ism`, `kjm`, `kmt`, `kxn`, and `lxb`. They are retained here only as **candidate family hypotheses** with `uniqueShape=false`, never as identities. The corrected resolver’s current token rows classify seven observed members as `UNKNOWN`; `.kjm` is unobserved in this GO 1 and has no resolver row. The current resolver does **not** classify these eight as `CANDIDATE` pairs. This distinction is preserved in [P2M_BLOCKERS.json](P2M_BLOCKERS.json) rather than changing the input classifications.
+## Eight former GO 1 `VERIFIED` aliases
+
+The prior GO 1 report treated these aliases as `VERIFIED`; the corrected resolver rows below classify them as `CANDIDATE`. Every row has `exactShape=true`, `uniqueShape=false`, `semanticIdentity=null`, and `proof=null`. These are structural candidates only; none demonstrates an identity.
+
+| Token | Readable candidate | Corrected resolver status |
+|---|---|---|
+| `hgf` | `PlacementCells` | `CANDIDATE` |
+| `imf` | `PlacementCells` | `CANDIDATE` |
+| `kkn` | `FightTurnFinishRequest` | `CANDIDATE` |
+| `klu` | `FightTurnFinishRequest` | `CANDIDATE` |
+| `kmj` | `FightTurnFinishRequest` | `CANDIDATE` |
+| `kkt` | `FightTurnReadyRequest` | `CANDIDATE` |
+| `klx` | `FightTurnReadyRequest` | `CANDIDATE` |
+| `kod` | `LoginCredentials` | `CANDIDATE` |
+
+Of these observed tokens, `hgf`, `kkn`, `klu`, and `kmj` are source-accepted by `NonPositionMessages` for their observed directions. `imf`, `kkt`, `klx`, and `kod` remain blockers. Source acceptance reports the existing policy only; it does not prove the candidate message identity.
+
+## Eight historical P2K nested-field alias hypotheses
+
+These are a separate group from the former GO 1 `VERIFIED` aliases: `ifg`, `ipe`, `ira`, `ism`, `kjm`, `kmt`, `kxn`, and `lxb`. They are retained only as **historical candidate family hypotheses** with `uniqueShape=false`, never as identities. The corrected resolver’s current token rows classify seven observed members as `UNKNOWN`; `.kjm` is unobserved in this GO 1 and has no resolver row. The current resolver does **not** classify these eight as `CANDIDATE` pairs. This distinction is preserved in [P2M_BLOCKERS.json](P2M_BLOCKERS.json) rather than changing the input classifications.
 
 ## Observation quality and noise reduction
 

@@ -112,8 +112,25 @@ These 24 observed types match an entry and direction in the current source allow
 
 `.kbi` is listed for `server` in the source policy but has 0 observed occurrences. Its `exchange` / `ExchangeErrorEvent` label is a prior hypothesis, not an identity proof.
 
-## Eight former P2K family aliases
+## Eight former GO 1 `VERIFIED` aliases
 
-The prior report says these eight direct-field aliases were removed after nested-field review: `ifg`, `ipe`, `ira`, `ism`, `kjm`, `kmt`, `kxn`, and `lxb`. They remain candidates for further evidence only; all are marked `uniqueShape=false` here. **The corrected P2M resolver itself labels seven observed tokens `UNKNOWN` and returns no row for unobserved `.kjm`; it does not label these eight as resolver `CANDIDATE` pairs.** No identity is proved and all observed members remain in the blocker table. This preserves the resolver output rather than changing its classification to match the historical annotation.
+These are distinct from the historical P2K nested-field alias hypotheses below. Although previously reported as GO 1 `VERIFIED`, the corrected resolver classifies each token/readable row as `CANDIDATE` with `exactShape=true`, `uniqueShape=false`, `semanticIdentity=null`, and `proof=null`. They remain unproven candidates.
+
+| Token | Readable candidate | Resolver status | Operational status |
+|---|---|---|---|
+| `hgf` | `PlacementCells` | `CANDIDATE` | Source-accepted by `NonPositionMessages` |
+| `imf` | `PlacementCells` | `CANDIDATE` | Blocker |
+| `kkn` | `FightTurnFinishRequest` | `CANDIDATE` | Source-accepted by `NonPositionMessages` |
+| `klu` | `FightTurnFinishRequest` | `CANDIDATE` | Source-accepted by `NonPositionMessages` |
+| `kmj` | `FightTurnFinishRequest` | `CANDIDATE` | Source-accepted by `NonPositionMessages` |
+| `kkt` | `FightTurnReadyRequest` | `CANDIDATE` | Blocker |
+| `klx` | `FightTurnReadyRequest` | `CANDIDATE` | Blocker |
+| `kod` | `LoginCredentials` | `CANDIDATE` | Blocker |
+
+Source acceptance is the existing direction allowlist comparison, not semantic identity proof. The four blockers remain fail-closed.
+
+## Eight historical P2K nested-field alias hypotheses
+
+This is a separate group from the eight former GO 1 `VERIFIED` aliases above. The prior report says these eight direct-field aliases were removed after nested-field review: `ifg`, `ipe`, `ira`, `ism`, `kjm`, `kmt`, `kxn`, and `lxb`. They remain candidates for further evidence only; all are marked `uniqueShape=false` here. **The corrected P2M resolver itself labels seven observed tokens `UNKNOWN` and returns no row for unobserved `.kjm`; it does not label these eight as resolver `CANDIDATE` pairs.** No identity is proved and all observed members remain in the blocker table. This preserves the resolver output rather than changing its classification to match the historical annotation.
 
 See [P2M resolution report](P2M_RESOLUTION_REPORT.md) for resolver method, classification counts, provenance, and full inventory pointer. Exact per-type fields and evidence are in [P2M_BLOCKERS.json](P2M_BLOCKERS.json).
