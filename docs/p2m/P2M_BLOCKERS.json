@@ -1,0 +1,3864 @@
+{
+  "reportVersion": 1,
+  "clientVersion": "3.7.13.17",
+  "schemaSha256": "e383c947b2c916c10d28636f73ebed0edfe556c61c3403dacf879b215be7e0b0",
+  "observation": {
+    "sourceReport": "docs/p2l-go1/diagnostic-report-20261106T145842529Z-af40abcc.json",
+    "sourceReportSha256": "6ec3e668629424e086d0e6f3016054190160a88f3cef5e61cf144bfefc491a3d",
+    "coverage": "complete",
+    "state": "COMPLETED",
+    "analyzedFrames": 124,
+    "droppedFrames": 0,
+    "distinctObservedTypes": 86,
+    "occurrenceTotal": 124,
+    "statusOccurrences": {
+      "VALID": 124
+    },
+    "problemOccurrences": {},
+    "contradictionOccurrences": {
+      "SHAPE_VARIATION": 14
+    },
+    "typeUrlMismatchOccurrences": 0
+  },
+  "resolution": {
+    "sourceInventory": "/home/nill/.local/share/D3B/diagnostic/reports/p2m-resolved-20261106.json",
+    "sourceInventorySha256": "a487bac837a2175d51226fdf5ecb832a033d916b5efa9e39fc89f1dd5cf5a2cd",
+    "sourceInventoryBytes": 5627768,
+    "protocolVersion": 2,
+    "classificationCounts": {
+      "verified": 0,
+      "candidate": 4995,
+      "conflict": 241,
+      "unknown": 48
+    },
+    "pairRows": 5284,
+    "candidateUniqueShapeFalseRows": 4965,
+    "candidateUniqueShapeTrueRows": 30,
+    "demonstratedIdentities": 0,
+    "semanticIdentityRows": 0,
+    "proofRows": 0
+  },
+  "policy": {
+    "source": "src/D3B.Bot/Network/NonPositionMessages.cs",
+    "sourceSha256": "280d8ab1a72b7a123faab073b0c14e4f08c93fa8cf18e9308182bb3e4e7d0992",
+    "clientVersion": "3.7.13.17",
+    "listedTypes": 25,
+    "acceptedObservedTypes": 24,
+    "observedBlockerTypes": 62,
+    "listedUnobservedTypes": 1,
+    "matchingDirectionMismatches": 0,
+    "acceptedObserved": [
+      {
+        "token": "hgf",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "hgg",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "hgh",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "hla",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "hlf",
+        "direction": [
+          {
+            "direction": "client",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "hlw",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "hmd",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "kcf",
+        "direction": [
+          {
+            "direction": "client",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "kes",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "kkn",
+        "direction": [
+          {
+            "direction": "client",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "klu",
+        "direction": [
+          {
+            "direction": "client",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "kmj",
+        "direction": [
+          {
+            "direction": "client",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "kna",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 4
+          }
+        ],
+        "occurrences": 4,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 4
+          }
+        ],
+        "problems": [],
+        "contradictions": [
+          {
+            "code": "SHAPE_VARIATION",
+            "occurrences": 3
+          }
+        ],
+        "typeUrlOkOccurrences": 4,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "knb",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 2
+          }
+        ],
+        "occurrences": 2,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 2
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 2,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "kni",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "kpu",
+        "direction": [
+          {
+            "direction": "client",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "kpv",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "krm",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "krw",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "lnt",
+        "direction": [
+          {
+            "direction": "client",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "lok",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 2
+          }
+        ],
+        "occurrences": 2,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 2
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 2,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "lsh",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "lwn",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      },
+      {
+        "token": "meq",
+        "direction": [
+          {
+            "direction": "server",
+            "occurrences": 1
+          }
+        ],
+        "occurrences": 1,
+        "statuses": [
+          {
+            "status": "VALID",
+            "occurrences": 1
+          }
+        ],
+        "problems": [],
+        "contradictions": [],
+        "typeUrlOkOccurrences": 1,
+        "typeUrlMismatchOccurrences": 0,
+        "sourcePolicy": "listed for exact client build and observed side"
+      }
+    ],
+    "listedUnobserved": [
+      {
+        "token": "kbi",
+        "expectedDirection": "server",
+        "occurrences": 0,
+        "statuses": [],
+        "problems": [],
+        "identityStatus": "supposed",
+        "familyHypotheses": [
+          {
+            "family": "exchange",
+            "message": "ExchangeErrorEvent",
+            "source": "NonPositionMessages.cs prior annotation; see docs/P2K_REPORT.md",
+            "status": "hypothesis only; no observation in this report"
+          }
+        ],
+        "note": "Listed by source policy but not present in the complete GO 1 observation."
+      }
+    ]
+  },
+  "blockers": [
+    {
+      "token": "mem",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "account",
+          "message": "AccountRoleStatusEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "first_review",
+        "rank": 1
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kne",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 2
+        }
+      ],
+      "occurrences": 2,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 2
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 2,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "connection",
+          "message": "PingRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "first_review",
+        "rank": 2
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kpx",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 13
+        }
+      ],
+      "occurrences": 13,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 13
+        }
+      ],
+      "problems": [],
+      "contradictions": [
+        {
+          "code": "SHAPE_VARIATION",
+          "occurrences": 3
+        }
+      ],
+      "typeUrlOkOccurrences": 13,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "chat",
+          "message": "ChannelUpdateEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "first_review",
+        "rank": 3
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "icj",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 8
+        }
+      ],
+      "occurrences": 8,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 8
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 8,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "quest",
+          "message": "QuestStepInformationEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "first_review",
+        "rank": 4
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "jxh",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 3
+        }
+      ],
+      "occurrences": 3,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 3
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 3,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "fight",
+          "message": "FightTeamUpdateEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "first_review",
+        "rank": 5
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "jpe",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "gamemap",
+          "message": "MapInformationRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "first_review",
+        "rank": 6
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 11,
+        "classificationCounts": {
+          "CANDIDATE": 6,
+          "CONFLICT": 5
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false,
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kod",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "client",
+          "message": "ClientChallengeInitRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "first_review",
+        "rank": 7
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "CANDIDATE": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "hme",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "server",
+          "message": ".com.ankama.dofus.server.game.protocol.server.ServerExperienceModifierEvent",
+          "source": "BillBot game_mappings_detailed.json",
+          "status": "hypothesis only; external mapping is not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 8
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "izn",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "haapi",
+          "message": "HaapiSessionEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 9
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 2,
+        "classificationCounts": {
+          "CONFLICT": 2
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "jet",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "guild",
+          "message": "GuildMemberWarnOnConnectionStopRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 10
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "knz",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "guild",
+          "message": "GuildTokenConfigurationEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 11
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kog",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "client",
+          "message": "ServerVerificationEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 12
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 13,
+        "classificationCounts": {
+          "CANDIDATE": 10,
+          "CONFLICT": 3
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ktc",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "character",
+          "message": "CharacterLoadingCompleteEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 13
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 13,
+        "classificationCounts": {
+          "CANDIDATE": 10,
+          "CONFLICT": 3
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "lnu",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "basic",
+          "message": "SequenceNumberEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 14
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 13,
+        "classificationCounts": {
+          "CANDIDATE": 10,
+          "CONFLICT": 3
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "lov",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "basic",
+          "message": "AlmanachCalendarDateEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 15
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "lpj",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "bak",
+          "message": "BakApiTokenRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 16
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 13,
+        "classificationCounts": {
+          "CANDIDATE": 7,
+          "CONFLICT": 6
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "lpp",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "bak",
+          "message": "BakApiKeyEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 17
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 2,
+        "classificationCounts": {
+          "CONFLICT": 2
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "meb",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "account",
+          "message": "AccountSecurityFlagsEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "initialization_security_connection",
+        "rank": 18
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "iym",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 2
+        }
+      ],
+      "occurrences": 2,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 2
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 2,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "haven",
+          "message": "HavenBagRoomUpdateEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 19
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "jpp",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 2
+        }
+      ],
+      "occurrences": 2,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 2
+        }
+      ],
+      "problems": [],
+      "contradictions": [
+        {
+          "code": "SHAPE_VARIATION",
+          "occurrences": 2
+        }
+      ],
+      "typeUrlOkOccurrences": 2,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "gamemap",
+          "message": "MapFightCountEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 20
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "jpx",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 2
+        }
+      ],
+      "occurrences": 2,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 2
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 2,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "game",
+          "message": "GameActionItemListEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 21
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "hmp",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "roleplay",
+          "message": "RemoveChallengeEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 22
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 3,
+        "classificationCounts": {
+          "CANDIDATE": 3
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "hnl",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "roleplay",
+          "message": "ShowChallengeEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 23
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ico",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "prism",
+          "message": "PrismListEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 24
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ilr",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "npc",
+          "message": "NpcsMapQuestStatusUpdateEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 25
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ixd",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "house",
+          "message": "HouseAccountEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 26
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "iye",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "haven",
+          "message": "HavenBagPackListEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 27
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ltb",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "area",
+          "message": "AreaFightModifierUpdateEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 28
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 3,
+        "classificationCounts": {
+          "CANDIDATE": 2,
+          "CONFLICT": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "lwx",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "anomaly",
+          "message": "AnomalySubareaInformationRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 29
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 13,
+        "classificationCounts": {
+          "CANDIDATE": 7,
+          "CONFLICT": 6
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "lxb",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "anomaly",
+          "message": "AnomalySubareaInformationEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "high",
+      "priority": {
+        "group": "position_relevant",
+        "rank": 30
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ibw",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 4
+        }
+      ],
+      "occurrences": 4,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 4
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 4,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "unknown",
+      "familyHypotheses": [
+        {
+          "family": "unknown",
+          "message": null,
+          "source": "no matching message name in supplied reference files or P2K annotation",
+          "status": "unidentified"
+        }
+      ],
+      "positionEffectPotential": "undetermined",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 31
+      },
+      "neededEvidence": "First identify this token on the exact build from independent evidence; then map its complete recursive schema field graph and review all possible map, cell, fight, movement, placement, and session effects before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ira",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 3
+        }
+      ],
+      "occurrences": 3,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 3
+        }
+      ],
+      "problems": [],
+      "contradictions": [
+        {
+          "code": "SHAPE_VARIATION",
+          "occurrences": 2
+        }
+      ],
+      "typeUrlOkOccurrences": 3,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "inventory",
+          "message": "SetUpdateEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 32
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "jgm",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 3
+        }
+      ],
+      "occurrences": 3,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 3
+        }
+      ],
+      "problems": [],
+      "contradictions": [
+        {
+          "code": "SHAPE_VARIATION",
+          "occurrences": 2
+        }
+      ],
+      "typeUrlOkOccurrences": 3,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "guild",
+          "message": "GuildInformationRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 33
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ism",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 2
+        }
+      ],
+      "occurrences": 2,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 2
+        }
+      ],
+      "problems": [],
+      "contradictions": [
+        {
+          "code": "SHAPE_VARIATION",
+          "occurrences": 2
+        }
+      ],
+      "typeUrlOkOccurrences": 2,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "inventory",
+          "message": "ShortcutBarContentEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 34
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "hkv",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "social",
+          "message": "SpouseInformationRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 35
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "hlv",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "unknown",
+      "familyHypotheses": [
+        {
+          "family": "unknown",
+          "message": null,
+          "source": "no matching message name in supplied reference files or P2K annotation",
+          "status": "unidentified"
+        }
+      ],
+      "positionEffectPotential": "undetermined",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 36
+      },
+      "neededEvidence": "First identify this token on the exact build from independent evidence; then map its complete recursive schema field graph and review all possible map, cell, fight, movement, placement, and session effects before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 5,
+        "classificationCounts": {
+          "CANDIDATE": 4,
+          "CONFLICT": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "hmj",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "unknown",
+      "familyHypotheses": [
+        {
+          "family": "unknown",
+          "message": null,
+          "source": "no matching message name in supplied reference files or P2K annotation",
+          "status": "unidentified"
+        }
+      ],
+      "positionEffectPotential": "undetermined",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 37
+      },
+      "neededEvidence": "First identify this token on the exact build from independent evidence; then map its complete recursive schema field graph and review all possible map, cell, fight, movement, placement, and session effects before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "CONFLICT": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "hpe",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "unknown",
+      "familyHypotheses": [
+        {
+          "family": "unknown",
+          "message": null,
+          "source": "no matching message name in supplied reference files or P2K annotation",
+          "status": "unidentified"
+        }
+      ],
+      "positionEffectPotential": "undetermined",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 38
+      },
+      "neededEvidence": "First identify this token on the exact build from independent evidence; then map its complete recursive schema field graph and review all possible map, cell, fight, movement, placement, and session effects before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "hrl",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "exchange",
+          "message": "ExchangeJobIndexStartedEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 39
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ibs",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "quest",
+          "message": ".com.ankama.dofus.server.game.protocol.quest.QuestsFollowedEvent",
+          "source": "BillBot game_mappings_detailed.json",
+          "status": "hypothesis only; external mapping is not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 40
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ica",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "quest",
+          "message": "QuestsEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 41
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ifg",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "preset",
+          "message": "PresetListEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 42
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "imf",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "notification",
+          "message": "NotificationsEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 43
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "CANDIDATE": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "ipe",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "job",
+          "message": "JobCrafterDirectorySettingsEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 44
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "iqu",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "exchange",
+          "message": "ObjectAveragePricesRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 45
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "isr",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "exchange",
+          "message": "ObjectAveragePricesEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 46
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "jcy",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "guild",
+          "message": "ServerMaintenanceInformationRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 47
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "jcz",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "guild",
+          "message": "ServerMaintenanceEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 48
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kaq",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "exchange",
+          "message": "ExchangeMoneyMovementLimitEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 49
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "CONFLICT": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kkt",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "contact",
+          "message": "FriendSetStatusShareRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 50
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "CANDIDATE": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "klx",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "contact",
+          "message": "ContactWarnOnPermanentDeathSetRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 51
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "CANDIDATE": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kmi",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "contact",
+          "message": "AcquaintanceListEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 52
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kmk",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "contact",
+          "message": "AcquaintanceListRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 53
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 13,
+        "classificationCounts": {
+          "CANDIDATE": 7,
+          "CONFLICT": 6
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kmt",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "contact",
+          "message": "FriendListEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 54
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kmu",
+      "directions": [
+        {
+          "direction": "client",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "contact",
+          "message": "FriendListRequest",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 55
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 13,
+        "classificationCounts": {
+          "CANDIDATE": 7,
+          "CONFLICT": 6
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          true
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "kxn",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "preset",
+          "message": "TierAmountTableEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 56
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "lto",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "cosmetic",
+          "message": "CharacterAppearanceCollectionEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 57
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "luo",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "cosmetic",
+          "message": "CosmeticInventoryLoadedEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 58
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "lve",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "cosmetic",
+          "message": "OutfitsLoadedEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 59
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "lvw",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "cosmetic",
+          "message": "OutfitEntityLookChangedEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 60
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "lxg",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "alteration",
+          "message": "AlterationsEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 61
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    },
+    {
+      "token": "mdp",
+      "directions": [
+        {
+          "direction": "server",
+          "occurrences": 1
+        }
+      ],
+      "occurrences": 1,
+      "statuses": [
+        {
+          "status": "VALID",
+          "occurrences": 1
+        }
+      ],
+      "problems": [],
+      "contradictions": [],
+      "typeUrlOkOccurrences": 1,
+      "typeUrlMismatchOccurrences": 0,
+      "identityStatus": "supposed",
+      "familyHypotheses": [
+        {
+          "family": "achievement",
+          "message": "AchievementsEvent",
+          "source": "docs/P2K_REPORT.md prior family annotation",
+          "status": "hypothesis only; historical, not build-exact proof"
+        }
+      ],
+      "positionEffectPotential": "possible",
+      "priority": {
+        "group": "frequency_then_token",
+        "rank": 62
+      },
+      "neededEvidence": "Establish this token’s exact-build semantic identity from independent evidence, map its complete recursive schema field graph, and review whether it can change map, cell, fight, movement, placement, or session state before any exemption is considered.",
+      "resolver": {
+        "pairRowCount": 1,
+        "classificationCounts": {
+          "UNKNOWN": 1
+        },
+        "uniqueShapeValues": [
+          false
+        ],
+        "exactShapeValues": [
+          false
+        ],
+        "semanticIdentityRows": 0,
+        "proofRows": 0
+      },
+      "latchDisposition": "closed; token is not accepted by NonPositionMessages for this observed direction"
+    }
+  ],
+  "formerAliases": [
+    {
+      "token": "ifg",
+      "priorFamilyHypothesis": "preset",
+      "priorMessageHypothesis": "PresetListEvent",
+      "historicalDisposition": "former P2K non-position candidate removed after nested-field review",
+      "candidateForFurtherEvidence": true,
+      "uniqueShape": false,
+      "identityStatus": "supposed",
+      "currentResolverClassifications": [
+        "UNKNOWN"
+      ],
+      "currentResolverUniqueShapeValues": [
+        false
+      ],
+      "observedInThisReport": true,
+      "note": "Historical family alias only. This record does not promote the token or assert identity proof.",
+      "familyHypothesisDisposition": "CANDIDATE"
+    },
+    {
+      "token": "ipe",
+      "priorFamilyHypothesis": "job",
+      "priorMessageHypothesis": "JobCrafterDirectorySettingsEvent",
+      "historicalDisposition": "former P2K non-position candidate removed after nested-field review",
+      "candidateForFurtherEvidence": true,
+      "uniqueShape": false,
+      "identityStatus": "supposed",
+      "currentResolverClassifications": [
+        "UNKNOWN"
+      ],
+      "currentResolverUniqueShapeValues": [
+        false
+      ],
+      "observedInThisReport": true,
+      "note": "Historical family alias only. This record does not promote the token or assert identity proof.",
+      "familyHypothesisDisposition": "CANDIDATE"
+    },
+    {
+      "token": "ira",
+      "priorFamilyHypothesis": "inventory",
+      "priorMessageHypothesis": "SetUpdateEvent",
+      "historicalDisposition": "former P2K non-position candidate removed after nested-field review",
+      "candidateForFurtherEvidence": true,
+      "uniqueShape": false,
+      "identityStatus": "supposed",
+      "currentResolverClassifications": [
+        "UNKNOWN"
+      ],
+      "currentResolverUniqueShapeValues": [
+        false
+      ],
+      "observedInThisReport": true,
+      "note": "Historical family alias only. This record does not promote the token or assert identity proof.",
+      "familyHypothesisDisposition": "CANDIDATE"
+    },
+    {
+      "token": "ism",
+      "priorFamilyHypothesis": "inventory",
+      "priorMessageHypothesis": "ShortcutBarContentEvent",
+      "historicalDisposition": "former P2K non-position candidate removed after nested-field review",
+      "candidateForFurtherEvidence": true,
+      "uniqueShape": false,
+      "identityStatus": "supposed",
+      "currentResolverClassifications": [
+        "UNKNOWN"
+      ],
+      "currentResolverUniqueShapeValues": [
+        false
+      ],
+      "observedInThisReport": true,
+      "note": "Historical family alias only. This record does not promote the token or assert identity proof.",
+      "familyHypothesisDisposition": "CANDIDATE"
+    },
+    {
+      "token": "kjm",
+      "priorFamilyHypothesis": "context",
+      "priorMessageHypothesis": "ContextRefreshEntityLookEvent",
+      "historicalDisposition": "former P2K non-position candidate removed after nested-field review",
+      "candidateForFurtherEvidence": true,
+      "uniqueShape": false,
+      "identityStatus": "supposed",
+      "currentResolverClassifications": [
+        "NO_ROW"
+      ],
+      "currentResolverUniqueShapeValues": [],
+      "observedInThisReport": false,
+      "note": "Historical family alias only. This record does not promote the token or assert identity proof.",
+      "familyHypothesisDisposition": "CANDIDATE"
+    },
+    {
+      "token": "kmt",
+      "priorFamilyHypothesis": "contact",
+      "priorMessageHypothesis": "FriendListEvent",
+      "historicalDisposition": "former P2K non-position candidate removed after nested-field review",
+      "candidateForFurtherEvidence": true,
+      "uniqueShape": false,
+      "identityStatus": "supposed",
+      "currentResolverClassifications": [
+        "UNKNOWN"
+      ],
+      "currentResolverUniqueShapeValues": [
+        false
+      ],
+      "observedInThisReport": true,
+      "note": "Historical family alias only. This record does not promote the token or assert identity proof.",
+      "familyHypothesisDisposition": "CANDIDATE"
+    },
+    {
+      "token": "kxn",
+      "priorFamilyHypothesis": "preset",
+      "priorMessageHypothesis": "TierAmountTableEvent",
+      "historicalDisposition": "former P2K non-position candidate removed after nested-field review",
+      "candidateForFurtherEvidence": true,
+      "uniqueShape": false,
+      "identityStatus": "supposed",
+      "currentResolverClassifications": [
+        "UNKNOWN"
+      ],
+      "currentResolverUniqueShapeValues": [
+        false
+      ],
+      "observedInThisReport": true,
+      "note": "Historical family alias only. This record does not promote the token or assert identity proof.",
+      "familyHypothesisDisposition": "CANDIDATE"
+    },
+    {
+      "token": "lxb",
+      "priorFamilyHypothesis": "anomaly",
+      "priorMessageHypothesis": "AnomalySubareaInformationEvent",
+      "historicalDisposition": "former P2K non-position candidate removed after nested-field review",
+      "candidateForFurtherEvidence": true,
+      "uniqueShape": false,
+      "identityStatus": "supposed",
+      "currentResolverClassifications": [
+        "UNKNOWN"
+      ],
+      "currentResolverUniqueShapeValues": [
+        false
+      ],
+      "observedInThisReport": true,
+      "note": "Historical family alias only. This record does not promote the token or assert identity proof.",
+      "familyHypothesisDisposition": "CANDIDATE"
+    }
+  ],
+  "classificationCaveat": "Resolver classifications are per token/readable pair. A P2K family hypothesis or a candidate shape is not an identity proof. For the eight historical nested-field aliases, current resolver token rows are UNKNOWN or absent; they remain hypotheses and fail closed."
+}
