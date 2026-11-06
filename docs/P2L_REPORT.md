@@ -1,18 +1,18 @@
 # P2L — Final mission record
 
-**Status: INSTALLED; GO 1 NOT EXECUTED.**
+**Status: INSTALLED; GO 1 EXECUTED — BLOCKED BY RESOLVER FALSE VERIFIED.**
 **Date:** 2026-11-06  
 **Base code SHA:** `4854297d6f60cd99dbfc0d1cb8785ea80acb8b0a`  
 **Final code SHA:** `8cfa4f03d0a988caef4d35fc8476c7e9cc651cf5`  
 **Integrated code branch:** `p2l`
 
-The apphost and engine were installed on 2026-11-06 after the owner gave an installation-only GO. No host, Dofus client, relay, or Ankama session was launched; no redirect or configuration change occurred. There was no movement, harvest, activity, mapping change or promotion. GO 1 remains unexecuted and requires a separate owner authorization.
+The apphost and engine were installed on 2026-11-06 after the owner gave an installation-only GO. A later, separately authorized supervised GO 1 ran on 2026-11-06. Pass 1 was contaminated by manual character movement; pass 2 was clean and produced a complete live report, but resolution returned structurally aliased `VERIFIED` targets. The final result is blocked. No movement automation, mapping change, or promotion occurred; nothing was pushed. The GO1 evidence record is [P2L_GO1_REPORT.md](P2L_GO1_REPORT.md).
 
 ## Verdict
 
-**READY FOR GO 1 — AWAITING OWNER AUTHORIZATION**
+**GO 1 BLOCKED — RESOLVER FALSE VERIFIED (STRUCTURAL ALIASING)**
 
-This is readiness for a future supervised passive diagnostic only. It is not live-client acceptance, mapping promotion, GO 2, or movement authorization. The translation latch remains unchanged.
+The supervised GO 1 run produced a complete live observation, but the resolver's eight `VERIFIED` results contain duplicate readable targets and therefore fail the contract's exact unique-shape requirement at the global token-to-readable level. This is not mapping promotion, GO 2, or movement authorization. The translation latch remains unchanged.
 
 ## Delivered
 
@@ -112,11 +112,11 @@ Data directories were `0700`, files `0600`, owner `nill`; no mapping change was 
 
 The installed P2L apphost has 372 files and manifest `38f067482f397b900c99ce6bfee4f79c921bb4a9f9149c8a3a1c5f59bd2932d0`; its launcher SHA-256 is `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`, `D3B.Diagnostic.dll` SHA-256 is `3fd6b226611a20906fc07b89d85bde094481e9e878ebd0ca1010482fd28344c2`, and informational version is `0.0.0-alpha.0.102+8cfa4f03d0a988caef4d35fc8476c7e9cc651cf5`. Directory, payload, and launcher modes are `0700`, `0600`, and `0700`, respectively; no capability is set. The pre-install P2J copies and rollback verification are recorded above.
 
-Client `3.7.13.17` and its data hashes remain unchanged from the preflight identities above. The Ankama version backup still matches the live version file. No Dofus, host, relay, or diagnostic process was launched; ports `5555` and `5556` have no listener, and no diagnostic socket exists. No redirect or configuration change occurred.
+At the pre-run check, client `3.7.13.17` and its data hashes remained unchanged from the preflight identities above. The Ankama version backup matched the live version file. Before either pass, no Dofus, host, relay, or diagnostic process was running; ports `5555` and `5556` had no listener, and no diagnostic socket existed. No redirect or configuration change had occurred.
 
 ## GO 1 procedure
 
-Use [P2L_LIVE_RUNBOOK.md](P2L_LIVE_RUNBOOK.md) only after a separate owner authorization and a fresh preflight. Its [host command and exact settings](P2L_LIVE_RUNBOOK.md#host-command-and-exact-settings) use the installed engine at `/home/nill/.local/share/D3B/diagnostic/d3b-diagnostic`. The host configuration is passive: `Diagnostic:Enabled=true`, `Diagnostic:EnginePath=/home/nill/.local/share/D3B/diagnostic/d3b-diagnostic`, report export enabled in a private report directory with `Diagnostic:ReportMaxBytes=4194304`, `Diagnostic:IncludeReadable=false`, `Network:Captures:Enabled=false`, `Fights:Alone=false`, and no activity, profile, schedule, automatic command, `p2j move`, movement, harvest, or combat action. GO 1 has not been executed: no host or client launch occurred. A future GO 1 requires separate owner authorization; then launch the host in the foreground first and start the client manually through Zaap only after authorization.
+The supervised run followed the passive configuration in [P2L_LIVE_RUNBOOK.md](P2L_LIVE_RUNBOOK.md): diagnostics and report export enabled, readable inclusion and classic captures disabled, `Fights:Alone=false`, and no activity/profile/schedule or movement automation. Pass 2 was placed manually and had no walk; the client was closed before the host was stopped. The Ankama configuration was restored and post-run checks found no process or listener. The two pass reports and pass-2 resolver output are inventoried in [p2l-go1/README.md](p2l-go1/README.md); interpretation and verdict are in [P2L_GO1_REPORT.md](P2L_GO1_REPORT.md).
 
 The resolver command form is:
 
@@ -138,12 +138,12 @@ Every lost observation, dropped frame, timeout, sidecar/engine error, report-wri
 - Dofus `clientVersion` intentionally uses the dotted numeric build format as an identity exception.
 - 64 blocking protocol types remain unresolved; `.jpe` remains `CONFLICT`, and `.kjt` remains an ambiguous `CANDIDATE`.
 - Full client binary fingerprinting remains a manual preflight.
-- No live GO 1 was executed, so no live observation or live-client acceptance exists.
+- GO 1 produced a live complete observation, but the resolver's duplicate `VERIFIED` targets block the result. No mapping was promoted, and live protocol acceptance is not claimed.
 
 ## Next session
 
-After separate owner authorization and a supervised GO 1, analyze the sanitized observations; validate or discard the 19 P2K-2 candidates; prioritize `.lok`, `.mem`, `.jpe`, `.kjt`, and frequent types; build deterministic fixtures; extend the readable protocol or evidence-based exemptions; run `ContractAudit`; then prepare a new GO 1 after mapping promotion. Mapping promotion still requires all P2K-2 gates and explicit owner approval. Candidates alone never authorize promotion.
+Fix resolver-wide token-to-readable injectivity and add regression coverage for duplicate `VERIFIED` targets before relying on this result. Then re-resolve the retained clean evidence, review the remaining candidates and conflicts, and add deterministic fixtures for any proposed protocol changes. Mapping promotion still requires all contract gates and explicit owner approval. Candidates alone never authorize promotion.
 
 ## Final verdict
 
-**READY FOR GO 1 — AWAITING OWNER AUTHORIZATION**
+**GO 1 BLOCKED — RESOLVER FALSE VERIFIED (STRUCTURAL ALIASING)**
