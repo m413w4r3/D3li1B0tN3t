@@ -1,16 +1,16 @@
 # P2L — Final mission record
 
-**Status: READY FOR OWNER GO; GO 1 NOT EXECUTED.**  
+**Status: INSTALLED; GO 1 NOT EXECUTED.**
 **Date:** 2026-11-06  
 **Base code SHA:** `4854297d6f60cd99dbfc0d1cb8785ea80acb8b0a`  
 **Final code SHA:** `8cfa4f03d0a988caef4d35fc8476c7e9cc651cf5`  
 **Integrated code branch:** `p2l`
 
-No push, live Dofus client, host, relay, or Ankama session occurred. There was no movement, harvest, activity, mapping change or promotion, or client configuration change. The apphost and engine were staged but not installed. GO 1 remains unexecuted and requires a separate owner GO.
+The apphost and engine were installed on 2026-11-06 after the owner gave an installation-only GO. No host, Dofus client, relay, or Ankama session was launched; no redirect or configuration change occurred. There was no movement, harvest, activity, mapping change or promotion. GO 1 remains unexecuted and requires a separate owner authorization.
 
 ## Verdict
 
-**READY FOR P2L LIVE DIAGNOSTIC — AWAITING OWNER GO**
+**READY FOR GO 1 — AWAITING OWNER AUTHORIZATION**
 
 This is readiness for a future supervised passive diagnostic only. It is not live-client acceptance, mapping promotion, GO 2, or movement authorization. The translation latch remains unchanged.
 
@@ -88,11 +88,11 @@ The apphost was published from the exact integrated code SHA `8cfa4f03d0a988caef
 | `D3B.Bot.dll` | `76ff95f6ea82e5e339aef97e49cf16552d8204f95883d5d9eee8665288d1bc23`. |
 | `D3B.Diagnostic.dll` | `3fd6b226611a20906fc07b89d85bde094481e9e878ebd0ca1010482fd28344c2`. |
 | Informational version | `0.0.0-alpha.0.102+8cfa4f03d0a988caef4d35fc8476c7e9cc651cf5`. |
-| Rust engine | `2ac365be2ac70cd5a3fe5e338179ab58cf1a83fdffedcf283e522b3d5200836b`; staged at `/tmp/p2l-apphost/engine/d3b-diagnostic`. |
+| Rust engine | `2ac365be2ac70cd5a3fe5e338179ab58cf1a83fdffedcf283e522b3d5200836b`; installed at `/home/nill/.local/share/D3B/diagnostic/d3b-diagnostic`. |
 
-The apphost is staged at `/home/nill/.local/share/D3B/.apphost-p2l-stage-20261106T004110Z`; stage directory `0700`, payload files `0600`, launcher `0700`. The staged manifest matches the publish manifest. No capability is set. The engine mode is `0700`, with no capability.
+The apphost is installed at `/home/nill/.local/share/D3B/apphost`; directory mode `0700`, payload files mode `0600`, launcher mode `0700`. The installed manifest matches the publish manifest. No capability is set. The Rust engine is installed at `/home/nill/.local/share/D3B/diagnostic/d3b-diagnostic`, SHA-256 `2ac365be2ac70cd5a3fe5e338179ab58cf1a83fdffedcf283e522b3d5200836b`, mode `0700`, with no capability.
 
-The pre-swap backup is `/home/nill/.local/share/D3B/private-backups/apphost-before-p2l-20261106T004111Z`: verified 369-file manifest `452a64c1503f2c20d2fee72873264218a23bba0ef811ce8ebc7be9f26827a7e9`, matching the live P2J apphost before any swap. **The staged apphost and engine were NOT installed.** The report directory was not created. No Ankama configuration was changed.
+The pre-install P2J apphost is preserved at `/home/nill/.local/share/D3B/.apphost-before-p2l-20261106T083635Z` and `/home/nill/.local/share/D3B/private-backups/apphost-before-p2l-20261106T004111Z`. Both copies have 369 files and manifest `452a64c1503f2c20d2fee72873264218a23bba0ef811ce8ebc7be9f26827a7e9`; they are byte-identical to each other and to the pre-install apphost. The rollback copy was verified. The report directory was not created. No Ankama configuration was changed.
 
 ## GO 1 preflight — 2026-11-06
 
@@ -110,11 +110,13 @@ Read-only preflight was rechecked before staging. Client version `3.7.13.17`, bu
 
 Data directories were `0700`, files `0600`, owner `nill`; no mapping change was made. Exact-name process check found no Dofus, D3B host, or diagnostic process; ports `5555`/`5556` had no listener and no diagnostic socket existed. The Ankama version backup at `/home/nill/.local/share/D3B/private-backups/go1-20261104T182159Z/version.original` matched the current version file byte-for-byte (`cmp`), with the same SHA-256 `796d68f1…`.
 
-The current live apphost was still the pre-P2K P2J set: 369 files, manifest `452a64c1503f2c20d2fee72873264218a23bba0ef811ce8ebc7be9f26827a7e9`, launcher mode `0700`, payload modes `0600`, and no capability. The backup manifest matched it.
+The installed P2L apphost has 372 files and manifest `38f067482f397b900c99ce6bfee4f79c921bb4a9f9149c8a3a1c5f59bd2932d0`; its launcher SHA-256 is `de95655755f64725635fadefcd8a31e541d44d093edf519ff78785ddd964e1c0`, `D3B.Diagnostic.dll` SHA-256 is `3fd6b226611a20906fc07b89d85bde094481e9e878ebd0ca1010482fd28344c2`, and informational version is `0.0.0-alpha.0.102+8cfa4f03d0a988caef4d35fc8476c7e9cc651cf5`. Directory, payload, and launcher modes are `0700`, `0600`, and `0700`, respectively; no capability is set. The pre-install P2J copies and rollback verification are recorded above.
+
+Client `3.7.13.17` and its data hashes remain unchanged from the preflight identities above. The Ankama version backup still matches the live version file. No Dofus, host, relay, or diagnostic process was launched; ports `5555` and `5556` have no listener, and no diagnostic socket exists. No redirect or configuration change occurred.
 
 ## GO 1 procedure
 
-Use [P2L_LIVE_RUNBOOK.md](P2L_LIVE_RUNBOOK.md) only after a separate owner GO and a fresh preflight. Its [host command and exact settings](P2L_LIVE_RUNBOOK.md#host-command-and-exact-settings) use `/home/nill/.local/share/D3B/diagnostic/d3b-diagnostic`; this engine path is not installed in this mission. The host configuration is passive: `Diagnostic:Enabled=true`, `Diagnostic:EnginePath=/home/nill/.local/share/D3B/diagnostic/d3b-diagnostic`, report export enabled in a private report directory with `Diagnostic:ReportMaxBytes=4194304`, `Diagnostic:IncludeReadable=false`, `Network:Captures:Enabled=false`, `Fights:Alone=false`, and no activity, profile, schedule, automatic command, `p2j move`, movement, harvest, or combat action. Launch the host in the foreground first; the client is started manually through Zaap only after authorization.
+Use [P2L_LIVE_RUNBOOK.md](P2L_LIVE_RUNBOOK.md) only after a separate owner authorization and a fresh preflight. Its [host command and exact settings](P2L_LIVE_RUNBOOK.md#host-command-and-exact-settings) use the installed engine at `/home/nill/.local/share/D3B/diagnostic/d3b-diagnostic`. The host configuration is passive: `Diagnostic:Enabled=true`, `Diagnostic:EnginePath=/home/nill/.local/share/D3B/diagnostic/d3b-diagnostic`, report export enabled in a private report directory with `Diagnostic:ReportMaxBytes=4194304`, `Diagnostic:IncludeReadable=false`, `Network:Captures:Enabled=false`, `Fights:Alone=false`, and no activity, profile, schedule, automatic command, `p2j move`, movement, harvest, or combat action. GO 1 has not been executed: no host or client launch occurred. A future GO 1 requires separate owner authorization; then launch the host in the foreground first and start the client manually through Zaap only after authorization.
 
 The resolver command form is:
 
@@ -140,8 +142,8 @@ Every lost observation, dropped frame, timeout, sidecar/engine error, report-wri
 
 ## Next session
 
-After owner GO and a supervised GO 1, analyze the sanitized observations; validate or discard the 19 P2K-2 candidates; prioritize `.lok`, `.mem`, `.jpe`, `.kjt`, and frequent types; build deterministic fixtures; extend the readable protocol or evidence-based exemptions; run `ContractAudit`; then prepare a new GO 1 after mapping promotion. Mapping promotion still requires all P2K-2 gates and explicit owner approval. Candidates alone never authorize promotion.
+After separate owner authorization and a supervised GO 1, analyze the sanitized observations; validate or discard the 19 P2K-2 candidates; prioritize `.lok`, `.mem`, `.jpe`, `.kjt`, and frequent types; build deterministic fixtures; extend the readable protocol or evidence-based exemptions; run `ContractAudit`; then prepare a new GO 1 after mapping promotion. Mapping promotion still requires all P2K-2 gates and explicit owner approval. Candidates alone never authorize promotion.
 
 ## Final verdict
 
-**READY FOR P2L LIVE DIAGNOSTIC — AWAITING OWNER GO**
+**READY FOR GO 1 — AWAITING OWNER AUTHORIZATION**
