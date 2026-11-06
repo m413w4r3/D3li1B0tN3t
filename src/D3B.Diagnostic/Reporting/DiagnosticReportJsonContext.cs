@@ -24,13 +24,13 @@ namespace D3B.Diagnostic.Reporting;
 [JsonSerializable(typeof(DiagnosticReportVariant))]
 [JsonSerializable(typeof(DiagnosticReportContradiction))]
 [JsonSerializable(typeof(DiagnosticReportTruncation))]
-public sealed partial class DiagnosticReportJsonContext : JsonSerializerContext
+internal sealed partial class DiagnosticReportJsonContext : JsonSerializerContext
 {
     /// <summary>Gets or initializes the ReportOptions value.</summary>
-    public static JsonSerializerOptions ReportOptions { get; } = CreateOptions();
+    internal static JsonSerializerOptions ReportOptions { get; } = CreateOptions();
 
     /// <summary>Gets or initializes the Protocol value.</summary>
-    public static DiagnosticReportJsonContext Protocol { get; } = new(ReportOptions);
+    internal static DiagnosticReportJsonContext Protocol { get; } = new(ReportOptions);
 
     private static JsonSerializerOptions CreateOptions()
     {
