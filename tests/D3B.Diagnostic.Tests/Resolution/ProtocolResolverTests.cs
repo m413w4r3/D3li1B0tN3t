@@ -167,6 +167,64 @@ public sealed class ProtocolResolverTests
         Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofInvalid");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SameSourceCorpusProofsFailClosedRegardlessOfOrder(bool invalidFirst)
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusEvent",
+                ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        const string token = "lok";
+        const string readableName = "d3b.game.StatusEvent";
+        const string source = "same-source";
+        var validProof = new
+        {
+            token,
+            readable = readableName,
+            build = ResolverTestData.ClientVersion,
+            schemaSha256 = ResolverTestData.SchemaHash,
+            kind = "AUDITED_REFERENCE",
+            source = "resolver-test",
+            artifactSha256 = new string('b', 64)
+        };
+        var invalidProof = new
+        {
+            token,
+            readable = "d3b.game.OtherEvent",
+            build = ResolverTestData.ClientVersion,
+            schemaSha256 = ResolverTestData.SchemaHash,
+            kind = "AUDITED_REFERENCE",
+            source = "resolver-test",
+            artifactSha256 = new string('b', 64)
+        };
+        object[] entries = invalidFirst
+            ? [
+                new { token, name = readableName, source, semanticProof = invalidProof },
+                new { token, name = readableName, source, semanticProof = validProof }
+            ]
+            : [
+                new { token, name = readableName, source, semanticProof = validProof },
+                new { token, name = readableName, source, semanticProof = invalidProof }
+            ];
+        ReferenceCorpus reference = ReferenceCorpusJsonLoader.Load(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            source,
+            build = ResolverTestData.ClientVersion,
+            buildExact = true,
+            messages = entries
+        }));
+
+        MappingCandidate candidate = Assert.Single(ResolverTestData.Resolver(readable, [reference])
+            .Resolve(ResolverTestData.Schema(token, ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)),
+                [ResolverTestData.Analysis(token, "server")], "server")
+            .Candidates);
+
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code == ResolverUncertaintyCode.SemanticProofInvalid);
+        Assert.Null(candidate.FixtureProposal);
+    }
+
     [Fact]
     public void PinSemanticProofFieldsAreConvertedToCandidateProof()
     {
