@@ -20,4 +20,7 @@ public sealed record ReferenceMessage
 
     /// <summary>Known field structure, when supplied by a normalized corpus.</summary>
     public IReadOnlyList<ReferenceField> Fields { get; init; } = Array.Empty<ReferenceField>();
+
+    /// <summary>Optional semantic identity proof carried by a normalized corpus.</summary>
+    public SemanticProof? SemanticProof { get; init; }
 }

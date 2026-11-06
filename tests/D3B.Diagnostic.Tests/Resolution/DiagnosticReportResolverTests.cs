@@ -13,7 +13,7 @@ public sealed class DiagnosticReportResolverTests
     ];
 
     [Fact]
-    public void FullyValidExactBuildReportVerifiesWithAggregateEvidence()
+    public void FullyValidExactBuildReportWithoutSemanticProofRemainsCandidate()
     {
         DiagnosticSchema schema = ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64));
         LoadedDiagnosticReport report = LoadReport("lok");
@@ -23,7 +23,12 @@ public sealed class DiagnosticReportResolverTests
         CandidateReport resolved = Resolve(schema, report, readable);
         MappingCandidate candidate = Assert.Single(resolved.Candidates);
 
-        Assert.Equal(CandidateClassification.Verified, candidate.Classification);
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.True(candidate.ExactShape);
+        Assert.True(candidate.UniqueShape);
+        Assert.True(candidate.HasValidObservation);
+        Assert.Null(candidate.FixtureProposal);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofMissing");
         Assert.NotNull(resolved.Provenance);
         Assert.Equal("diagnostic-report", resolved.Provenance.Source);
         Assert.Contains(candidate.Evidence, evidence => evidence.Source == "observation" && evidence.Detail.Contains("1 observations", StringComparison.Ordinal));
@@ -75,7 +80,9 @@ public sealed class DiagnosticReportResolverTests
         Assert.Equal("diagnostic report is invalid for the build schema", exception.Message);
 
         CandidateReport resolved = DiagnosticReportResolver.Resolve(schema, oversized, [], [], [readable], sufficient);
-        Assert.Equal(CandidateClassification.Verified, Assert.Single(resolved.Candidates).Classification);
+        MappingCandidate candidate = Assert.Single(resolved.Candidates);
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.Contains(candidate.Uncertainties, uncertainty => uncertainty.Code.ToString() == "SemanticProofMissing");
     }
 
     [Fact]

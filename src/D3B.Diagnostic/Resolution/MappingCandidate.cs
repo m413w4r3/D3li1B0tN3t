@@ -14,7 +14,7 @@ public sealed record MappingCandidate
     /// <summary>Observed or requested direction, when known.</summary>
     public string? Direction { get; init; }
 
-    /// <summary>Classification determined by structural evidence and gates.</summary>
+    /// <summary>Classification determined by structural, observation, and semantic proof gates.</summary>
     public CandidateClassification Classification { get; init; }
 
     /// <summary>Ranking hint only; never classification proof.</summary>
@@ -33,16 +33,19 @@ public sealed record MappingCandidate
     public bool BuildExact { get; init; }
 
     /// <summary>Whether the complete declared graph matched exactly.</summary>
-    [JsonIgnore]
     public bool ExactShape { get; init; }
 
     /// <summary>Whether the structural match is unambiguous.</summary>
-    [JsonIgnore]
     public bool UniqueShape { get; init; }
 
     /// <summary>Whether a valid observation supports this token.</summary>
-    [JsonIgnore]
     public bool HasValidObservation { get; init; }
+
+    /// <summary>Readable semantic identity established by a matching proof, or null when unproven.</summary>
+    public string? SemanticIdentity { get; init; }
+
+    /// <summary>Proof supplied for this candidate, whether valid or invalid.</summary>
+    public SemanticProof? Proof { get; init; }
 
     /// <summary>Ordered provenance evidence.</summary>
     public IReadOnlyList<CandidateEvidence> Evidence { get; init; } = Array.Empty<CandidateEvidence>();

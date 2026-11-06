@@ -15,6 +15,9 @@ public enum ResolverUncertaintyCode
     /// <summary>Several readable descriptors have the same exact shape.</summary>
     [JsonStringEnumMemberName("AMBIGUOUS_READABLE_SHAPE")]
     AmbiguousReadableShape,
+    /// <summary>Several schema tokens share one exact readable shape.</summary>
+    [JsonStringEnumMemberName("AMBIGUOUS_SCHEMA_TOKEN")]
+    AmbiguousSchemaToken,
     /// <summary>There is no reproducible valid observation.</summary>
     [JsonStringEnumMemberName("MISSING_VALID_OBSERVATION")]
     MissingValidObservation,
@@ -32,5 +35,11 @@ public enum ResolverUncertaintyCode
     AmbiguousObservationDirection,
     /// <summary>A build-exact pin names a different readable message.</summary>
     [JsonStringEnumMemberName("CONFLICTING_PRIOR_MAPPING")]
-    ConflictingPriorMapping
+    ConflictingPriorMapping,
+    /// <summary>No semantic identity proof was supplied for the candidate.</summary>
+    [JsonStringEnumMemberName("SEMANTIC_PROOF_MISSING")]
+    SemanticProofMissing,
+    /// <summary>A supplied semantic identity proof is malformed or bound to another identity.</summary>
+    [JsonStringEnumMemberName("SEMANTIC_PROOF_INVALID")]
+    SemanticProofInvalid
 }

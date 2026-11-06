@@ -25,6 +25,12 @@ message MessagePin {
 
   // Fields whose obfuscated number differs from the readable one, or whose pairing the structure leaves open.
   repeated NumberPair fields = 3;
+
+  // Optional semantic identity evidence; token, readable name, and build are bound to this pin and its file.
+  optional string semantic_proof_kind = 4;
+  optional string semantic_proof_source = 5;
+  optional string semantic_proof_schema_sha256 = 6;
+  optional string semantic_proof_artifact_sha256 = 7;
 }
 
 message EnumPin {

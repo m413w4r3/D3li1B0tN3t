@@ -9,6 +9,7 @@ namespace D3B.Diagnostic.Resolution;
     WriteIndented = false,
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(CandidateReport))]
+[JsonSerializable(typeof(SemanticProof))]
 internal partial class CandidateReportJsonContext : JsonSerializerContext
 {
 }

@@ -22,10 +22,14 @@ public static class PromotionGate
             || reportCandidate.Classification != CandidateClassification.Verified
             || !reportCandidate.ExactShape
             || !reportCandidate.UniqueShape
-            || !reportCandidate.HasValidObservation
-            || !HasRequiredVerifiedEvidence(reportCandidate))
+            || !reportCandidate.HasValidObservation)
         {
             refusals.Add("NOT_VERIFIED");
+        }
+
+        if (!HasMatchingSemanticProof(reportCandidate, report, context))
+        {
+            refusals.Add("NO_SEMANTIC_PROOF");
         }
 
         if (reportCandidate is not null && reportCandidate.Contradictions.Count > 0)
@@ -88,14 +92,16 @@ public static class PromotionGate
         };
     }
 
-    private static bool HasRequiredVerifiedEvidence(MappingCandidate candidate)
+    private static bool HasMatchingSemanticProof(
+        MappingCandidate? candidate,
+        CandidateReport report,
+        PromotionContext context)
     {
-        HashSet<string> verifiedSources = candidate.Evidence
-            .Where(evidence => evidence.Verified)
-            .Select(evidence => evidence.Source)
-            .ToHashSet(StringComparer.Ordinal);
-
-        return verifiedSources.Count >= 2
-            && (verifiedSources.Contains("schema") || verifiedSources.Contains("readable"));
+        return candidate is not null
+            && candidate.Readable is { Length: > 0 }
+            && string.Equals(candidate.SemanticIdentity, candidate.Readable, StringComparison.Ordinal)
+            && candidate.Proof is not null
+            && candidate.Proof.IsValidFor(candidate.Token, candidate.Readable, report.ClientVersion, report.SchemaSha256)
+            && candidate.Proof.IsValidFor(candidate.Token, candidate.Readable, context.TargetClientVersion, context.TargetSchemaSha256);
     }
 }
