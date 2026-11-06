@@ -119,7 +119,13 @@ public sealed class ProtocolResolver
             .Take(MaxNearCandidates)
             .ToArray();
         List<ResolverSchemaPair> selected = namedPairs.Concat(exactPairs).Concat(nearSelection)
-            .DistinctBy(pair => (pair.Schema.Name, pair.Readable!.FullName, pair.Reference?.Source, pair.Pin?.ReadableFullName))
+            .DistinctBy(pair => (
+                pair.Schema.Name,
+                pair.Readable!.FullName,
+                pair.Reference?.Source,
+                pair.Pin?.ReadableFullName,
+                pair.Reference?.SemanticProof,
+                pair.Pin?.SemanticProof))
             .ToList();
 
         HashSet<string> selectedTokens = selected.Select(pair => pair.Schema.Name).ToHashSet(StringComparer.Ordinal);
