@@ -54,12 +54,9 @@ public static class AtomicPrivateFileWriter
                 File.SetUnixFileMode(temporaryPath, PrivateFileMode);
             }
 
+            // The temporary file already has its final private mode, so the atomic replacement is the last fallible operation.
             File.Move(temporaryPath, fullPath, overwrite: true);
             temporaryCreated = false;
-            if (!OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(fullPath, PrivateFileMode);
-            }
         }
         catch
         {
