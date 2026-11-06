@@ -42,7 +42,7 @@ public sealed class AtomicPrivateFileWriterTests
     }
 
     [Fact]
-    public void WriteSafelyReplacesExistingFileAndLeavesNoTemporaryFiles()
+    public void WriteReplacesExistingFileWithPrivateTemporaryModeAndLeavesNoTemporaryFiles()
     {
         string directory = CreatePrivateDirectory();
         string targetPath = Path.Combine(directory, "output.json");
