@@ -69,7 +69,15 @@ public sealed class PromotionGateTests
         PromotionDecision decision = PromotionGate.Evaluate(candidate, report, context);
 
         Assert.False(decision.Allowed);
-        Assert.Equal(expectedCode, Assert.Single(decision.RefusalCodes));
+        Assert.Contains(expectedCode, decision.RefusalCodes);
+        if (expectedCode == "BUILD_MISMATCH")
+        {
+            Assert.Contains("NO_SEMANTIC_PROOF", decision.RefusalCodes);
+        }
+        else
+        {
+            Assert.Equal(expectedCode, Assert.Single(decision.RefusalCodes));
+        }
     }
 
     [Fact]

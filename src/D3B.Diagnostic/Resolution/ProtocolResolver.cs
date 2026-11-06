@@ -99,6 +99,19 @@ public sealed class ProtocolResolver
             }
         }
 
+        Dictionary<string, MessageDescriptor[]> exactReadablesByToken = exactPairs
+            .GroupBy(pair => pair.Schema.Name, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(pair => pair.Readable!).ToArray(),
+                StringComparer.Ordinal);
+        Dictionary<string, int> exactSchemaTokenDegrees = exactPairs
+            .GroupBy(pair => pair.Readable!.FullName, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(pair => pair.Schema.Name).Distinct(StringComparer.Ordinal).Count(),
+                StringComparer.Ordinal);
+
         ResolverSchemaPair[] nearSelection = nearPairs
             .OrderByDescending(pair => pair.Shape?.Score ?? 0)
             .ThenBy(pair => pair.Schema.Name, StringComparer.Ordinal)
@@ -141,9 +154,7 @@ public sealed class ProtocolResolver
         foreach (IGrouping<string, ResolverSchemaPair> tokenGroup in selected.GroupBy(pair => pair.Schema.Name, StringComparer.Ordinal))
         {
             DiagnosticMessage schemaMessage = tokenGroup.First().Schema;
-            List<ResolverSchemaPair> pairs = tokenGroup.Where(pair => pair.Readable is not null).ToList();
-            List<MessageDescriptor> exactReadables = _readableMessages
-                .Where(readable => Compare(schemaMessage, readable, schemaMessages).Exact)
+            List<MessageDescriptor> exactReadables = exactReadablesByToken.GetValueOrDefault(schemaMessage.Name, [])
                 .ToList();
             HashSet<string> conflictingNames = ConflictingReferenceNames(schemaMessage.Name);
             PriorMapping[] pinsForToken = PinsFor(schemaMessage.Name).ToArray();
@@ -173,6 +184,7 @@ public sealed class ProtocolResolver
                     pair,
                     relatedPairs,
                     exactReadables,
+                    exactSchemaTokenDegrees.GetValueOrDefault(pair.Readable.FullName),
                     pinsForToken,
                     conflictingNames,
                     analyses,
@@ -212,6 +224,7 @@ public sealed class ProtocolResolver
         ResolverSchemaPair pair,
         IReadOnlyList<ResolverSchemaPair> relatedPairs,
         List<MessageDescriptor> exactReadables,
+        int exactSchemaTokenDegree,
         IReadOnlyList<PriorMapping> pinsForToken,
         HashSet<string> conflictingNames,
         IReadOnlyList<DiagnosticAnalysis> analyses,
@@ -294,6 +307,35 @@ public sealed class ProtocolResolver
             }
         }
 
+        SemanticProof[] suppliedProofs = relatedPairs
+            .SelectMany(related => new[] { related.Reference?.SemanticProof, related.Pin?.SemanticProof })
+            .Where(proof => proof is not null)
+            .Cast<SemanticProof>()
+            .Distinct()
+            .OrderBy(proof => proof.Kind)
+            .ThenBy(proof => proof.Source, StringComparer.Ordinal)
+            .ThenBy(proof => proof.ArtifactSha256, StringComparer.Ordinal)
+            .ToArray();
+        SemanticProof? candidateProof = suppliedProofs.FirstOrDefault();
+        bool semanticProofValid = suppliedProofs.Length > 0
+            && suppliedProofs.All(proof => proof.IsValidFor(schemaMessage.Name, readable.FullName, schema.ClientVersion, schema.SchemaSha256));
+        if (suppliedProofs.Length == 0)
+        {
+            uncertainties.Add(new ResolverUncertainty
+            {
+                Code = ResolverUncertaintyCode.SemanticProofMissing,
+                Detail = "no semantic identity proof is supplied for this pairing"
+            });
+        }
+        else if (!semanticProofValid)
+        {
+            uncertainties.Add(new ResolverUncertainty
+            {
+                Code = ResolverUncertaintyCode.SemanticProofInvalid,
+                Detail = "a semantic identity proof is malformed or does not match this pairing and build schema"
+            });
+        }
+
         if (pinsForToken.Any(pin => pin.BuildExact
             && string.Equals(pin.Build, schema.ClientVersion, StringComparison.Ordinal)
             && !string.Equals(pin.ReadableFullName, readable.FullName, StringComparison.Ordinal)))
@@ -309,7 +351,7 @@ public sealed class ProtocolResolver
         DiagnosticAnalysis[] tokenAnalyses = FindAnalyses(analyses, token).ToArray();
         bool hasValidObservation = useAggregatedObservations
             ? aggregateObservation?.FullyValid == true
-            : tokenAnalyses.Any(IsValidObservation);
+            : tokenAnalyses.Length > 0 && tokenAnalyses.All(IsValidObservation);
         string? direction = useAggregatedObservations
             ? ObservationDirection(aggregateObservation, targetDirection)
             : tokenAnalyses.Select(analysis => analysis.Direction).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? targetDirection;
@@ -368,7 +410,7 @@ public sealed class ProtocolResolver
         }
 
         bool exactShape = shape.Exact;
-        bool uniqueShape = exactShape && exactReadables.Count == 1;
+        bool uniqueShape = exactShape && exactReadables.Count == 1 && exactSchemaTokenDegree == 1;
         if (IsPartial(readable) || ContainsPartialNested(readable, new HashSet<string>(StringComparer.Ordinal), 0))
         {
             uncertainties.Add(new ResolverUncertainty
@@ -384,6 +426,15 @@ public sealed class ProtocolResolver
             {
                 Code = ResolverUncertaintyCode.AmbiguousReadableShape,
                 Detail = "multiple readable descriptors have the same exact shape"
+            });
+        }
+
+        if (exactShape && exactSchemaTokenDegree > 1)
+        {
+            uncertainties.Add(new ResolverUncertainty
+            {
+                Code = ResolverUncertaintyCode.AmbiguousSchemaToken,
+                Detail = "multiple schema messages share the same exact shape for this readable descriptor"
             });
         }
 
@@ -408,7 +459,7 @@ public sealed class ProtocolResolver
         bool buildExact = IsBuildExact(schema);
         CandidateClassification classification = contradictions.Count > 0
             ? CandidateClassification.Conflict
-            : exactShape && uniqueShape && buildExact && hasValidObservation
+            : exactShape && uniqueShape && buildExact && hasValidObservation && semanticProofValid
                 && observations.Dropped == 0
                 && string.Equals(observations.Coverage, "complete", StringComparison.Ordinal)
                 && !uncertainties.Any(uncertainty => uncertainty.Code is ResolverUncertaintyCode.PartialReadable
@@ -439,6 +490,8 @@ public sealed class ProtocolResolver
             ExactShape = exactShape,
             UniqueShape = uniqueShape,
             HasValidObservation = hasValidObservation,
+            SemanticIdentity = semanticProofValid ? candidateProof!.Readable : null,
+            Proof = candidateProof,
             Evidence = evidence,
             Contradictions = contradictions.DistinctBy(item => (item.Code, item.Detail)).ToArray(),
             Uncertainties = uncertainties.DistinctBy(item => (item.Code, item.Detail)).ToArray(),
@@ -448,7 +501,10 @@ public sealed class ProtocolResolver
 
     private static bool IsValidObservation(DiagnosticAnalysis analysis)
     {
-        return analysis.Status == DiagnosticStatus.Valid && analysis.TypeUrlOk;
+        return analysis.Status == DiagnosticStatus.Valid
+            && analysis.TypeUrlOk
+            && analysis.DetailTruncated != true
+            && analysis.Problems.Count == 0;
     }
 
     private static MappingCandidate CreateUnknown(

@@ -6,7 +6,7 @@ namespace D3B.Diagnostic.Resolution;
 public sealed record CandidateReport
 {
     /// <summary>Resolver output protocol version.</summary>
-    public int ProtocolVersion { get; init; } = 1;
+    public int ProtocolVersion { get; init; } = 2;
 
     /// <summary>Client build under analysis.</summary>
     public string ClientVersion { get; init; } = string.Empty;

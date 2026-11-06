@@ -51,7 +51,8 @@ public static class ReferenceCorpusJsonLoader
                     Source = GetString(item, "source", source),
                     Build = GetString(item, "build", build),
                     BuildExact = GetBoolean(item, "buildExact", buildExact),
-                    Fields = fields.OrderBy(field => field.Number).ToArray()
+                    Fields = fields.OrderBy(field => field.Number).ToArray(),
+                    SemanticProof = ReadSemanticProof(item)
                 });
             }
         }
@@ -133,5 +134,29 @@ public static class ReferenceCorpusJsonLoader
         }
 
         return fallback;
+    }
+
+    private static SemanticProof? ReadSemanticProof(JsonElement message)
+    {
+        if (!message.TryGetProperty("semanticProof", out JsonElement proof))
+        {
+            return null;
+        }
+
+        if (proof.ValueKind != JsonValueKind.Object)
+        {
+            return new SemanticProof();
+        }
+
+        return new SemanticProof
+        {
+            Token = GetString(proof, "token", string.Empty),
+            Readable = GetString(proof, "readable", string.Empty),
+            Build = GetString(proof, "build", string.Empty),
+            SchemaSha256 = GetString(proof, "schemaSha256", string.Empty),
+            Kind = SemanticProof.ParseKind(GetString(proof, "kind", string.Empty)),
+            Source = GetString(proof, "source", string.Empty),
+            ArtifactSha256 = GetString(proof, "artifactSha256", string.Empty)
+        };
     }
 }

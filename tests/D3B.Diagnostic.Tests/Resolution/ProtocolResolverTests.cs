@@ -196,6 +196,7 @@ public sealed class ProtocolResolverTests
             .Candidates);
 
         Assert.Equal(CandidateClassification.Verified, candidate.Classification);
+        Assert.NotNull(candidate.FixtureProposal);
         object? proof = GetCandidateProperty(candidate, "Proof");
         Assert.NotNull(proof);
         Assert.Equal("AUDITED_PIN", GetProofKind(proof!));
@@ -221,7 +222,7 @@ public sealed class ProtocolResolverTests
         Assert.Equal(2, root.GetProperty("protocolVersion").GetInt32());
         Assert.True(candidate.GetProperty("exactShape").GetBoolean());
         Assert.True(candidate.GetProperty("uniqueShape").GetBoolean());
-        Assert.True(candidate.GetProperty("hasValidObservation").GetBoolean());
+        Assert.False(candidate.GetProperty("hasValidObservation").GetBoolean());
         Assert.Equal("d3b.game.StatusEvent", candidate.GetProperty("semanticIdentity").GetString());
         Assert.Equal("BEHAVIORAL", candidate.GetProperty("proof").GetProperty("kind").GetString());
         Assert.DoesNotContain("PRIVATE_PAYLOAD_SENTINEL", json, StringComparison.Ordinal);
@@ -332,16 +333,21 @@ public sealed class ProtocolResolverTests
                 readableName.EndsWith("Request", StringComparison.Ordinal) ? "client" : "server");
     }
 
-    private static ReferenceCorpus CorpusWithProof(string kind, string? changedProperty = null, string? changedValue = null)
+    private static ReferenceCorpus CorpusWithProof(
+        string kind,
+        string? changedProperty = null,
+        string? changedValue = null,
+        string token = "lok",
+        string readable = "d3b.game.StatusEvent")
     {
         Dictionary<string, object?> proof = new(StringComparer.Ordinal)
         {
             ["kind"] = kind,
-            ["token"] = "lok",
-            ["readable"] = "d3b.game.StatusEvent",
+            ["token"] = token,
+            ["readable"] = readable,
             ["build"] = ResolverTestData.ClientVersion,
             ["schemaSha256"] = ResolverTestData.SchemaHash,
-            ["source"] = "resolver-test",
+            ["source"] = "resolver-test-" + kind + "-" + (changedProperty ?? "matching"),
             ["artifactSha256"] = new string('b', 64)
         };
         if (changedProperty is not null)
@@ -351,12 +357,12 @@ public sealed class ProtocolResolverTests
 
         string json = System.Text.Json.JsonSerializer.Serialize(new
         {
-            source = "resolver-proof-test",
+            source = "resolver-proof-test-" + kind + "-" + (changedProperty ?? "matching"),
             build = ResolverTestData.ClientVersion,
             buildExact = true,
             messages = new[]
             {
-                new { token = "lok", name = "d3b.game.StatusEvent", semanticProof = proof }
+                new { token, name = readable, semanticProof = proof }
             }
         });
         return ReferenceCorpusJsonLoader.Load(json);
@@ -369,7 +375,15 @@ public sealed class ProtocolResolverTests
 
     private static string GetProofKind(object proof)
     {
-        return proof.GetType().GetProperty("Kind")?.GetValue(proof)?.ToString()?.ToUpperInvariant() ?? string.Empty;
+        string? kind = proof.GetType().GetProperty("Kind")?.GetValue(proof)?.ToString();
+        return kind switch
+        {
+            "Il2Cpp" => "IL2CPP",
+            "Behavioral" => "BEHAVIORAL",
+            "AuditedPin" => "AUDITED_PIN",
+            "AuditedReference" => "AUDITED_REFERENCE",
+            _ => string.Empty
+        };
     }
 
     private sealed class TemporaryDirectory : IDisposable
@@ -630,7 +644,7 @@ public sealed class ProtocolResolverTests
                 ResolverTestData.ReadableField("labels", 1, FieldDescriptorProto.Types.Type.String, repeated: true),
                 ResolverTestData.ReadableField("fixed", 2, FieldDescriptorProto.Types.Type.Fixed32)));
 
-        CandidateReport report = ResolverTestData.Resolver(readable)
+        CandidateReport report = ResolverTestData.Resolver(readable, [CorpusWithProof("BEHAVIORAL", token: "fixture", readable: "d3b.game.FixtureEvent")])
             .Resolve(ResolverTestData.Schema("fixture",
                 ResolverTestData.Field(1, DiagnosticFieldKind.Utf8String, repeated: true),
                 ResolverTestData.Field(2, DiagnosticFieldKind.Fixed32)),
@@ -671,15 +685,32 @@ public sealed class ProtocolResolverTests
     }
 
     [Fact]
+    public void OneInvalidAnalysisPreventsACompleteValidObservation()
+    {
+        FileDescriptor readable = ResolverTestData.ReadableFile(
+            ResolverTestData.Message("StatusEvent", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
+        DiagnosticAnalysis[] analyses =
+        [
+            ResolverTestData.Analysis("lok", "server"),
+            ResolverTestData.Analysis("lok", "server") with { Index = 1, TypeUrlOk = false }
+        ];
+
+        MappingCandidate candidate = Assert.Single(ResolverTestData.Resolver(readable, [CorpusWithProof("BEHAVIORAL")])
+            .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)), analyses, "server")
+            .Candidates);
+
+        Assert.Equal(CandidateClassification.Candidate, candidate.Classification);
+        Assert.False(candidate.HasValidObservation);
+        Assert.Null(candidate.FixtureProposal);
+    }
+
+    [Fact]
     public void CandidateReportIsDeterministicAndContainsOnlySyntheticFixtureHex()
     {
         FileDescriptor readable = ResolverTestData.ReadableFile(
             ResolverTestData.Message("StatusEvent", ResolverTestData.ReadableField("value", 1, FieldDescriptorProto.Types.Type.Int64)));
-        DiagnosticAnalysis analysis = ResolverTestData.Analysis("lok", "server") with
-        {
-            Problems = [new DiagnosticProblem { Code = DiagnosticProblemCode.UnknownType, Detail = "PAYLOAD_SENTINEL" }]
-        };
-        CandidateReport report = ResolverTestData.Resolver(readable)
+        DiagnosticAnalysis analysis = ResolverTestData.Analysis("lok", "server");
+        CandidateReport report = ResolverTestData.Resolver(readable, [CorpusWithProof("BEHAVIORAL")])
             .Resolve(ResolverTestData.Schema("lok", ResolverTestData.Field(1, DiagnosticFieldKind.SignedInteger64)), [analysis], "server");
 
         byte[] first = CandidateReportJson.SerializeToUtf8Bytes(report);
@@ -687,7 +718,6 @@ public sealed class ProtocolResolverTests
         string json = System.Text.Encoding.UTF8.GetString(first);
 
         Assert.Equal(first, second);
-        Assert.DoesNotContain("PAYLOAD_SENTINEL", json, StringComparison.Ordinal);
         Assert.DoesNotContain("numericValue", json, StringComparison.Ordinal);
         using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(json);
         System.Text.Json.JsonElement fixture = document.RootElement.GetProperty("candidates")[0].GetProperty("fixture");
