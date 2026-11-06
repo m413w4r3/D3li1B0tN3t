@@ -3,6 +3,7 @@ using D3B.Diagnostic.Reporting;
 
 namespace D3B.Diagnostic.Tests.Reporting;
 
+// The umask is process-global, so this collection runs outside xUnit parallel execution and restores it in finally.
 [CollectionDefinition("Atomic private file writer", DisableParallelization = true)]
 public sealed class AtomicPrivateFileWriterTestGroup
 {
@@ -110,9 +111,11 @@ public sealed class AtomicPrivateFileWriterTests
         string targetPath = Path.Combine(directory, "output.json");
         try
         {
-            File.SetUnixFileMode(directory, PrivateDirectoryMode | UnixFileMode.GroupRead);
+            UnixFileMode sharedParentMode = PrivateDirectoryMode | UnixFileMode.GroupRead;
+            File.SetUnixFileMode(directory, sharedParentMode);
 
             Assert.Throws<IOException>(() => AtomicPrivateFileWriter.Write(targetPath, "private output"));
+            Assert.Equal(sharedParentMode, File.GetUnixFileMode(directory));
             Assert.Empty(Directory.GetFileSystemEntries(directory));
         }
         finally

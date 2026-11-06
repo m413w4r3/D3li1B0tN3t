@@ -1,5 +1,6 @@
 using D3B.Diagnostic.Contract;
 using D3B.Diagnostic.Replay;
+using D3B.Diagnostic.Reporting;
 
 namespace D3B.Scripts.Diagnose;
 
@@ -46,7 +47,7 @@ internal static class DiagnoseIO
         try
         {
             if (output is null) Console.WriteLine(json);
-            else File.WriteAllText(output.FullName, json);
+            else AtomicPrivateFileWriter.Write(output.FullName, json);
         }
         catch { throw new DiagnoseFailure("output write failed"); }
     }
