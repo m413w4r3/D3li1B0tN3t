@@ -28,10 +28,13 @@ public sealed record TargetRegion
     /// <summary>Gets the calibrated cell center in captured-window pixels.</summary>
     public WindowLocalPixels ProjectedCellCenter { get; }
 
+    /// <summary>Gets the calibrated, target-specific visual center used to bound the search.</summary>
+    public WindowLocalPixels ExpectedVisualCenter { get; }
+
     /// <summary>Gets the matched candidate bounds, when a finite match was measured.</summary>
     public WindowLocalRect? VisualBoundingBox { get; }
 
-    /// <summary>Gets the candidate center only after every verification check passes.</summary>
+    /// <summary>Gets the proposed point only after every verification check passes.</summary>
     public WindowLocalPixels? ProposedClickPoint { get; }
 
     /// <summary>Gets scores, thresholds, and accumulated evidence.</summary>
@@ -49,6 +52,12 @@ public sealed record TargetRegion
     /// <summary>Gets the exact calibration identifier used for localization.</summary>
     public string CalibrationId { get; }
 
+    /// <summary>Gets the exact frame width used for localization.</summary>
+    public int FrameWidth { get; }
+
+    /// <summary>Gets the exact frame height used for localization.</summary>
+    public int FrameHeight { get; }
+
     /// <summary>Creates a candidate result tied to one frame and calibration.</summary>
     public TargetRegion(
         long mapId,
@@ -63,10 +72,15 @@ public sealed record TargetRegion
         TargetStatus status,
         TargetEvidence? reason,
         Guid captureId,
-        string calibrationId)
+        string calibrationId,
+        WindowLocalPixels expectedVisualCenter,
+        int frameWidth,
+        int frameHeight)
     {
         ArgumentNullException.ThrowIfNull(confidence);
         ArgumentException.ThrowIfNullOrWhiteSpace(calibrationId);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameWidth);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameHeight);
 
         MapId = mapId;
         ElementId = elementId;
@@ -74,6 +88,7 @@ public sealed record TargetRegion
         GfxId = gfxId;
         ExpectedSkillId = expectedSkillId;
         ProjectedCellCenter = projectedCellCenter;
+        ExpectedVisualCenter = expectedVisualCenter;
         VisualBoundingBox = visualBoundingBox;
         ProposedClickPoint = proposedClickPoint;
         Confidence = confidence;
@@ -81,5 +96,7 @@ public sealed record TargetRegion
         Reason = reason;
         CaptureId = captureId;
         CalibrationId = calibrationId;
+        FrameWidth = frameWidth;
+        FrameHeight = frameHeight;
     }
 }

@@ -26,14 +26,23 @@ public sealed record TargetExpectation
     /// <summary>Gets the caller-owned OpenCV template.</summary>
     public Mat Template { get; }
 
-    /// <summary>Gets the square search radius in pixels; the initial default is 96 px.</summary>
+    /// <summary>Gets the pixel offset from the projected cell center to the expected visual center.</summary>
+    public WindowLocalOffset AnchorOffset { get; }
+
+    /// <summary>Gets the pixel offset from the matched template center to the proposed click point.</summary>
+    public WindowLocalOffset ClickOffset { get; }
+
+    /// <summary>Gets the square search radius in pixels; the default is 96 px.</summary>
     public int SearchRadiusPixels { get; }
 
     /// <summary>Gets the required safety margin from the image edge; the initial default is 8 px.</summary>
     public int MinMarginPixels { get; }
 
-    /// <summary>Gets the maximum candidate-center distance from the projected cell; the initial default is 64 px.</summary>
-    public int MaxDistanceFromProjectedCellPixels { get; }
+    /// <summary>Gets the maximum candidate-center distance from the expected visual center; the default is 64 px.</summary>
+    public int MaxCenterDistancePixels { get; }
+
+    /// <summary>Gets the legacy name for <see cref="MaxCenterDistancePixels"/>.</summary>
+    public int MaxDistanceFromProjectedCellPixels => MaxCenterDistancePixels;
 
     /// <summary>Gets rectangles where the target is obscured or unsafe to use.</summary>
     public ImmutableArray<WindowLocalRect> Exclusions { get; }
@@ -51,14 +60,19 @@ public sealed record TargetExpectation
         Mat template,
         int searchRadiusPixels = 96,
         int minMarginPixels = 8,
-        int maxDistanceFromProjectedCellPixels = 64,
+        int maxCenterDistancePixels = 64,
         ImmutableArray<WindowLocalRect> exclusions = default,
-        ImmutableArray<LogicalCell> otherElements = default)
+        ImmutableArray<LogicalCell> otherElements = default,
+        WindowLocalOffset anchorOffset = default,
+        WindowLocalOffset clickOffset = default)
     {
         ArgumentNullException.ThrowIfNull(template);
-        ArgumentOutOfRangeException.ThrowIfNegative(searchRadiusPixels);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(searchRadiusPixels);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(searchRadiusPixels, 4096);
         ArgumentOutOfRangeException.ThrowIfNegative(minMarginPixels);
-        ArgumentOutOfRangeException.ThrowIfNegative(maxDistanceFromProjectedCellPixels);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(minMarginPixels, 4096);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxCenterDistancePixels);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maxCenterDistancePixels, 8192);
 
         MapId = mapId;
         ElementId = elementId;
@@ -66,10 +80,28 @@ public sealed record TargetExpectation
         GfxId = gfxId;
         ExpectedSkillId = expectedSkillId;
         Template = template;
+        AnchorOffset = anchorOffset;
+        ClickOffset = clickOffset;
         SearchRadiusPixels = searchRadiusPixels;
         MinMarginPixels = minMarginPixels;
-        MaxDistanceFromProjectedCellPixels = maxDistanceFromProjectedCellPixels;
-        Exclusions = exclusions.IsDefault ? ImmutableArray<WindowLocalRect>.Empty : exclusions;
+        MaxCenterDistancePixels = maxCenterDistancePixels;
+        Exclusions = ValidateExclusions(exclusions.IsDefault ? ImmutableArray<WindowLocalRect>.Empty : exclusions);
         OtherElements = otherElements.IsDefault ? ImmutableArray<LogicalCell>.Empty : otherElements;
+    }
+
+    private static ImmutableArray<WindowLocalRect> ValidateExclusions(ImmutableArray<WindowLocalRect> exclusions)
+    {
+        foreach (var exclusion in exclusions)
+        {
+            if (exclusion.X < 0 || exclusion.Y < 0
+                || exclusion.Width <= 0 || exclusion.Height <= 0
+                || (long)exclusion.X + exclusion.Width > int.MaxValue
+                || (long)exclusion.Y + exclusion.Height > int.MaxValue)
+            {
+                throw new ArgumentException("Every exclusion must have positive dimensions and representable window-local bounds.", nameof(exclusions));
+            }
+        }
+
+        return exclusions;
     }
 }

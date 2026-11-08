@@ -252,9 +252,10 @@ Measurements:
 
 1. **MapId provenance.** `120063490` is atlas+fingerprint verified, not live server-observed. Confirm it with a relay
    observation before binding any action or resource to this profile.
-2. **Tall resource templates.** The default bounded search (±96 px) and maximum center distance (64 px) reject a
-   130-px-tall plant template centered ~54 px above the cell. Use a distinctive lower-foliage template, or extend the
-   locator with an explicit visual-anchor offset and/or a configurable search radius.
+2. **Tall resource templates.** The locator now accepts a per-target visual-anchor offset and a configurable search
+   radius. Synthetic coverage confirms the default still rejects the 75×130 template while an explicit −14 px anchor
+   and 128 px radius can find it. The verified 50×60 lower-foliage measurement remains a 14 px upward offset from
+   the projected cell center; callers must pass that measurement for the target they are locating.
 3. **Display overlays.** The in-game grid changes image pixels and lowers template scores. Templates must be captured
    under the same display settings or made invariant to overlays. The small template still passed cross-condition at
    `0.915`, but the full template failed.
@@ -266,10 +267,14 @@ Measurements:
 6. **Preflight state capture.** Fix the shell quoting in the Ankama launcher hash manifest; the current session can
    prove the Dofus client install unchanged by mtime and binary identity, but not every launcher-managed file
    byte-for-byte.
-7. **UI exclusions.** Define exclusions for the nameplate, right-side bar, and top icons in P2O. The target was clear
-   in this capture, but the capture does not prove every UI layout.
+7. **UI exclusions.** The locator accepts validated, caller-supplied rectangles and rejects a candidate when its box or
+   proposed point overlaps one. Callers still need to measure the nameplate, right-side bar, and top icons for each
+   relevant frame layout; this report does not establish universal Dofus UI coordinates.
 8. **Window-manager decorations.** The selected XID had border width 0 and no decoration was measured outside it. Other
    window-manager configurations must be measured separately.
+9. **Scene and zoom changes.** Capture, calibration, dimensions, map, and target identity are bound to each result, and
+   the action gate invalidates a result for another capture or frame size. Matching XID and dimensions do not reveal a
+   Unity zoom or scene change by themselves; callers must revalidate calibration and target measurements.
 
 ## 9. Verdict
 
@@ -286,6 +291,31 @@ The three required gates are met and reproducible:
 Resource localization is **PASS** for a bounded 50×60 template (0.985 cross-frame score, 0.721 margin, 14-px visual
 offset), with the tall-template and overlay limitations above. The MapId provenance and action-readiness items are
 P2O work; no live action is authorized by this report.
+
+The P2O offline locator implementation keeps zero offsets, a 96 px search radius, and a 64 px candidate-center limit
+as defaults. It does not hard-code the measured 14 px target offset or any UI exclusion. Its synthetic tests exercise
+large-radius tall-template matching, caller-provided exclusions, no-proposal failure paths, and result binding. No
+private capture or template was added to the repository.
+
+### P2O targeting verification
+
+| Check | Result |
+| --- | --- |
+| Pinned-SDK solution build | Pass; 0 warnings, 0 errors. |
+| `D3B.Gui.Tests` | Pass; 202/202 (190 before this lot, +10 locator cases, +2 action-gate cases). |
+| `D3B.Bot.Tests` | Pass; 649/649, unchanged. |
+| `dotnet format --verify-no-changes --no-restore` | Pass. |
+| `git diff --check` | Pass. |
+
+RED/GREEN evidence is synthetic: the new anchor-distance case failed against the prior locator with
+`TooFarFromExpectedCell` (90 px from the cell despite being 50 px from the expected visual center), then passed with
+the configured anchor-relative check. The tall-template test keeps the default 96 px search unverified with no
+proposed point and verifies the same synthetic 75×130 image with a −14 px anchor and 128 px radius. NuGet audit was
+disabled only for the local commands because `api.nuget.org` was unreachable; repository configuration was not
+changed. Test and formatting tools used local-socket permission because their runners require IPC sockets.
+
+One repeated GUI run had an Xvfb fake-window startup failure; its next full run passed 202/202. One repeated Bot run
+had an existing fight request-order assertion fail; that case passed alone and the next full run passed 649/649.
 
 ## Private evidence
 

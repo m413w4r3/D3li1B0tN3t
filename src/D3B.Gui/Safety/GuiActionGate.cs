@@ -127,6 +127,8 @@ public sealed class GuiActionGate
         if (target.Status != TargetStatus.Verified
             || target.CaptureId != frame.CaptureId
             || !string.Equals(target.CalibrationId, profile.CalibrationId, StringComparison.Ordinal)
+            || target.FrameWidth != frame.PixelWidth
+            || target.FrameHeight != frame.PixelHeight
             || target.MapId != intent.MapId
             || target.ProposedClickPoint is null
             || !IsClickPointInsideSafeClientArea(target, profile.ClientAreaGeometry, frame)
