@@ -4,11 +4,15 @@ using D3B.Bot.Activities;
 using D3B.Bot.Banks;
 using D3B.Bot.Characters;
 using D3B.Bot.Fights;
+using D3B.Bot.Gui;
 using D3B.Bot.Journal;
 using D3B.Bot.Movement;
 using D3B.Bot.Network;
 using D3B.Data.Maps;
 using D3B.Engine.World;
+using D3B.Gui.Actions;
+using D3B.Gui.Safety;
+using D3B.Gui.Windowing;
 using D3B.Network.Relay;
 using D3B.Protocol.Game;
 using Google.Protobuf;
@@ -55,6 +59,8 @@ public sealed class BotActor : IAsyncDisposable
     private readonly List<Starting> _parked = [];
     private readonly Lock _activityLock = new();
     private readonly AsyncLocal<RunningBehavior?> _movementSendBehavior = new();
+    private readonly GuiIntentCorrelation _guiIntents;
+    private readonly GuiWorldSnapshotAdapter _guiWorldSnapshots;
     private readonly ILogger _log;
     private readonly Lazy<WorldPathfinder> _world;
     private readonly Lazy<BankDirectory> _banks;
@@ -165,6 +171,8 @@ public sealed class BotActor : IAsyncDisposable
 
     internal TimeProvider Time { get; }
 
+    internal GuiIntentCorrelationState GuiIntentState => _guiIntents.State;
+
     internal ILogger Log => _log;
 
     /// <summary>Gets how long the bot's behaviors wait now, which the app may change while they run (D151).</summary>
@@ -242,6 +250,8 @@ public sealed class BotActor : IAsyncDisposable
         _banks = banks;
         _delays = delays;
         Time = time;
+        _guiIntents = new GuiIntentCorrelation(time);
+        _guiWorldSnapshots = new GuiWorldSnapshotAdapter(time);
         _log = log;
         _loop = Task.Run(ReadInboxAsync);
     }
@@ -265,6 +275,103 @@ public sealed class BotActor : IAsyncDisposable
     public void Resume()
     {
         Post(new Resuming());
+    }
+
+    /// <summary>Submits one GUI intention to the actor loop for safety validation and registration.</summary>
+    /// <param name="intent">The intention tied to the decision snapshot and window.</param>
+    /// <param name="decisionWorld">The protocol snapshot used to plan the intention.</param>
+    /// <param name="window">The selected game window snapshot.</param>
+    /// <param name="cancellationToken">Cancels the queued submission before the loop handles it.</param>
+    /// <returns>The actor's registration decision.</returns>
+    public Task<GuiIntentRegistration> RegisterGuiIntentAsync(
+        GuiActionIntent intent,
+        GuiWorldSnapshot decisionWorld,
+        GameWindowSnapshot window,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(intent);
+        ArgumentNullException.ThrowIfNull(decisionWorld);
+        ArgumentNullException.ThrowIfNull(window);
+
+        if (cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<GuiIntentRegistration>(cancellationToken);
+
+        if (_stopping)
+            return Task.FromResult(RejectedGuiIntent(intent.IntentId, "The bot is stopped."));
+
+        var completed = new TaskCompletionSource<GuiIntentRegistration>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        if (!_inbox.Writer.TryWrite(new RegisterGuiIntent(intent, decisionWorld, window, completed, cancellationToken)))
+            return Task.FromResult(RejectedGuiIntent(intent.IntentId, "The bot inbox is closed."));
+
+        return completed.Task;
+    }
+
+    /// <summary>Acknowledges a registered GUI intention on the actor loop against its current snapshot and window.</summary>
+    public Task<bool> AcknowledgeGuiIntentAsync(
+        Guid intentId,
+        GuiWorldSnapshot world,
+        GameWindowSnapshot window,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(window);
+
+        if (cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<bool>(cancellationToken);
+
+        if (_stopping)
+            return Task.FromResult(false);
+
+        var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        if (!_inbox.Writer.TryWrite(new AcknowledgeGuiIntent(intentId, world, window, completed, cancellationToken)))
+            return Task.FromResult(false);
+
+        return completed.Task;
+    }
+
+    /// <summary>Records the single permitted GUI click on the actor loop after rechecking its snapshot and window.</summary>
+    public Task<bool> MarkGuiIntentClickedAsync(
+        Guid intentId,
+        GuiWorldSnapshot world,
+        GameWindowSnapshot window,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(window);
+
+        if (cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<bool>(cancellationToken);
+
+        if (_stopping)
+            return Task.FromResult(false);
+
+        var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        if (!_inbox.Writer.TryWrite(new MarkGuiIntentClicked(intentId, world, window, completed, cancellationToken)))
+            return Task.FromResult(false);
+
+        return completed.Task;
+    }
+
+    /// <summary>Terminates the active GUI intention on the actor loop, preserving uncertainty after a possible click.</summary>
+    public Task<bool> CancelGuiIntentAsync(Guid intentId, bool clickMayHaveBeenEmitted, string reason, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(reason);
+
+        if (cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<bool>(cancellationToken);
+
+        if (_stopping)
+            return Task.FromResult(false);
+
+        var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        if (!_inbox.Writer.TryWrite(new CancelGuiIntent(intentId, clickMayHaveBeenEmitted, reason, completed, cancellationToken)))
+            return Task.FromResult(false);
+
+        return completed.Task;
     }
 
     /// <summary>Reckons the character's life at a time: the life the server last said, and a point each interval it regenerates since (D153).</summary>
@@ -482,6 +589,7 @@ public sealed class BotActor : IAsyncDisposable
             try
             {
                 Handle(input);
+                RevokeGuiIntentIfTranslationBlocked();
                 Wake();
             }
             catch (Exception exception)
@@ -540,21 +648,254 @@ public sealed class BotActor : IAsyncDisposable
                     settling.Settled.TrySetResult();
                     break;
                 }
-            case Processing processing:
-                {
-                    var failures = Volatile.Read(ref _handlerFailures);
-
-                    if (processing.HandlerFailures > 0 || failures != processing.HandlerFailures)
-                        processing.Processed.TrySetException(new InvalidOperationException("A bot inbox handler failed before movement authorization."));
-                    else
-                        processing.Processed.TrySetResult();
-                    break;
-                }
             case MovementRequested movement:
                 if (movement.MapId is null || movement.MapId == _state.MapId)
                     PublishState(_state with { PendingMovementMapId = movement.MapId }, _connected);
                 break;
+            case Processing processing:
+                RevokeGuiIntentIfTranslationBlocked();
+                CompleteProcessing(processing);
+                break;
+            case RegisterGuiIntent registering:
+                if (registering.CancellationToken.IsCancellationRequested)
+                    registering.Completed.TrySetCanceled(registering.CancellationToken);
+                else if (_stopping)
+                    registering.Completed.TrySetResult(RejectedGuiIntent(registering.Intent.IntentId, "The bot is stopped."));
+                else
+                    registering.Completed.TrySetResult(RegisterGuiIntentOnLoop(registering.Intent, registering.DecisionWorld, registering.Window));
+                break;
+            case AcknowledgeGuiIntent acknowledging:
+                if (acknowledging.CancellationToken.IsCancellationRequested)
+                    acknowledging.Completed.TrySetCanceled(acknowledging.CancellationToken);
+                else
+                    acknowledging.Completed.TrySetResult(AcknowledgeGuiIntentOnLoop(acknowledging.IntentId, acknowledging.World, acknowledging.Window));
+                break;
+            case MarkGuiIntentClicked clicking:
+                if (clicking.CancellationToken.IsCancellationRequested)
+                    clicking.Completed.TrySetCanceled(clicking.CancellationToken);
+                else
+                    clicking.Completed.TrySetResult(MarkGuiIntentClickedOnLoop(clicking.IntentId, clicking.World, clicking.Window));
+                break;
+            case CancelGuiIntent cancelling:
+                if (cancelling.CancellationToken.IsCancellationRequested)
+                    cancelling.Completed.TrySetCanceled(cancelling.CancellationToken);
+                else
+                    cancelling.Completed.TrySetResult(CancelGuiIntentOnLoop(cancelling.IntentId, cancelling.ClickMayHaveBeenEmitted, cancelling.Reason));
+                break;
         }
+    }
+
+    private void CompleteProcessing(Processing processing)
+    {
+        var failures = Volatile.Read(ref _handlerFailures);
+
+        if (processing.HandlerFailures > 0 || failures != processing.HandlerFailures)
+            processing.Processed.TrySetException(new InvalidOperationException("A bot inbox handler failed before movement authorization."));
+        else
+            processing.Processed.TrySetResult();
+    }
+
+    private GuiIntentRegistration RegisterGuiIntentOnLoop(GuiActionIntent intent, GuiWorldSnapshot decisionWorld, GameWindowSnapshot window)
+    {
+        GuiWorldSnapshot current = _guiWorldSnapshots.Capture(this);
+
+        if (_guiIntents.Intent is { } activeIntent && IsActiveGuiIntent(activeIntent.IntentId))
+            return _guiIntents.Register(intent, current, window);
+
+        if (intent.ActionKind != GuiActionKind.WalkToCell)
+            return RejectedGuiIntent(intent.IntentId, "Only WalkToCell intentions are accepted by this inbox.");
+
+        if (current.StateRevision != decisionWorld.StateRevision
+            || current.SessionEpoch != decisionWorld.SessionEpoch
+            || current.MapId != decisionWorld.MapId
+            || current.StateRevision != intent.StateRevision
+            || current.SessionEpoch != intent.SessionEpoch
+            || current.MapId != intent.MapId)
+        {
+            return RejectedGuiIntent(intent.IntentId, "The actor state changed after the intention was planned.");
+        }
+
+        DateTimeOffset now = Time.GetUtcNow();
+
+        if (now < intent.CreatedAt || now >= intent.ExpiresAt)
+            return _guiIntents.Register(intent, current, window);
+
+        if (!IsSafeGuiIntentWorld(current))
+            return RejectedGuiIntent(intent.IntentId, GetGuiIntentSafetyDetail(current));
+
+        return _guiIntents.Register(intent, current, window);
+    }
+
+    private bool AcknowledgeGuiIntentOnLoop(Guid intentId, GuiWorldSnapshot world, GameWindowSnapshot window)
+    {
+        if (_stopping || !IsActiveGuiIntent(intentId))
+            return false;
+
+        GuiWorldSnapshot current = _guiWorldSnapshots.Capture(this);
+
+        if (!GuiWorldSnapshotsMatch(world, current))
+        {
+            _guiIntents.Cancel("The actor snapshot did not match the acknowledgement snapshot.");
+            return false;
+        }
+
+        return _guiIntents.Acknowledge(current, window);
+    }
+
+    private bool MarkGuiIntentClickedOnLoop(Guid intentId, GuiWorldSnapshot world, GameWindowSnapshot window)
+    {
+        if (_stopping || !IsActiveGuiIntent(intentId))
+            return false;
+
+        GuiWorldSnapshot current = _guiWorldSnapshots.Capture(this);
+
+        if (!GuiWorldSnapshotsMatch(world, current))
+        {
+            _guiIntents.Cancel("The actor snapshot did not match the click snapshot.");
+            return false;
+        }
+
+        return _guiIntents.MarkClicked(current, window);
+    }
+
+    private bool CancelGuiIntentOnLoop(Guid intentId, bool clickMayHaveBeenEmitted, string reason)
+    {
+        if (!IsActiveGuiIntent(intentId))
+            return false;
+
+        return clickMayHaveBeenEmitted
+            ? _guiIntents.MarkUnconfirmed(reason)
+            : _guiIntents.Cancel(reason);
+    }
+
+    private bool IsActiveGuiIntent(Guid intentId)
+    {
+        return _guiIntents.Intent?.IntentId == intentId
+            && (_guiIntents.State is GuiIntentCorrelationState.Registered
+            or GuiIntentCorrelationState.Acknowledged
+            or GuiIntentCorrelationState.Clicked
+            or GuiIntentCorrelationState.ClientRequestSeen
+            or GuiIntentCorrelationState.ServerConfirmed);
+    }
+
+    private void RevokeGuiIntentIfTranslationBlocked()
+    {
+        if (_guiIntents.State is not (GuiIntentCorrelationState.Registered or GuiIntentCorrelationState.Acknowledged
+            or GuiIntentCorrelationState.Clicked or GuiIntentCorrelationState.ClientRequestSeen))
+        {
+            return;
+        }
+
+        GuiWorldSnapshot current = _guiWorldSnapshots.Capture(this);
+
+        if (current.ProtocolObservationStatus is ProtocolObservationStatus.TranslationBlocked)
+            CancelActiveGuiIntent("Protocol translation was blocked during the intention.");
+    }
+
+    private void RevokeGuiIntentIfMapChanged(long? mapId)
+    {
+        if (_guiIntents.Intent is { } intent && IsActiveGuiIntent(intent.IntentId) && intent.MapId != mapId)
+            CancelActiveGuiIntent("The character left the intention's map.");
+    }
+
+    private void RevokeGuiIntentBeforeClick(string detail)
+    {
+        if (_guiIntents.State is GuiIntentCorrelationState.Registered or GuiIntentCorrelationState.Acknowledged)
+            CancelActiveGuiIntent(detail);
+    }
+
+    private void CancelActiveGuiIntent(string detail)
+    {
+        if (_guiIntents.Intent is { } intent && IsActiveGuiIntent(intent.IntentId))
+            _guiIntents.Cancel(detail);
+    }
+
+    private static bool IsSafeGuiIntentWorld(GuiWorldSnapshot world)
+    {
+        return world.IsConnected
+            && !world.IsUserInterrupted
+            && !world.IsFighting
+            && !world.IsWalking
+            && !world.IsUsing
+            && !world.IsInDialog
+            && !world.HasAmbiguousMovement
+            && world.ProtocolObservationStatus is ProtocolObservationStatus.Complete
+            && world.CellProvenance is GuiCellProvenance.ServerPlaced or GuiCellProvenance.ServerConfirmed;
+    }
+
+    private static string GetGuiIntentSafetyDetail(GuiWorldSnapshot world)
+    {
+        if (!world.IsConnected)
+            return "The character is disconnected.";
+
+        if (world.IsUserInterrupted)
+            return "The player has paused the bot.";
+
+        if (world.IsFighting)
+            return "The character is fighting.";
+
+        if (world.IsWalking)
+            return "The character is already walking.";
+
+        if (world.IsUsing)
+            return "The character is using an interactive.";
+
+        if (world.IsInDialog)
+            return "The character is in a dialog or exchange.";
+
+        if (world.HasAmbiguousMovement)
+            return "The character's movement state is ambiguous.";
+
+        if (world.ProtocolObservationStatus is not ProtocolObservationStatus.Complete)
+            return $"The protocol observation is {world.ProtocolObservationStatus}.";
+
+        return "The current cell does not have trusted server provenance.";
+    }
+
+    private static GuiIntentRegistration RejectedGuiIntent(Guid intentId, string detail)
+    {
+        return new GuiIntentRegistration(GuiIntentRegistrationStatus.Rejected, intentId, detail);
+    }
+
+    private static bool GuiWorldSnapshotsMatch(GuiWorldSnapshot expected, GuiWorldSnapshot actual)
+    {
+        return expected.SessionEpoch == actual.SessionEpoch
+            && expected.StateRevision == actual.StateRevision
+            && expected.MapId == actual.MapId
+            && expected.CellId == actual.CellId
+            && expected.CellProvenance == actual.CellProvenance
+            && expected.IsConnected == actual.IsConnected
+            && expected.IsFighting == actual.IsFighting
+            && expected.IsWalking == actual.IsWalking
+            && expected.IsUsing == actual.IsUsing
+            && expected.IsInDialog == actual.IsInDialog
+            && expected.HasAmbiguousMovement == actual.HasAmbiguousMovement
+            && expected.ProtocolObservationStatus == actual.ProtocolObservationStatus
+            && expected.IsUserInterrupted == actual.IsUserInterrupted
+            && KnownGuiElementsMatch(expected.KnownElements, actual.KnownElements);
+    }
+
+    private static bool KnownGuiElementsMatch(ImmutableArray<GuiKnownElement> expected, ImmutableArray<GuiKnownElement> actual)
+    {
+        if (expected.Length != actual.Length)
+            return false;
+
+        for (int index = 0; index < expected.Length; index++)
+        {
+            GuiKnownElement left = expected[index];
+            GuiKnownElement right = actual[index];
+
+            if (left.ElementId != right.ElementId
+                || left.Cell != right.Cell
+                || left.InteractiveId != right.InteractiveId
+                || left.State != right.State
+                || !left.EnabledSkillIds.AsSpan().SequenceEqual(right.EnabledSkillIds.AsSpan()))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void OnSeen(GameSession session, RelayDirection side, IMessage message, bool translationBlocked)
@@ -566,6 +907,7 @@ public sealed class BotActor : IAsyncDisposable
         var state = CharacterEvents.Apply(before, side, message);
 
         PublishState(state, _connected);
+        RevokeGuiIntentIfMapChanged(state.MapId);
 
         LogPositionTransition(before, state, side, message);
 
@@ -591,7 +933,12 @@ public sealed class BotActor : IAsyncDisposable
         }
 
         // A request to leave changes nothing of the state, so this is the dialog the client sent it in.
-        if (side is RelayDirection.FromClient && _behavior is { } behavior && PlayerActions.Starts(state, message))
+        bool playerActionStarted = side is RelayDirection.FromClient && PlayerActions.Starts(state, message);
+
+        if (playerActionStarted)
+            RevokeGuiIntentBeforeClick("A client gameplay action started before the intention was clicked.");
+
+        if (playerActionStarted && _behavior is { } behavior)
         {
             // The player's first request pauses the bot; those that come with it, such as a walk after its cancelling, add nothing.
             if (!_paused)
@@ -605,6 +952,7 @@ public sealed class BotActor : IAsyncDisposable
 
         if (side is RelayDirection.FromServer && message is ContextCreationEvent { Context: ContextCreationEvent.Types.GameContext.Fight })
         {
+            CancelActiveGuiIntent("A fight started during the intention.");
             Volatile.Write(ref _fightBeganAt, Time.GetUtcNow().UtcTicks);
             Interlocked.Increment(ref _fightsBegun);
             Write(BotEvent.FightBegan);
@@ -847,6 +1195,8 @@ public sealed class BotActor : IAsyncDisposable
 
     private void OnPausing()
     {
+        CancelActiveGuiIntent("The bot was paused during the intention.");
+
         if (_paused)
             return;
 
@@ -860,6 +1210,8 @@ public sealed class BotActor : IAsyncDisposable
     {
         if (_stopping)
             return;
+
+        CancelActiveGuiIntent("The game session was attached or replaced during the intention.");
 
         if (_behavior is { } behavior)
             Interrupt(behavior, Interruption.Disconnected);
@@ -884,6 +1236,8 @@ public sealed class BotActor : IAsyncDisposable
         if (session != _session)
             return;
 
+        CancelActiveGuiIntent("The game session detached during the intention.");
+
         if (_behavior is { } behavior)
             Interrupt(behavior, Interruption.Disconnected);
 
@@ -902,6 +1256,8 @@ public sealed class BotActor : IAsyncDisposable
 
     private void OnStopping()
     {
+        CancelActiveGuiIntent("The bot stopped during the intention.");
+
         if (_behavior is { } behavior)
             Interrupt(behavior, Interruption.Stopped);
 
@@ -971,6 +1327,34 @@ public sealed class BotActor : IAsyncDisposable
     private sealed record Processing(TaskCompletionSource Processed, int HandlerFailures) : Input;
 
     private sealed record MovementRequested(long? MapId) : Input;
+
+    private sealed record RegisterGuiIntent(
+        GuiActionIntent Intent,
+        GuiWorldSnapshot DecisionWorld,
+        GameWindowSnapshot Window,
+        TaskCompletionSource<GuiIntentRegistration> Completed,
+        CancellationToken CancellationToken) : Input;
+
+    private sealed record AcknowledgeGuiIntent(
+        Guid IntentId,
+        GuiWorldSnapshot World,
+        GameWindowSnapshot Window,
+        TaskCompletionSource<bool> Completed,
+        CancellationToken CancellationToken) : Input;
+
+    private sealed record MarkGuiIntentClicked(
+        Guid IntentId,
+        GuiWorldSnapshot World,
+        GameWindowSnapshot Window,
+        TaskCompletionSource<bool> Completed,
+        CancellationToken CancellationToken) : Input;
+
+    private sealed record CancelGuiIntent(
+        Guid IntentId,
+        bool ClickMayHaveBeenEmitted,
+        string Reason,
+        TaskCompletionSource<bool> Completed,
+        CancellationToken CancellationToken) : Input;
 
     /// <summary>When a behavior may start.</summary>
     private enum Readiness

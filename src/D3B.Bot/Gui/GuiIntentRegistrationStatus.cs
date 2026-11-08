@@ -13,5 +13,8 @@ public enum GuiIntentRegistrationStatus
     Duplicate,
 
     /// <summary>The intention was already expired when submitted.</summary>
-    Expired
+    Expired,
+
+    /// <summary>The actor refused the intention because its current state was unsafe or had changed.</summary>
+    Rejected
 }
