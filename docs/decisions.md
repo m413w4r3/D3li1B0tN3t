@@ -7214,3 +7214,89 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Decision**: map logical cells through `MapGeometry.PointOf` and fit a six-parameter affine transform with OpenCV RANSAC. Require eight distributed fit anchors and three unique, independent validation anchors; use the initial 4 px median fit, 8 px maximum validation, 12 px per-point validation, and 80% inlier thresholds. Keep client-area geometry measured, profile identity stable and window-bound, annotation JSON versioned, and profile age limited to 30 seconds. An explicit XID with unverified process identity can produce a calibrated Preview profile and retains its identity status; future action authorization remains the GUI action gate's responsibility.
 - **Evidence**: the deterministic exact fixture reports 0.000 px median fit error, 0.000 px maximum validation error, and 12/12 fit inliers. The two-outlier fixture rejects both and accepts 10/12 fit anchors. GUI tests passed 36/36; the serialized full suite passed 1,773 tests with 4 conditional skips (1,777 total); build had 0 warnings and 0 errors; format verification exited 0. Details and limits are in [P2N_CALIBRATION.md](P2N_CALIBRATION.md).
 - **Limit and boundary**: synthetic fixtures establish implementation behavior only. No Unity screenshot, live client, capture, vision, action gate, or executor was used or accepted in this slice. The thresholds remain initial design values pending supervised real-client measurements.
+
+## D319: P2N selects the hybrid protocol-observation and GUI-execution architecture
+
+*2026-11-08, P2N final documentation.*
+
+- **Decision**: the target flow is Protocol Read-Only → CharacterState → World Planner → GUI Executor →
+  Protocol/Visual Feedback. The official client remains responsible for requests caused by a future GUI action.
+  D3B.Gui depends on D3B.Engine and D3B.Data; D3B.Bot depends on D3B.Gui for its P2N snapshot and correlation
+  contracts. D3B.Gui must not depend on D3B.Bot, D3B.Host, D3B.App, D3B.Protocol, or D3B.Network.
+- **Current state**: D3B.Gui supplies windowing, capture, calibration, template localization, input seams, safety
+  contracts, and offline preview. D3B.Bot supplies an immutable snapshot adapter and an isolated correlation model.
+  Neither the host nor app registers an executor, capture loop, or gameplay trigger.
+- **Boundary**: existing protocol injection remains a separate path; P2N neither removes it nor enables GUI gameplay.
+  See [P2N_ARCHITECTURE.md](P2N_ARCHITECTURE.md).
+
+## D320: P2N uses the X11, maim, xdotool, and OpenCvSharp stack
+
+*2026-11-08, P2N final documentation.*
+
+- **Decision**: Xorg/X11 is the only P2N desktop backend. Use maim for explicit-XID PNG capture, xdotool with XTest
+  for window discovery/geometry and future global input, and OpenCvSharp5 plus its linux-x64 slim runtime for
+  OpenCV on Linux x64. Use xprop and xwininfo for complementary identity, state, and geometry checks.
+- **Boundaries**: external maim and xdotool binaries are not bundled or linked. P2N uses no /dev/uinput, ydotool,
+  root service, Linux capability, Frida, or Unity process injection. Wayland is not implemented.
+- **Evidence**: 21 X11 tests passed on Xvfb against fake windows; this is not Dofus input evidence. Exact source
+  commits and package notices are in [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) and backend details are in
+  [P2N_LINUX_BACKEND.md](P2N_LINUX_BACKEND.md).
+
+## D321: P2N uses a measured affine calibration with independent validation
+
+*2026-11-08, P2N final documentation.*
+
+- **Decision**: map D3B logical points through MapGeometry.PointOf and fit a complete six-parameter affine transform
+  with seeded OpenCV RANSAC. Require at least eight distributed fit anchors, three independent validation anchors,
+  median fit error at most 4 px, maximum validation error at most 8 px, no validation point above 12 px, and at least
+  80% fit inliers. Bind the profile to the build, map, measured client geometry, image dimensions, scale, version,
+  and a 30-second maximum age.
+- **Window matching rule**: the action gate and target matcher always compare XID; they compare ProcessId and
+  ExecutablePath only when both identities know the respective value, and ignore Title and Status in equality. A
+  title is never evidence. The gate separately requires Status=Verified for the current window. Calibration profile
+  revalidation has a stricter exact XID/PID/executable check, documented in [P2N_CALIBRATION.md](P2N_CALIBRATION.md).
+- **Limit**: synthetic measurements do not establish accuracy on a Unity screenshot. See
+  [P2N_CALIBRATION.md](P2N_CALIBRATION.md).
+
+## D322: P2N keeps GUI readiness fail-closed and Preview-only
+
+*2026-11-08, P2N final documentation.*
+
+- **Decision**: readiness fails on the first unmet window, capture, scene, calibration, target, protocol, state,
+  position, expiry, fight, busy, or interruption guard. Readiness binds one intent, session epoch, state revision,
+  window, calibration, frame, and target. The binding is process-local and is not a cryptographic authorization.
+- **Action contract**: only WalkToCell and UseElement are represented. Each submitted intent is consumed once and
+  emits at most one click. A click is not success; PASS requires the compatible client request and expected server
+  outcome. Missing or contradictory confirmation is UNCONFIRMED with no retry. NeverConfirms is the P2N default.
+- **Boundary**: Preview is the only defined application mode; AllowRealInput=true is rejected by the options
+  validator, and the host does not register the executor or input backend.
+- **Protocol-neutral GUI input**: GameInputMode.GuiClientInput models accepting client-originated requests while
+  refusing D3B-originated gameplay requests. Its policy is not integrated at the final network admission point and
+  existing network protections remain unchanged. See [P2N_GUI_CONTRACT.md](P2N_GUI_CONTRACT.md).
+
+## D323: P2N does not connect the planner or correlation model to gameplay
+
+*2026-11-08, P2N final documentation.*
+
+- **Decision**: keep GuiWorldSnapshotAdapter, GuiIntentCorrelation, and GameInputModePolicy as isolated contracts.
+  Do not register an automatic capture loop, gameplay trigger, or executor in the host. Do not change PlayerActions'
+  priority, relay admission, or protocol injection behavior in this documentation lot.
+- **Boundary**: any future real action requires a separate supervised GO and a separately implemented and audited
+  network-admission boundary.
+
+## D324: P2N implementation evidence is synthetic and final audits are pending
+
+*2026-11-08, P2N final documentation; integrated tree 3c22fe6.*
+
+- **Evidence**: solution build 0 warnings/0 errors; full serialized suite 1,943 total, 1,939 passed, 4 skipped because
+  Rust was not configured, 0 failed, exit 0; D3B.Gui.Tests 179/179; D3B.Bot.Tests 648/648; format verification exit 0.
+  Xvfb passed 21/21 X11 tests. The exact synthetic affine fixture measured 0.000 px median fit, 0.000 px maximum
+  validation error, and 12/12 inliers; the two-outlier fixture retained 10/12 (83.3%). The synthetic target scored
+  1.0000 with second peak 0.0000 and margin 1.0000; box {159,141,24,20}, point {171,151}. Preview output was private,
+  repository output was rejected, and the preview help smoke exited 0.
+- **Audit state**: the early audit's 1 BLOCKER, 4 MAJOR, and 3 MINOR findings were corrected and verified. The final
+  independent audits remain to be executed. Therefore P2N is BLOCKED under the section 19 exit criteria until those
+  required audit results are recorded.
+- **Limits**: no Dofus screenshot or capture, real click, movement, harvest, or game connection was used. XTest with
+  Dofus, Unity calibration accuracy, and resource detection are unproven. Details and the verified/inferred split are
+  recorded in [P2N_REPORT.md](P2N_REPORT.md).
