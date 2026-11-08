@@ -24,6 +24,7 @@ public sealed class GuiActionGateTests
     [InlineData("CalibrationStale", GuiSafetyReason.CalibrationStale)]
     [InlineData("CalibrationTooOld", GuiSafetyReason.CalibrationStale)]
     [InlineData("CalibrationIdentityChanged", GuiSafetyReason.CalibrationStale)]
+    [InlineData("CalibrationIdentityUnverified", GuiSafetyReason.WindowIdentityUnverified)]
     [InlineData("TargetUnverified", GuiSafetyReason.TargetUnverified)]
     [InlineData("TargetIdentityChanged", GuiSafetyReason.TargetUnverified)]
     [InlineData("AmbiguousTarget", GuiSafetyReason.AmbiguousTarget)]
@@ -120,10 +121,18 @@ public sealed class GuiActionGateTests
             ExecutablePath = null,
             Status = GameWindowIdentityStatus.UnverifiedProcessIdUnavailable,
         };
-        Assert.True(readiness.IsBoundTo(
+        Assert.False(readiness.IsBoundTo(
             fixture.Intent,
             fixture.World,
             fixture.CreateWindow(processIdUnavailable),
+            fixture.Calibration,
+            fixture.Target));
+
+        GameWindowIdentity intentProcessIdUnavailable = fixture.WindowIdentity with { ProcessId = null };
+        Assert.False(readiness.IsBoundTo(
+            fixture.Intent with { WindowIdentity = intentProcessIdUnavailable },
+            fixture.World,
+            fixture.Window,
             fixture.Calibration,
             fixture.Target));
 
@@ -153,6 +162,22 @@ public sealed class GuiActionGateTests
 
         Assert.False(readiness.Allowed);
         Assert.Equal(GuiSafetyReason.Disabled, readiness.ReasonCode);
+    }
+
+    [Fact]
+    public void GateRejectsRealInputOptionsDuringConstruction()
+    {
+        using GuiActionTestFixture fixture = new();
+
+        Assert.Throws<ArgumentException>(() => fixture.CreateGate(new GuiOptions { AllowRealInput = true }));
+    }
+
+    [Fact]
+    public void GateRejectsOutOfRangeTimeoutDuringConstruction()
+    {
+        using GuiActionTestFixture fixture = new();
+
+        Assert.Throws<ArgumentException>(() => fixture.CreateGate(new GuiOptions { CaptureTimeoutMs = 2001 }));
     }
 
     private static void ApplyScenario(GuiActionTestFixture fixture, string scenario)
@@ -225,6 +250,13 @@ public sealed class GuiActionGateTests
                 break;
             case "CalibrationIdentityChanged":
                 fixture.Intent = fixture.Intent with { CalibrationIdentity = "another-profile" };
+                break;
+            case "CalibrationIdentityUnverified":
+                fixture.Calibration = fixture.CreateCalibration(
+                    windowIdentity: fixture.WindowIdentity with
+                    {
+                        Status = GameWindowIdentityStatus.UnverifiedProcessIdUnavailable,
+                    });
                 break;
             case "TargetUnverified":
                 fixture.Target = fixture.CreateTarget(TargetStatus.Unverified);

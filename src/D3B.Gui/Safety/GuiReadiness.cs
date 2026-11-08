@@ -141,11 +141,11 @@ public sealed record GuiReadiness
 
     internal static bool IdentityMatches(GameWindowIdentity expected, GameWindowIdentity actual)
     {
-        return expected.Xid == actual.Xid
-            && (expected.ProcessId is null || actual.ProcessId is null || expected.ProcessId == actual.ProcessId)
-            && (expected.ExecutablePath is null
-                || actual.ExecutablePath is null
-                || string.Equals(expected.ExecutablePath, actual.ExecutablePath, StringComparison.Ordinal));
+        return expected.Status == GameWindowIdentityStatus.Verified
+            && actual.Status == GameWindowIdentityStatus.Verified
+            && expected.Xid == actual.Xid
+            && expected.ProcessId == actual.ProcessId
+            && string.Equals(expected.ExecutablePath, actual.ExecutablePath, StringComparison.Ordinal);
     }
 
     private static bool IsActionTargetCompatible(GuiActionIntent intent, TargetRegion target)

@@ -125,10 +125,19 @@ public sealed class GuiWorldSnapshotAdapterTests : IAsyncDisposable
     public async Task ClosedTranslationLatchMakesTheObservationTranslationBlocked()
     {
         var (connection, bot) = await _play.EnterAsync(300);
+        var viewRevision = bot.View.Revision;
+        var openSnapshot = _adapter.Capture(bot);
+
         connection.ServerRaw([0x12, 0x7F, 0x01]);
         await bot.ProcessedAsync();
 
-        Assert.Equal(ProtocolObservationStatus.TranslationBlocked, _adapter.Capture(bot).ProtocolObservationStatus);
+        var closedView = bot.View;
+        var closedSnapshot = _adapter.Capture(bot);
+
+        Assert.Equal(ProtocolObservationStatus.TranslationBlocked, closedSnapshot.ProtocolObservationStatus);
+        Assert.Equal(viewRevision, closedView.Revision);
+        Assert.Equal(viewRevision, bot.View.Revision);
+        Assert.NotEqual(openSnapshot.StateRevision, closedSnapshot.StateRevision);
     }
 
     [Fact]

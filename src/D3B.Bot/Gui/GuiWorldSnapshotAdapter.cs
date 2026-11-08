@@ -36,7 +36,7 @@ public sealed class GuiWorldSnapshotAdapter
 
         return new GuiWorldSnapshot(
             view.SessionEpoch,
-            view.Revision,
+            ComposeStateRevision(view.Revision, translationBlocked),
             _timeProvider.GetUtcNow(),
             state.MapId,
             ToLogicalCell(state.Cell),
@@ -52,6 +52,12 @@ public sealed class GuiWorldSnapshotAdapter
         {
             IsUserInterrupted = view.IsPaused,
         };
+    }
+
+    private static long ComposeStateRevision(long viewRevision, bool translationBlocked)
+    {
+        // Reserve the low bit for the latch while unchecked shifting keeps large revisions from throwing.
+        return unchecked((viewRevision << 1) | (translationBlocked ? 1L : 0L));
     }
 
     private static GuiKnownElement ToKnownElement(MapElement element)

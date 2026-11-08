@@ -24,6 +24,7 @@ public sealed class XdotoolGuiInputTests
         bool observed = await window.HasButtonPressAsync(TimeSpan.FromSeconds(2));
 
         Assert.Equal(GuiInputStatus.Sent, result.Status);
+        Assert.True(result.ClickMayHaveBeenEmitted);
         Assert.True(observed, "xev did not observe the XTest ButtonPress event.");
     }
 
@@ -166,6 +167,64 @@ public sealed class XdotoolGuiInputTests
         Assert.False(observed);
         Assert.False(File.Exists(markerPath));
         Directory.Delete(directory, recursive: true);
+    }
+
+    [Fact]
+    public async Task FailedClickCommandAfterLaunchMayHaveEmittedInput()
+    {
+        GameWindowSnapshot snapshot = CreateTestSnapshot();
+        SequenceGameWindowLocator locator = new(snapshot, snapshot);
+        string directory = Path.Combine(Path.GetTempPath(), $"d3b-gui-input-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string clickMarker = Path.Combine(directory, "click");
+        string fakeXdotool = Path.Combine(directory, "fake-xdotool");
+        XvfbTestCommands.WriteExecutable(
+            fakeXdotool,
+            $"#!/bin/sh\nif [ \"$1\" = \"mousemove\" ]; then exit 0; fi\nif [ \"$1\" = \"click\" ]; then printf started > '{clickMarker}'; exit 1; fi\nexit 1\n");
+        XdotoolGuiInput input = new(locator, fakeXdotool, GetTestEnvironmentValue);
+
+        try
+        {
+            GuiInputResult result = await input.ClickAsync(GetClientCenter(snapshot), snapshot, CancellationToken.None);
+
+            Assert.Equal(GuiInputStatus.Failed, result.Status);
+            Assert.True(result.ClickMayHaveBeenEmitted);
+            Assert.True(File.Exists(clickMarker));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CancellationAfterClickLaunchMayHaveEmittedInput()
+    {
+        GameWindowSnapshot snapshot = CreateTestSnapshot();
+        SequenceGameWindowLocator locator = new(snapshot, snapshot);
+        string directory = Path.Combine(Path.GetTempPath(), $"d3b-gui-input-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string clickMarker = Path.Combine(directory, "click");
+        string fakeXdotool = Path.Combine(directory, "fake-xdotool");
+        XvfbTestCommands.WriteExecutable(
+            fakeXdotool,
+            $"#!/bin/sh\nif [ \"$1\" = \"mousemove\" ]; then exit 0; fi\nif [ \"$1\" = \"click\" ]; then printf started > '{clickMarker}'; exec sleep 5; fi\nexit 1\n");
+        XdotoolGuiInput input = new(locator, fakeXdotool, GetTestEnvironmentValue);
+        using CancellationTokenSource cancellation = new(TimeSpan.FromSeconds(1));
+
+        try
+        {
+            GuiInputResult result = await input.ClickAsync(GetClientCenter(snapshot), snapshot, cancellation.Token);
+
+            Assert.Equal(GuiInputStatus.Canceled, result.Status);
+            Assert.True(result.ClickMayHaveBeenEmitted);
+            Assert.True(File.Exists(clickMarker));
+        }
+        finally
+        {
+            cancellation.Cancel();
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
