@@ -1,3 +1,4 @@
+using System.Globalization;
 using D3B.Gui.Actions;
 using D3B.Gui.Safety;
 using D3B.Gui.Windowing;
@@ -198,7 +199,7 @@ public sealed class GuiIntentCorrelation
 
             if (!MatchesClientRequest(_activeIntent, request))
             {
-                Interrupt("An unexpected client request occurred; player control takes priority.");
+                Interrupt(GetClientRequestMismatchDetail(_activeIntent, request));
                 return false;
             }
 
@@ -257,7 +258,8 @@ public sealed class GuiIntentCorrelation
     {
         lock (_sync)
         {
-            if (_activeIntent is null || _state is not (GuiIntentCorrelationState.Clicked or GuiIntentCorrelationState.ClientRequestSeen))
+            if (_activeIntent is null || _state is not (GuiIntentCorrelationState.Acknowledged
+                or GuiIntentCorrelationState.Clicked or GuiIntentCorrelationState.ClientRequestSeen))
                 return false;
 
             SetTerminal(GuiIntentCorrelationState.Unconfirmed, detail ?? "No matching server confirmation arrived.");
@@ -349,6 +351,28 @@ public sealed class GuiIntentCorrelation
         return intent.ActionKind == GuiActionKind.UseElement
             && request.TargetElementId == intent.TargetElementId
             && (request.TargetCellId is null || request.TargetCellId == intent.TargetCellId);
+    }
+
+    private static string GetClientRequestMismatchDetail(GuiActionIntent intent, GuiClientRequestObservation request)
+    {
+        if (request.SessionEpoch != intent.SessionEpoch)
+            return "A client request arrived from a different session epoch; player control takes priority.";
+
+        if (request.MapId != intent.MapId)
+            return $"A client request arrived on map {request.MapId}, not intention map {intent.MapId}; player control takes priority.";
+
+        if (request.Action != intent.ExpectedClientAction)
+            return "An unexpected client request occurred; player control takes priority.";
+
+        if (intent.ActionKind is GuiActionKind.WalkToCell && request.TargetCellId != intent.TargetCellId)
+        {
+            string observed = request.TargetCellId is { } cell ? cell.Value.ToString(CultureInfo.InvariantCulture) : "invalid";
+            string expected = intent.TargetCellId.Value.ToString(CultureInfo.InvariantCulture);
+
+            return $"The client walk request targeted cell {observed}, not intention cell {expected}; player control takes priority.";
+        }
+
+        return "An unexpected client request occurred; player control takes priority.";
     }
 
     private static bool MatchesServerOutcome(GuiActionIntent intent, GuiServerOutcomeObservation outcome)

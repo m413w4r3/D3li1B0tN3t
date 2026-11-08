@@ -247,8 +247,15 @@ same time. PotentiallyConcurrentHumanInput causes an interruption; the correlati
 cryptographic attribution. Missing or conflicting confirmation yields Unconfirmed and no automatic retry. Visual
 animation alone is not a server confirmation.
 
-GuiIntentCorrelation is currently an isolated model in D3B.Bot.Gui. It does not alter BotActor, PlayerActions, or
-GameSession, and it is not a live confirmation provider for GuiActionExecutor.
+For WalkToCell, BotActor now feeds GuiIntentCorrelation from its existing decoded-frame inbox. It matches the initial
+client MapMovementRequest by map and endpoint, requires the self MapMovementEvent and a matching
+MapMovementConfirmResponse with server-confirmed position provenance, and rejects refusal or incomplete evidence. The
+actor exposes a one-outcome waiter and one-time consumption; terminal uncertainty and expiry cannot produce success.
+MapMovementConfirmRequest is the client's arrival acknowledgement, not the initial request used for correlation.
+
+This bounded observer does not emit input, register a capture loop or gameplay trigger, or connect GuiActionExecutor to
+BotActor. UseElement remains a contract-only correlation action. Packet correlation cannot identify whether an
+indistinguishable request came from a human or a synthesized click.
 
 ## Security boundaries
 

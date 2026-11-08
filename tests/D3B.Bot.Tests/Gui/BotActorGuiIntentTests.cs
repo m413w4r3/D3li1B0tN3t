@@ -1,8 +1,10 @@
 using D3B.Bot.Characters;
 using D3B.Bot.Fights;
 using D3B.Bot.Gui;
+using D3B.Bot.Movement;
 using D3B.Bot.Runtime;
 using D3B.Bot.Tests.Runtime;
+using D3B.Engine.Maps;
 using D3B.Gui.Actions;
 using D3B.Gui.Calibration;
 using D3B.Gui.Safety;
@@ -246,8 +248,10 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         var world = _adapter.Capture(bot);
         var intent = CreateIntent(world);
         await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken);
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
 
         Assert.True(await bot.CancelGuiIntentAsync(intent.IntentId, false, "test cancellation", TestContext.Current.CancellationToken));
+        Assert.Null(await outcome);
         Assert.Equal(GuiIntentCorrelationState.Cancelled, bot.GuiIntentState);
         Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
     }
@@ -263,8 +267,10 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken);
         Assert.True(await bot.AcknowledgeGuiIntentAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
         Assert.True(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
 
         Assert.True(await bot.CancelGuiIntentAsync(intent.IntentId, clickMayHaveBeenEmitted, "uncertain click", TestContext.Current.CancellationToken));
+        Assert.Null(await outcome);
         Assert.Equal(GuiIntentCorrelationState.Unconfirmed, bot.GuiIntentState);
         Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
     }
@@ -284,6 +290,7 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         var intent = CreateIntent(world);
         Assert.Equal(GuiIntentRegistrationStatus.Registered,
             (await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken)).Status);
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
 
         switch (transition)
         {
@@ -315,6 +322,7 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
             await bot.ProcessedAsync();
 
         Assert.Equal(GuiIntentCorrelationState.Cancelled, bot.GuiIntentState);
+        Assert.Null(await outcome);
         Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
         Assert.Empty(connection.Sent);
     }
@@ -326,11 +334,13 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         var world = _adapter.Capture(bot);
         var intent = CreateIntent(world);
         await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken);
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
 
         connection.ServerRaw([0x12, 0x7F, 0x01]);
         await bot.ProcessedAsync();
 
         Assert.Equal(GuiIntentCorrelationState.Cancelled, bot.GuiIntentState);
+        Assert.Null(await outcome);
         Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
     }
 
@@ -350,10 +360,338 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         Assert.Single(registrations, result => result.Status == GuiIntentRegistrationStatus.Busy);
     }
 
+    [Fact]
+    public async Task MatchingWalkRequestMovementAndConfirmationCompleteAndConsumeOnce()
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        MapMovementRequest request = ReachableWalkRequest(out int[] cells);
+
+        connection.Client(request);
+        await bot.ProcessedAsync();
+        Assert.True(bot.GuiIntentState is GuiIntentCorrelationState.ClientRequestSeen, bot.GuiIntentDetail);
+        var movement = new MapMovementEvent { ActorId = TestPlay.Key.CharacterId };
+        movement.Cells.AddRange(cells);
+        connection.Server(movement);
+        await bot.ProcessedAsync();
+        connection.Client(new MapMovementConfirmRequest());
+        connection.Response(new MapMovementConfirmResponse());
+        await bot.ProcessedAsync();
+
+        Assert.Equal(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+        Assert.Equal(GuiServerOutcome.MovementConfirmed, await outcome);
+        Assert.Equal(TargetCell, bot.State.Cell);
+        Assert.Equal(CellProvenance.ServerConfirmed, bot.State.Provenance);
+        Assert.True(await bot.ConsumeGuiIntentAsync(intent.IntentId, TestContext.Current.CancellationToken));
+        Assert.False(await bot.ConsumeGuiIntentAsync(intent.IntentId, TestContext.Current.CancellationToken));
+        Assert.Null(await bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken));
+        Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, _adapter.Capture(bot), _fixture.Window, TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData("wrong-map")]
+    [InlineData("wrong-cell")]
+    [InlineData("empty-path")]
+    [InlineData("bad-direction")]
+    [InlineData("bad-middle-direction")]
+    [InlineData("bad-cell")]
+    public async Task InvalidWalkRequestsCannotConfirm(string kind)
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        MapMovementRequest request = kind switch
+        {
+            "wrong-map" => WalkRequest(TestPlay.NorthMapId, TargetCell),
+            "wrong-cell" => WalkRequest(TestPlay.MapId, TargetCell + 1),
+            "empty-path" => new MapMovementRequest { MapId = TestPlay.MapId },
+            "bad-direction" => WalkRequest(TestPlay.MapId, TargetCell, 8),
+            "bad-middle-direction" => new MapMovementRequest
+            {
+                MapId = TestPlay.MapId,
+                KeyMovements = { StartCell, (8 << 12) | TargetCell, TargetCell },
+            },
+            "bad-cell" => WalkRequest(TestPlay.MapId, 0xFFF),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+
+        connection.Client(request);
+
+        Assert.Null(await outcome);
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+        Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, _adapter.Capture(bot), _fixture.Window, TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData("other-actor")]
+    [InlineData("wrong-endpoint")]
+    [InlineData("empty-path")]
+    [InlineData("bad-cell")]
+    public async Task NonmatchingSelfMovementCannotConfirm(string kind)
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        connection.Client(WalkRequest(TestPlay.MapId, TargetCell));
+        await bot.ProcessedAsync();
+
+        var movement = new MapMovementEvent
+        {
+            ActorId = kind == "other-actor" ? TestPlay.Key.CharacterId + 1 : TestPlay.Key.CharacterId,
+        };
+
+        if (kind is not "empty-path")
+        {
+            movement.Cells.Add(StartCell);
+            movement.Cells.Add(kind switch
+            {
+                "wrong-endpoint" => TargetCell + 1,
+                "bad-cell" => 0xFFF,
+                _ => TargetCell,
+            });
+        }
+
+        connection.Server(movement);
+
+        if (kind == "other-actor")
+            connection.Response(new MapMovementConfirmResponse());
+
+        Assert.Null(await outcome);
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+    }
+
+    [Fact]
+    public async Task FinalMovementResponseWithoutTheSelfMovementIsUnconfirmed()
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        connection.Client(WalkRequest(TestPlay.MapId, TargetCell));
+        await bot.ProcessedAsync();
+        connection.Response(new MapMovementConfirmResponse());
+
+        Assert.Null(await outcome);
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+    }
+
+    [Fact]
+    public async Task MovementRefusalIsUnconfirmed()
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        connection.Client(WalkRequest(TestPlay.MapId, TargetCell));
+        await bot.ProcessedAsync();
+        connection.Server(new MapMovementRefusedEvent());
+
+        Assert.Null(await outcome);
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+    }
+
+    [Theory]
+    [InlineData("response")]
+    [InlineData("movement")]
+    public async Task ServerMovementBeforeTheClientRequestIsUnconfirmed(string kind)
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+
+        if (kind == "response")
+            connection.Response(new MapMovementConfirmResponse());
+        else
+            connection.Server(new MapMovementEvent { ActorId = TestPlay.Key.CharacterId, Cells = { StartCell, TargetCell } });
+
+        Assert.Null(await outcome);
+        connection.Client(WalkRequest(TestPlay.MapId, TargetCell));
+        await bot.ProcessedAsync();
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+    }
+
+    [Fact]
+    public async Task ReplacedSessionCannotUseAnOldSessionOutcome()
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        var replacement = _play.Connect(TestPlay.Account);
+        bot.Attach(replacement.Session, SafeState());
+        await bot.ProcessedAsync();
+
+        connection.Client(WalkRequest(TestPlay.MapId, TargetCell));
+        connection.Server(new MapMovementEvent { ActorId = TestPlay.Key.CharacterId, Cells = { StartCell, TargetCell } });
+        connection.Response(new MapMovementConfirmResponse());
+
+        Assert.Null(await outcome);
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+    }
+
+    [Fact]
+    public async Task TranslationBlockedAfterClickCompletesWaiterWithoutConfirmation()
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        connection.ServerRaw([0x12, 0x7F, 0x01]);
+        await bot.ProcessedAsync();
+
+        Assert.Null(await outcome);
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+    }
+
+    [Fact]
+    public async Task PartialPositionAfterClickCompletesWaiterWithoutConfirmation()
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        connection.Server(new MapInformationEvent { MapId = TestPlay.MapId });
+        await bot.ProcessedAsync();
+
+        Assert.Null(await outcome);
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+    }
+
+    [Fact]
+    public async Task MapChangeAfterClickCompletesWaiterWithoutConfirmation()
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        connection.Server(new MapCurrentEvent { MapId = TestPlay.NorthMapId });
+        await bot.ProcessedAsync();
+
+        Assert.Null(await outcome);
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+    }
+
+    [Fact]
+    public async Task UnexpectedClientGameplayAfterClickInterruptsAndPauses()
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        var behaviorStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<bool> behavior = bot.RunAsync(
+            async (_, cancellationToken) =>
+            {
+                behaviorStarted.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return true;
+            },
+            TestContext.Current.CancellationToken);
+        await behaviorStarted.Task;
+        connection.Client(new MapMovementCancelRequest { CellId = StartCell });
+        await bot.ProcessedAsync();
+
+        Assert.Null(await outcome);
+        Assert.Equal(Interruption.Player, (await Assert.ThrowsAsync<BotInterruptedException>(() => behavior)).Reason);
+        Assert.True(bot.IsPaused, $"{bot.GuiIntentState}: {bot.GuiIntentDetail}");
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+        Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, _adapter.Capture(bot), _fixture.Window, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task SecondClientWalkAfterTheExpectedRequestInterruptsAndPauses()
+    {
+        var (connection, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        connection.Client(WalkRequest(TestPlay.MapId, TargetCell));
+        await bot.ProcessedAsync();
+
+        var behaviorStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<bool> behavior = bot.RunAsync(
+            async (_, cancellationToken) =>
+            {
+                behaviorStarted.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return true;
+            },
+            TestContext.Current.CancellationToken);
+        await behaviorStarted.Task;
+        connection.Client(WalkRequest(TestPlay.MapId, TargetCell));
+        await bot.ProcessedAsync();
+
+        Assert.Equal(GuiIntentCorrelationState.Interrupted, bot.GuiIntentState);
+        Assert.Null(await outcome);
+        Assert.Equal(Interruption.Player, (await Assert.ThrowsAsync<BotInterruptedException>(() => behavior)).Reason);
+        Assert.True(bot.IsPaused, bot.GuiIntentDetail);
+        Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, _adapter.Capture(bot), _fixture.Window, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task WaiterExpiresWithTheIntention()
+    {
+        var (_, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        _play.Time.Advance(intent.ExpiresAt - _play.Time.GetUtcNow());
+        await bot.ProcessedAsync();
+
+        Assert.Null(await outcome);
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+    }
+
+    [Fact]
+    public async Task WaiterCancellationCompletesOnTheActorLoop()
+    {
+        var (_, bot, intent) = await ClickIntentAsync();
+        using var cancellation = new CancellationTokenSource();
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, cancellation.Token);
+        cancellation.Cancel();
+        await bot.ProcessedAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await outcome);
+    }
+
+    [Fact]
+    public async Task OnlyOneGuiOutcomeWaiterCanBeRegistered()
+    {
+        var (_, bot, intent) = await ClickIntentAsync();
+        Task<GuiServerOutcome?> first = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+        Task<GuiServerOutcome?> second = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+
+        Assert.Null(await second);
+        Assert.False(first.IsCompleted);
+    }
+
+    [Fact]
+    public async Task UnknownGuiIntentWaitReturnsNullAndCannotBeConsumed()
+    {
+        var (_, bot) = await EnterAsync();
+
+        Assert.Null(await bot.WaitForGuiOutcomeAsync(Guid.NewGuid(), TestContext.Current.CancellationToken));
+        Assert.False(await bot.ConsumeGuiIntentAsync(Guid.NewGuid(), TestContext.Current.CancellationToken));
+    }
+
     private async Task<(TestConnection Connection, BotActor Bot)> EnterAsync()
     {
         return await _play.EnterAsync(300);
     }
+
+    private async Task<(TestConnection Connection, BotActor Bot, GuiActionIntent Intent)> ClickIntentAsync()
+    {
+        var (connection, bot) = await EnterAsync();
+        var world = _adapter.Capture(bot);
+        var intent = CreateIntent(world) with { TargetCellId = new LogicalCell(TargetCell) };
+
+        Assert.Equal(GuiIntentRegistrationStatus.Registered,
+            (await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken)).Status);
+        Assert.True(await bot.AcknowledgeGuiIntentAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
+        Assert.True(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
+
+        return (connection, bot, intent);
+    }
+
+    private static MapMovementRequest WalkRequest(long mapId, int targetCell, int direction = 0)
+    {
+        return new MapMovementRequest
+        {
+            MapId = mapId,
+            KeyMovements = { (direction << 12) | targetCell },
+        };
+    }
+
+    private MapMovementRequest ReachableWalkRequest(out int[] cells)
+    {
+        var map = _play.Maps.Get(TestPlay.MapId);
+        Assert.True(CellPathfinder.TryFind(map.Cells.Span, StartCell, TargetCell, out var path));
+        cells = path.Cells.ToArray();
+
+        return MapWalk.Request(TestPlay.MapId, path);
+    }
+
+    private const int StartCell = 300;
+    private const int TargetCell = 301;
 
     private GuiActionIntent CreateIntent(GuiWorldSnapshot world)
     {

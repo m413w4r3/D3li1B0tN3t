@@ -142,12 +142,20 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
 
     void IGameObserver.OnFrame(GameSession session, RelayDirection direction, DecodedGameFrame frame)
     {
-        if (!frame.IsRead || !_sessions.TryGetValue(session, out var binding))
+        if (!_sessions.TryGetValue(session, out var binding))
             return;
 
         if (binding.Bot is { } bot)
-            bot.See(session, direction, frame.Content, session.IsMovementTranslationBlocked);
-        else if (direction is RelayDirection.FromServer && frame.Content is CharacterSelectionEvent { Success.Character: { } character })
+        {
+            if (frame.IsRead)
+                bot.See(session, direction, frame.Content, session.IsMovementTranslationBlocked);
+            else if (session.IsMovementTranslationBlocked)
+                bot.NotifyTranslationBlocked(session);
+
+            return;
+        }
+
+        if (frame.IsRead && direction is RelayDirection.FromServer && frame.Content is CharacterSelectionEvent { Success.Character: { } character })
             Bind(session, binding, character);
     }
 
