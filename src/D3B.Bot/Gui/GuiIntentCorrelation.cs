@@ -6,8 +6,8 @@ namespace D3B.Bot.Gui;
 
 /// <summary>Models one active GUI intention and the client/server observations that may confirm it.</summary>
 /// <remarks>
-/// This is an isolated model, not wired into BotActor or PlayerActions. A compatible packet is not proof of who
-/// clicked: if simultaneous human input is observed, correlation stops and player control takes priority.
+/// A compatible packet is not proof of who clicked: if simultaneous human input is observed, correlation stops and
+/// player control takes priority.
 /// </remarks>
 public sealed class GuiIntentCorrelation
 {
@@ -409,10 +409,25 @@ public sealed class GuiIntentCorrelation
 
     private static bool KnownElementsMatch(GuiWorldSnapshot expected, GuiWorldSnapshot actual)
     {
-        if (expected.KnownElements.IsDefaultOrEmpty || actual.KnownElements.IsDefaultOrEmpty)
-            return expected.KnownElements.IsDefaultOrEmpty && actual.KnownElements.IsDefaultOrEmpty;
+        if (expected.KnownElements.Length != actual.KnownElements.Length)
+            return false;
 
-        return expected.KnownElements.SequenceEqual(actual.KnownElements);
+        for (int index = 0; index < expected.KnownElements.Length; index++)
+        {
+            GuiKnownElement left = expected.KnownElements[index];
+            GuiKnownElement right = actual.KnownElements[index];
+
+            if (left.ElementId != right.ElementId
+                || left.Cell != right.Cell
+                || left.InteractiveId != right.InteractiveId
+                || left.State != right.State
+                || !left.EnabledSkillIds.AsSpan().SequenceEqual(right.EnabledSkillIds.AsSpan()))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool IdentityMatches(GameWindowIdentity expected, GameWindowIdentity actual)
