@@ -40,7 +40,7 @@ public sealed class TemplateTargetLocator : ITargetLocator
             return Build(TargetStatus.Unverified, TargetEvidence.FrameUnusable);
         }
 
-        if (frame.WindowIdentity != calibration.WindowIdentity
+        if (!IdentityMatches(calibration.WindowIdentity, frame.WindowIdentity)
             || frame.PixelWidth != calibration.CaptureWidth
             || frame.PixelHeight != calibration.CaptureHeight
             || expectation.MapId != calibration.MapId)
@@ -231,6 +231,15 @@ public sealed class TemplateTargetLocator : ITargetLocator
                 frame.CaptureId,
                 calibration.CalibrationId);
         }
+    }
+
+    private static bool IdentityMatches(GameWindowIdentity expected, GameWindowIdentity actual)
+    {
+        return expected.Xid == actual.Xid
+            && (expected.ProcessId is null || actual.ProcessId is null || expected.ProcessId == actual.ProcessId)
+            && (expected.ExecutablePath is null
+                || actual.ExecutablePath is null
+                || string.Equals(expected.ExecutablePath, actual.ExecutablePath, StringComparison.Ordinal));
     }
 
     private static bool HasSpatialVariance(Mat template)

@@ -13,6 +13,7 @@ public sealed class GuiActionGateTests
     [InlineData("NotX11", GuiSafetyReason.NotX11)]
     [InlineData("WindowNotFound", GuiSafetyReason.WindowNotFound)]
     [InlineData("WindowIdentityUnverified", GuiSafetyReason.WindowIdentityUnverified)]
+    [InlineData("WindowProcessIdUnavailable", GuiSafetyReason.WindowIdentityUnverified)]
     [InlineData("WindowNotActive", GuiSafetyReason.WindowNotActive)]
     [InlineData("WindowChanged", GuiSafetyReason.WindowChanged)]
     [InlineData("WindowChangedAfterCapture", GuiSafetyReason.WindowChanged)]
@@ -96,8 +97,35 @@ public sealed class GuiActionGateTests
         Assert.False(readiness.IsBoundTo(fixture.Intent with { StateRevision = 10 }, fixture.World, fixture.Window, fixture.Calibration, fixture.Target));
         Assert.False(readiness.IsBoundTo(fixture.Intent, fixture.World with { StateRevision = 10 }, fixture.Window, fixture.Calibration, fixture.Target));
 
-        GameWindowIdentity otherIdentity = new(452, 9002, "/synthetic/other", "other title", GameWindowIdentityStatus.Verified);
-        Assert.False(readiness.IsBoundTo(fixture.Intent, fixture.World, fixture.CreateWindow(otherIdentity), fixture.Calibration, fixture.Target));
+        GameWindowIdentity otherXid = fixture.WindowIdentity with { Xid = 452 };
+        Assert.False(readiness.IsBoundTo(fixture.Intent, fixture.World, fixture.CreateWindow(otherXid), fixture.Calibration, fixture.Target));
+
+        GameWindowIdentity otherProcessId = fixture.WindowIdentity with { ProcessId = 9002 };
+        Assert.False(readiness.IsBoundTo(fixture.Intent, fixture.World, fixture.CreateWindow(otherProcessId), fixture.Calibration, fixture.Target));
+
+        GameWindowIdentity otherExecutable = fixture.WindowIdentity with { ExecutablePath = "/synthetic/other" };
+        Assert.False(readiness.IsBoundTo(fixture.Intent, fixture.World, fixture.CreateWindow(otherExecutable), fixture.Calibration, fixture.Target));
+
+        GameWindowIdentity renamed = fixture.WindowIdentity with { Title = "renamed synthetic window" };
+        Assert.True(readiness.IsBoundTo(
+            fixture.Intent with { WindowIdentity = renamed },
+            fixture.World,
+            fixture.CreateWindow(renamed),
+            fixture.Calibration,
+            fixture.Target));
+
+        GameWindowIdentity processIdUnavailable = fixture.WindowIdentity with
+        {
+            ProcessId = null,
+            ExecutablePath = null,
+            Status = GameWindowIdentityStatus.UnverifiedProcessIdUnavailable,
+        };
+        Assert.True(readiness.IsBoundTo(
+            fixture.Intent,
+            fixture.World,
+            fixture.CreateWindow(processIdUnavailable),
+            fixture.Calibration,
+            fixture.Target));
 
         CalibrationResult otherCalibration = fixture.CreateCalibration(createdAt: fixture.Now.AddSeconds(-1), mapId: GuiActionTestFixture.MapId);
         Assert.False(readiness.IsBoundTo(fixture.Intent, fixture.World, fixture.Window, otherCalibration, fixture.Target));
@@ -147,6 +175,15 @@ public sealed class GuiActionGateTests
             case "WindowIdentityUnverified":
                 GameWindowIdentity unverified = fixture.WindowIdentity with { Status = GameWindowIdentityStatus.UnverifiedExecutableUnreadable };
                 fixture.Window = fixture.CreateWindow(unverified);
+                break;
+            case "WindowProcessIdUnavailable":
+                GameWindowIdentity processIdUnavailable = fixture.WindowIdentity with
+                {
+                    ProcessId = null,
+                    ExecutablePath = null,
+                    Status = GameWindowIdentityStatus.UnverifiedProcessIdUnavailable,
+                };
+                fixture.Window = fixture.CreateWindow(processIdUnavailable);
                 break;
             case "WindowNotActive":
                 fixture.Window = fixture.Window with { IsActive = false };
