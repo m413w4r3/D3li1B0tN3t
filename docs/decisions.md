@@ -7352,3 +7352,21 @@ Settled questions leave this table, and the decision that settles one says so.
   refusal of D3B gameplay requests, admission of client requests and D3B non-gameplay requests, and zero XTest input.
   Production GameSession admission remains P2O work and must be implemented and separately audited before a real GUI
   action.
+
+## D331: P2N final outcome
+
+*2026-11-08, P2N final documentation; verified tree `531c337`.*
+
+- **Decision**: P2N is **READY FOR P2N VISUAL GO**. The early audit's initial REJECT (1 BLOCKER, 4 MAJOR, 3 MINOR)
+  was corrected and verified. The final code audit on `3c22fe6` returned REJECT (1 BLOCKER, 3 MAJOR, 5 MINOR/NIT);
+  all findings were corrected, and the delta audit on `de6745b` returned APPROVE with one MINOR timeout-coverage
+  finding corrected by `87f87ef`. The final security, boundary, and compliance audit on `531c337` returned APPROVE
+  with no BLOCKER or MAJOR findings; its one documentation MINOR in [P2N_REPORT.md](P2N_REPORT.md) is corrected by
+  this update.
+- **Evidence**: build 0 warnings/0 errors; full serialized suite 1,955 total, 1,951 passed, 4 skipped because Rust was
+  not configured, 0 failed, exit 0; D3B.Gui.Tests 190/190; 21 Xvfb X11 tests; format verification exit 0; and
+  `gui-preview --help` exit 0.
+- **Scope**: this GO authorizes only future supervised real-client capture and visual calibration. It does not
+  authorize movement, harvesting, or any other real GUI action; action requires a separate GO. No Dofus capture or
+  action was performed. Synthetic calibration does not prove Unity accuracy, XTest with Dofus is unproven, and
+  relevant resource detection is unproven. Production host wiring and network admission remain P2O work.
