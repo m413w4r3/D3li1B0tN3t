@@ -101,15 +101,14 @@ against supervised, manually annotated client screenshots.
 
 ## Final window identity rule
 
-The action gate and target matcher compare the numeric XID every time. They compare ProcessId and ExecutablePath only
-when both identities provide the corresponding value, and ignore Title and Status for equality. A title is never
-identity evidence. Separately, GuiActionGate requires Status=Verified on the current window snapshot before returning
-Ready. An explicitly selected XID with unavailable process identity may still be used for Preview, but it cannot
-authorize an action.
+`TemplateTargetLocator` compares the numeric XID every time and compares ProcessId and ExecutablePath only when both
+identities provide the corresponding value; it ignores Title and Status. This permissive comparison is for preview
+target matching only. Action readiness requires both compared identities to have Status=Verified and requires exact
+Xid, ProcessId, and ExecutablePath equality. An identity marked unverified, including one with unavailable process
+data, cannot authorize an action. A title is never identity evidence.
 
-Calibration profile revalidation has a stricter implementation check: `CalibrationValidator.ValidateProfile`
-compares XID, ProcessId, and ExecutablePath exactly, so a process identity appearing or disappearing invalidates
-that stored profile. Its environment does not include a current client-build value, so this revalidation does not
+`CalibrationValidator.ValidateProfile` also compares stored and current XID, ProcessId, and ExecutablePath exactly, so a
+process identity appearing or disappearing invalidates that stored profile. Its environment does not include a current
+client-build value, so this revalidation does not
 compare `ClientBuild`; the build is recorded in the profile. `CalibrationId` includes XID, optional ProcessId,
-ExecutablePath, and Status, but not Title. The action gate's current-window `Verified` requirement remains separate
-from its identity equality rule.
+ExecutablePath, and Status, but not Title. The action gate also requires verified identities during its exact comparison.
