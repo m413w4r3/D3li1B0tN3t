@@ -11,8 +11,10 @@ internal sealed class XvfbTestDisplay : IAsyncDisposable
 
     private readonly List<Process> _windowProcesses = [];
     private readonly Process _serverProcess;
+    private readonly int _displayNumber;
     private readonly string _displayName;
     private readonly string _title;
+    private (string UserId, string? LockIdentity, string? SocketIdentity)? _ownedDisplayFiles;
 
     /// <summary>The display number assigned to this isolated Xvfb server.</summary>
     public string DisplayName
@@ -23,20 +25,39 @@ internal sealed class XvfbTestDisplay : IAsyncDisposable
         }
     }
 
+    /// <summary>The lock file reserved by this isolated Xvfb server.</summary>
+    public string LockFilePath
+    {
+        get
+        {
+            return XvfbTestCommands.GetLockFilePath(_displayNumber);
+        }
+    }
+
+    /// <summary>The Unix socket created by this isolated Xvfb server.</summary>
+    public string SocketFilePath
+    {
+        get
+        {
+            return XvfbTestCommands.GetSocketFilePath(_displayNumber);
+        }
+    }
+
     /// <summary>The XID of the primary fake xterm window.</summary>
     public long WindowId { get; private set; }
 
-    private XvfbTestDisplay(Process serverProcess, string displayName, string title)
+    private XvfbTestDisplay(Process serverProcess, int displayNumber, string title)
     {
         _serverProcess = serverProcess;
-        _displayName = displayName;
+        _displayNumber = displayNumber;
+        _displayName = $":{displayNumber}";
         _title = title;
     }
 
     /// <summary>Starts Xvfb and waits for a uniquely titled xterm window.</summary>
     public static async Task<XvfbTestDisplay> StartAsync()
     {
-        string[] requiredCommands = ["Xvfb", "xterm", "xdpyinfo", "xwininfo", "xprop", "xdotool", "sleep"];
+        string[] requiredCommands = ["Xvfb", "xterm", "xdpyinfo", "xwininfo", "xprop", "xdotool", "sleep", "stat"];
         List<string> missingCommands = [];
 
         foreach (string command in requiredCommands)
@@ -57,6 +78,11 @@ internal sealed class XvfbTestDisplay : IAsyncDisposable
         for (int attempt = 0; attempt < 100; attempt++)
         {
             int displayNumber = Interlocked.Increment(ref _nextDisplayNumber);
+            if (displayNumber <= 0)
+            {
+                throw new InvalidOperationException("Xvfb test display numbers must be positive and must not use :0.");
+            }
+
             string displayName = $":{displayNumber}";
 
             if (File.Exists($"/tmp/.X11-unix/X{displayNumber}") || File.Exists($"/tmp/.X{displayNumber}-lock"))
@@ -74,11 +100,12 @@ internal sealed class XvfbTestDisplay : IAsyncDisposable
                 continue;
             }
 
-            XvfbTestDisplay display = new(server, displayName, title);
+            XvfbTestDisplay display = new(server, displayNumber, title);
 
             try
             {
                 await display.WaitForServerAsync().ConfigureAwait(false);
+                display._ownedDisplayFiles = await XvfbTestCommands.CaptureOwnedDisplayFilesAsync(displayNumber, server.Id).ConfigureAwait(false);
                 await display.StartWindowAsync(title).ConfigureAwait(false);
                 return display;
             }
@@ -193,19 +220,45 @@ internal sealed class XvfbTestDisplay : IAsyncDisposable
             }
         }
 
+        bool serverStopped = false;
+
         try
         {
             if (!_serverProcess.HasExited)
             {
                 _serverProcess.Kill(entireProcessTree: true);
-                await _serverProcess.WaitForExitAsync().ConfigureAwait(false);
             }
+
+            await _serverProcess.WaitForExitAsync().ConfigureAwait(false);
+            serverStopped = true;
         }
         catch (InvalidOperationException)
         {
+            serverStopped = _serverProcess.HasExited;
         }
         catch (System.ComponentModel.Win32Exception)
         {
+            serverStopped = _serverProcess.HasExited;
+        }
+
+        try
+        {
+            if (serverStopped && _ownedDisplayFiles is null)
+            {
+                _ownedDisplayFiles = await XvfbTestCommands.TryCapturePartialDisplayFilesAsync(
+                    _displayNumber,
+                    _serverProcess.Id).ConfigureAwait(false);
+            }
+
+            if (serverStopped && _ownedDisplayFiles is { } ownedDisplayFiles)
+            {
+                await XvfbTestCommands.DeleteOwnedDisplayFilesAsync(
+                    _displayNumber,
+                    _serverProcess.Id,
+                    ownedDisplayFiles.UserId,
+                    ownedDisplayFiles.LockIdentity,
+                    ownedDisplayFiles.SocketIdentity).ConfigureAwait(false);
+            }
         }
         finally
         {
