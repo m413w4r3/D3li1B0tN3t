@@ -23,20 +23,20 @@ public static class GuiOptionsValidator
         if (options.AllowRealInput)
             problems.Add("Real input is refused in P2N (Gui:AllowRealInput).");
 
-        if (options.CaptureTimeoutMs is < 100 or > 10_000)
-            problems.Add("Gui:CaptureTimeoutMs must be between 100 and 10000.");
+        if (options.CaptureTimeoutMs is < 100 or > 2000)
+            problems.Add("Gui:CaptureTimeoutMs must be between 100 and 2000.");
 
-        if (options.MaxCaptureBytes is < 1_048_576 or > 67_108_864)
-            problems.Add("Gui:MaxCaptureBytes must be between 1048576 and 67108864.");
+        if (options.MaxCaptureBytes is < 1_048_576 or > 16_777_216)
+            problems.Add("Gui:MaxCaptureBytes must be between 1048576 and 16777216.");
 
-        if (options.MaxWidth is < 1 or > 7680)
-            problems.Add("Gui:MaxWidth must be between 1 and 7680.");
+        if (options.MaxWidth is < 1 or > 3840)
+            problems.Add("Gui:MaxWidth must be between 1 and 3840.");
 
-        if (options.MaxHeight is < 1 or > 7680)
-            problems.Add("Gui:MaxHeight must be between 1 and 7680.");
+        if (options.MaxHeight is < 1 or > 2160)
+            problems.Add("Gui:MaxHeight must be between 1 and 2160.");
 
-        if (options.CalibrationMaxAgeSeconds is < 1 or > 3600)
-            problems.Add("Gui:CalibrationMaxAgeSeconds must be between 1 and 3600.");
+        if (options.CalibrationMaxAgeSeconds is < 1 or > 30)
+            problems.Add("Gui:CalibrationMaxAgeSeconds must be between 1 and 30.");
 
         return new GuiOptionsValidation(problems.Count is 0, problems.ToImmutable());
     }

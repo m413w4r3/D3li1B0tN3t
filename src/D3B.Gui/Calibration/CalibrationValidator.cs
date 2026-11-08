@@ -7,7 +7,7 @@ namespace D3B.Gui.Calibration;
 /// <summary>Fits affine projections and rejects profiles that fail geometry, metrics, or freshness checks.</summary>
 public static class CalibrationValidator
 {
-    /// <summary>The default lifetime of a calibration profile.</summary>
+    /// <summary>The maximum lifetime of a calibration profile, in seconds.</summary>
     public const int CalibrationMaxAgeSeconds = 30;
 
     /// <summary>The initial RANSAC reprojection threshold, in pixels.</summary>
@@ -72,6 +72,9 @@ public static class CalibrationValidator
 
         if (request.CaptureWidth <= 0 || request.CaptureHeight <= 0 || request.MaxAge < TimeSpan.Zero)
             AddProblem(problems, CalibrationProblemCode.InvalidInput, "Capture dimensions and the maximum age must be valid.");
+
+        if (request.MaxAge > TimeSpan.FromSeconds(CalibrationMaxAgeSeconds))
+            AddProblem(problems, CalibrationProblemCode.InvalidInput, "The maximum calibration age cannot exceed 30 seconds.");
 
         if (!ClientAreaFits(request.ClientAreaGeometry, request.CaptureWidth, request.CaptureHeight))
             AddProblem(problems, CalibrationProblemCode.SceneContradiction, "The measured client area lies outside the captured window.");
@@ -240,7 +243,7 @@ public static class CalibrationValidator
     /// <param name="profile">The profile to validate.</param>
     /// <param name="environment">The currently measured environment.</param>
     /// <param name="now">The current clock value.</param>
-    /// <param name="maxAge">The maximum permitted profile age.</param>
+    /// <param name="maxAge">The requested maximum profile age; values above 30 seconds are capped at 30 seconds.</param>
     /// <returns>A current calibrated result or an invalidation result with metrics.</returns>
     public static CalibrationResult ValidateProfile(
         CalibrationProfile profile,
@@ -280,11 +283,15 @@ public static class CalibrationValidator
         if (profile.CalibrationVersion != environment.CalibrationVersion)
             AddProblem(problems, CalibrationProblemCode.CalibrationVersionChanged, "The calibration contract version changed.");
 
+        var effectiveMaxAge = maxAge > TimeSpan.FromSeconds(CalibrationMaxAgeSeconds)
+            ? TimeSpan.FromSeconds(CalibrationMaxAgeSeconds)
+            : maxAge;
+
         if (maxAge < TimeSpan.Zero)
             AddProblem(problems, CalibrationProblemCode.InvalidInput, "The maximum profile age must not be negative.");
         else if (profile.CreatedAt > now)
             AddProblem(problems, CalibrationProblemCode.SceneContradiction, "The profile creation time is in the future.");
-        else if (now - profile.CreatedAt > maxAge)
+        else if (now - profile.CreatedAt > effectiveMaxAge)
             AddProblem(problems, CalibrationProblemCode.Stale, "The calibration profile exceeded its permitted age.");
 
         if (environment.CaptureWidth <= 0 || environment.CaptureHeight <= 0

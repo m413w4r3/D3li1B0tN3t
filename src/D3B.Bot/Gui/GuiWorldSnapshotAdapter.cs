@@ -27,9 +27,12 @@ public sealed class GuiWorldSnapshotAdapter
     {
         ArgumentNullException.ThrowIfNull(bot);
 
+        var translationBlockedBeforeView = bot.IsMovementTranslationBlocked;
         var view = bot.View;
+        var translationBlockedAfterView = bot.IsMovementTranslationBlocked;
         var state = view.State;
-        var translationBlocked = bot.IsMovementTranslationBlocked;
+        // The relay can close its latch outside the bot loop, so a close racing the view read must fail closed.
+        var translationBlocked = translationBlockedBeforeView || view.IsTranslationBlocked || translationBlockedAfterView;
 
         return new GuiWorldSnapshot(
             view.SessionEpoch,
@@ -47,7 +50,7 @@ public sealed class GuiWorldSnapshotAdapter
             state.Elements.Values.Select(ToKnownElement).ToImmutableArray(),
             GetObservationStatus(state, view.IsConnected, translationBlocked))
         {
-            IsUserInterrupted = bot.IsPaused,
+            IsUserInterrupted = view.IsPaused,
         };
     }
 

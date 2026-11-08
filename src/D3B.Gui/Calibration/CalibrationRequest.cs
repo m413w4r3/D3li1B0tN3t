@@ -32,7 +32,7 @@ public sealed record CalibrationRequest
     /// <summary>Gets the clock used to timestamp the profile.</summary>
     public TimeProvider TimeProvider { get; }
 
-    /// <summary>Gets the permitted profile age.</summary>
+    /// <summary>Gets the requested profile age, which validation rejects when greater than 30 seconds.</summary>
     public TimeSpan MaxAge { get; }
 
     /// <summary>Gets whether this request is explicitly synthetic.</summary>

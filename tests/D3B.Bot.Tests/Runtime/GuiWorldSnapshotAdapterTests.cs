@@ -191,17 +191,17 @@ public sealed class GuiWorldSnapshotAdapterTests : IAsyncDisposable
     public async Task StateRevisionAndConnectionArePublishedAsOneView()
     {
         var (connection, bot) = await _play.EnterAsync(300);
-        var expected = new ConcurrentDictionary<(string Name, long Revision, long Epoch, bool Connected), byte>();
+        var expected = new ConcurrentDictionary<(string Name, long Revision, long Epoch, bool Connected, bool Paused, bool TranslationBlocked), byte>();
         var initial = bot.View;
-        expected.TryAdd((initial.State.Name, initial.Revision, initial.SessionEpoch, initial.IsConnected), 0);
-        var mismatches = new ConcurrentQueue<(string Name, long Revision, long Epoch, bool Connected)>();
+        expected.TryAdd((initial.State.Name, initial.Revision, initial.SessionEpoch, initial.IsConnected, initial.IsPaused, initial.IsTranslationBlocked), 0);
+        var mismatches = new ConcurrentQueue<(string Name, long Revision, long Epoch, bool Connected, bool Paused, bool TranslationBlocked)>();
         using var stopReader = new CancellationTokenSource();
         var reader = Task.Run(() =>
         {
             while (!stopReader.IsCancellationRequested)
             {
                 var view = bot.View;
-                var observed = (view.State.Name, view.Revision, view.SessionEpoch, view.IsConnected);
+                var observed = (view.State.Name, view.Revision, view.SessionEpoch, view.IsConnected, view.IsPaused, view.IsTranslationBlocked);
 
                 if (!expected.ContainsKey(observed))
                     mismatches.Enqueue(observed);
@@ -212,12 +212,22 @@ public sealed class GuiWorldSnapshotAdapterTests : IAsyncDisposable
         {
             var current = bot.View;
             var name = $"snapshot-{index}";
-            expected.TryAdd((name, current.Revision + 1, current.SessionEpoch + 1, true), 0);
+            expected.TryAdd((name, current.Revision + 1, current.SessionEpoch + 1, true, current.IsPaused, false), 0);
             bot.Attach(connection.Session, State() with { Name = name });
             await bot.ProcessedAsync();
 
             current = bot.View;
-            expected.TryAdd((current.State.Name, current.Revision + 1, current.SessionEpoch, false), 0);
+            expected.TryAdd((current.State.Name, current.Revision + 1, current.SessionEpoch, current.IsConnected, true, current.IsTranslationBlocked), 0);
+            bot.Pause();
+            await bot.ProcessedAsync();
+
+            current = bot.View;
+            expected.TryAdd((current.State.Name, current.Revision + 1, current.SessionEpoch, current.IsConnected, false, current.IsTranslationBlocked), 0);
+            bot.Resume();
+            await bot.ProcessedAsync();
+
+            current = bot.View;
+            expected.TryAdd((current.State.Name, current.Revision + 1, current.SessionEpoch, false, current.IsPaused, false), 0);
             bot.Detach(connection.Session);
             await bot.ProcessedAsync();
         }
@@ -256,6 +266,7 @@ public sealed class GuiWorldSnapshotAdapterTests : IAsyncDisposable
     public async Task SnapshotReportsUserInterruption()
     {
         var (connection, bot) = await _play.EnterAsync(300);
+        var initialRevision = bot.View.Revision;
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var behavior = bot.RunAsync(async (_, token) =>
@@ -275,7 +286,31 @@ public sealed class GuiWorldSnapshotAdapterTests : IAsyncDisposable
         await bot.ProcessedAsync();
 
         Assert.Equal(Interruption.Player, interrupted.Reason);
+        Assert.True(bot.View.Revision > initialRevision);
         Assert.True(_adapter.Capture(bot).IsUserInterrupted);
+    }
+
+    [Fact]
+    public async Task PauseAndResumePublishNewViewsAndSnapshots()
+    {
+        var (_, bot) = await _play.EnterAsync(300);
+        var initialRevision = bot.View.Revision;
+
+        bot.Pause();
+        await bot.ProcessedAsync();
+        var pausedView = bot.View;
+
+        Assert.True(pausedView.Revision > initialRevision);
+        Assert.True(pausedView.IsPaused);
+        Assert.True(_adapter.Capture(bot).IsUserInterrupted);
+
+        bot.Resume();
+        await bot.ProcessedAsync();
+        var resumedView = bot.View;
+
+        Assert.True(resumedView.Revision > pausedView.Revision);
+        Assert.False(resumedView.IsPaused);
+        Assert.False(_adapter.Capture(bot).IsUserInterrupted);
     }
 
     private static CharacterState State()
