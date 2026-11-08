@@ -40,11 +40,11 @@ flowchart LR
 | Project | References | Boundary |
 | --- | --- | --- |
 | src/D3B.Gui | D3B.Engine, D3B.Data | Platform and vision library. It has no dependency on Bot, Host, App, Protocol, or Network. OpenCV is supplied by the two central NuGet package references. |
-| src/D3B.Bot | D3B.Gui, D3B.Engine, D3B.Data, D3B.Network, D3B.Protocol, and the existing bot dependencies | Owns character state and the future adaptation boundary. Its P2N snapshot adapter and correlation model are not registered in a gameplay loop. |
+| src/D3B.Bot | D3B.Gui, D3B.Engine, D3B.Data, D3B.Network, D3B.Protocol, and the existing bot dependencies | Owns character state and the bounded WalkToCell observation path on BotActor's existing inbox. It does not send GUI input or install a capture loop or gameplay trigger. |
 | src/D3B.Storage | D3B.Bot | Existing account/profile storage module used by the executable projects. |
 | src/D3B.Host and src/D3B.App | D3B.Storage | These projects reach D3B.Bot through the existing storage dependency. Neither registers a GUI executor, capture loop, or gameplay trigger; D3B.Gui is transitive through D3B.Bot. |
 | tests/D3B.Gui.Tests | src/D3B.Gui | Pure contracts and synthetic fixtures, plus Xvfb tests against fake windows. |
-| tests/D3B.Bot.Tests | src/D3B.Bot | Bot-side tests, including the isolated snapshot and correlation contracts. |
+| tests/D3B.Bot.Tests | src/D3B.Bot | Bot-side tests, including actor-loop WalkToCell observation, outcome waiting, and isolated snapshot/correlation contracts. |
 
 The required dependency direction is D3B.Gui → D3B.Engine and D3B.Data, then D3B.Bot → D3B.Gui. Forbidden
 dependencies from D3B.Gui are D3B.Bot, D3B.Host, D3B.App, D3B.Protocol, and D3B.Network. D3B.Gui does not own a
@@ -71,8 +71,9 @@ BotActor, a client connection, or mutable character state.
 - GuiWorldSnapshotAdapter reads one atomically published BotActor view and creates an immutable GUI snapshot. OpenCV
   receives that snapshot as data; the image pipeline does not receive a mutable BotActor.
 - GuiIntentCorrelation models registration, acknowledgement, one click, a compatible client request, a server
-  outcome, and final consumption. It is isolated: it does not modify or register with BotActor, PlayerActions, or
-  GameSession.
+  outcome, and final consumption. BotActor feeds WalkToCell observations on its existing inbox and exposes one
+  outcome waiter. PlayerActions still pauses a running behavior on client gameplay requests; the observer does not send
+  requests or modify GameSession's transport.
 - GameInputModePolicy is a pure policy seam. It is not installed at the relay's final network admission point.
 - The executor defaults to NeverConfirms. A click without a matching confirmation ends Unconfirmed and cannot be
   retried with the same intent identifier.
@@ -93,6 +94,7 @@ emits input.
 ## Not wired in P2N
 
 There is no host or application registration for GuiActionExecutor, XdotoolGuiInput, or an automatic capture loop.
-There is no gameplay trigger, no schedule, and no gameplay call from a planner into the GUI library. D3B.Bot's snapshot
-adapter and correlation state model are contracts only. The GuiClientInput policy is not connected to the network
-admission point. No real Dofus capture, click, move, harvest, or server session was performed.
+There is no gameplay trigger, no schedule, and no gameplay call from a planner into the GUI library. D3B.Bot observes
+WalkToCell protocol evidence only; it does not cause client requests. UseElement correlation remains contract-only. The
+GuiClientInput policy is not connected to the network admission point. No real Dofus capture, click, move, harvest, or
+server session was performed.

@@ -11,6 +11,7 @@ using D3B.Bot.Network;
 using D3B.Data.Maps;
 using D3B.Engine.World;
 using D3B.Gui.Actions;
+using D3B.Gui.Calibration;
 using D3B.Gui.Safety;
 using D3B.Gui.Windowing;
 using D3B.Network.Relay;
@@ -94,6 +95,9 @@ public sealed class BotActor : IAsyncDisposable
     private long _useEndedAt = NeverEnded;
     private long _fightBeganAt = NeverEnded;
     private long _regeneratingSince = NeverEnded;
+    private GuiOutcomeWaiter? _guiOutcomeWaiter;
+    private Guid? _guiMovementIntentId;
+    private bool _guiExpectedMovementSeen;
 
     /// <summary>Gets who the bot plays.</summary>
     public CharacterKey Key { get; }
@@ -172,6 +176,8 @@ public sealed class BotActor : IAsyncDisposable
     internal TimeProvider Time { get; }
 
     internal GuiIntentCorrelationState GuiIntentState => _guiIntents.State;
+
+    internal string? GuiIntentDetail => _guiIntents.LastDetail;
 
     internal ILogger Log => _log;
 
@@ -374,6 +380,46 @@ public sealed class BotActor : IAsyncDisposable
         return completed.Task;
     }
 
+    /// <summary>Waits on the actor loop for the one GUI intention's matching server outcome or terminal uncertainty.</summary>
+    /// <param name="intentId">The registered intention to await.</param>
+    /// <param name="cancellationToken">Cancels this wait without retrying the intention.</param>
+    /// <returns>The expected outcome after server confirmation, or <see langword="null"/> when the wait ends without one.</returns>
+    public Task<GuiServerOutcome?> WaitForGuiOutcomeAsync(Guid intentId, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<GuiServerOutcome?>(cancellationToken);
+
+        if (_stopping)
+            return Task.FromResult<GuiServerOutcome?>(null);
+
+        var completed = new TaskCompletionSource<GuiServerOutcome?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        if (!_inbox.Writer.TryWrite(new WaitForGuiOutcome(intentId, completed, cancellationToken)))
+            return Task.FromResult<GuiServerOutcome?>(null);
+
+        return completed.Task;
+    }
+
+    /// <summary>Consumes a server-confirmed GUI intention once, on the actor loop.</summary>
+    /// <param name="intentId">The confirmed intention to consume.</param>
+    /// <param name="cancellationToken">Cancels the queued consume before the loop handles it.</param>
+    /// <returns>Whether this call consumed the intention.</returns>
+    public Task<bool> ConsumeGuiIntentAsync(Guid intentId, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<bool>(cancellationToken);
+
+        if (_stopping)
+            return Task.FromResult(false);
+
+        var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        if (!_inbox.Writer.TryWrite(new ConsumeGuiIntent(intentId, completed, cancellationToken)))
+            return Task.FromResult(false);
+
+        return completed.Task;
+    }
+
     /// <summary>Reckons the character's life at a time: the life the server last said, and a point each interval it regenerates since (D153).</summary>
     /// <param name="at">The time, by the bot's clock.</param>
     /// <returns>The life, at most the most; <see langword="null"/> while the server has not said it.</returns>
@@ -503,6 +549,11 @@ public sealed class BotActor : IAsyncDisposable
         Post(new Seen(session, side, message, translationBlocked));
     }
 
+    internal void NotifyTranslationBlocked(GameSession session)
+    {
+        Post(new TranslationBlockedInput(session));
+    }
+
     internal void Detach(GameSession session)
     {
         Post(new Detached(session));
@@ -590,13 +641,17 @@ public sealed class BotActor : IAsyncDisposable
             {
                 Handle(input);
                 RevokeGuiIntentIfTranslationBlocked();
-                Wake();
             }
             catch (Exception exception)
             {
                 // A message the state handlers fail on must not stop the bot from seeing the next.
                 Interlocked.Increment(ref _handlerFailures);
                 BotLog.HandlerFailed(_log, Key.CharacterId, exception);
+            }
+            finally
+            {
+                CompleteGuiOutcomeWaiterIfTerminal();
+                Wake();
             }
         }
     }
@@ -607,6 +662,10 @@ public sealed class BotActor : IAsyncDisposable
         {
             case Seen seen:
                 OnSeen(seen.Session, seen.Side, seen.Message, seen.TranslationBlocked);
+                break;
+            case TranslationBlockedInput blocked:
+                if (blocked.Session == _session)
+                    CancelActiveGuiIntent("Protocol translation was blocked during the intention.");
                 break;
             case Expecting expecting:
                 OnExpecting(expecting.Expectation);
@@ -682,6 +741,25 @@ public sealed class BotActor : IAsyncDisposable
                 else
                     cancelling.Completed.TrySetResult(CancelGuiIntentOnLoop(cancelling.IntentId, cancelling.ClickMayHaveBeenEmitted, cancelling.Reason));
                 break;
+            case WaitForGuiOutcome waiting:
+                if (waiting.CancellationToken.IsCancellationRequested)
+                    waiting.Completed.TrySetCanceled(waiting.CancellationToken);
+                else
+                    RegisterGuiOutcomeWaiter(waiting.IntentId, waiting.Completed, waiting.CancellationToken);
+                break;
+            case CancelGuiOutcomeWaiter cancelling:
+                if (ReferenceEquals(_guiOutcomeWaiter, cancelling.Waiter))
+                    CompleteGuiOutcomeWaiter(null, canceled: true);
+                break;
+            case ExpireGuiOutcomeWaiter expired:
+                ExpireGuiOutcomeWaiterOnLoop(expired.Waiter);
+                break;
+            case ConsumeGuiIntent consuming:
+                if (consuming.CancellationToken.IsCancellationRequested)
+                    consuming.Completed.TrySetCanceled(consuming.CancellationToken);
+                else
+                    consuming.Completed.TrySetResult(ConsumeGuiIntentOnLoop(consuming.IntentId));
+                break;
         }
     }
 
@@ -723,7 +801,15 @@ public sealed class BotActor : IAsyncDisposable
         if (!IsSafeGuiIntentWorld(current))
             return RejectedGuiIntent(intent.IntentId, GetGuiIntentSafetyDetail(current));
 
-        return _guiIntents.Register(intent, current, window);
+        GuiIntentRegistration registration = _guiIntents.Register(intent, current, window);
+
+        if (registration.Status is GuiIntentRegistrationStatus.Registered)
+        {
+            _guiMovementIntentId = intent.IntentId;
+            _guiExpectedMovementSeen = false;
+        }
+
+        return registration;
     }
 
     private bool AcknowledgeGuiIntentOnLoop(Guid intentId, GuiWorldSnapshot world, GameWindowSnapshot window)
@@ -766,6 +852,131 @@ public sealed class BotActor : IAsyncDisposable
         return clickMayHaveBeenEmitted
             ? _guiIntents.MarkUnconfirmed(reason)
             : _guiIntents.Cancel(reason);
+    }
+
+    private void RegisterGuiOutcomeWaiter(Guid intentId, TaskCompletionSource<GuiServerOutcome?> completed, CancellationToken cancellationToken)
+    {
+        if (_guiOutcomeWaiter is not null)
+        {
+            completed.TrySetResult(null);
+            return;
+        }
+
+        if (_guiIntents.Intent is not { } intent || intent.IntentId != intentId)
+        {
+            completed.TrySetResult(null);
+            return;
+        }
+
+        if (_guiIntents.State is GuiIntentCorrelationState.ServerConfirmed)
+        {
+            completed.TrySetResult(intent.ExpectedServerOutcome);
+            return;
+        }
+
+        if (_guiIntents.State is not (GuiIntentCorrelationState.Registered or GuiIntentCorrelationState.Acknowledged
+            or GuiIntentCorrelationState.Clicked or GuiIntentCorrelationState.ClientRequestSeen))
+        {
+            completed.TrySetResult(null);
+            return;
+        }
+
+        var waiter = new GuiOutcomeWaiter(intentId, completed, cancellationToken);
+        _guiOutcomeWaiter = waiter;
+        waiter.CancellationRegistration = cancellationToken.Register(
+            static state =>
+            {
+                var cancellation = (GuiWaiterCancellationState)state!;
+                cancellation.Actor.Post(new CancelGuiOutcomeWaiter(cancellation.Waiter));
+            },
+            new GuiWaiterCancellationState(this, waiter));
+
+        TimeSpan remaining = intent.ExpiresAt - Time.GetUtcNow();
+
+        if (remaining <= TimeSpan.Zero)
+        {
+            ExpireGuiOutcomeWaiterOnLoop(waiter);
+            return;
+        }
+
+        waiter.ExpiryTimer = Time.CreateTimer(
+            static state =>
+            {
+                var expiry = (GuiWaiterTimerState)state!;
+                expiry.Actor.Post(new ExpireGuiOutcomeWaiter(expiry.Waiter));
+            },
+            new GuiWaiterTimerState(this, waiter),
+            remaining,
+            Timeout.InfiniteTimeSpan);
+    }
+
+    private void ExpireGuiOutcomeWaiterOnLoop(GuiOutcomeWaiter waiter)
+    {
+        if (!ReferenceEquals(_guiOutcomeWaiter, waiter))
+            return;
+
+        if (_guiIntents.Intent?.IntentId == waiter.IntentId)
+            _guiIntents.Cancel("The intention expired while awaiting its server outcome.");
+
+        CompleteGuiOutcomeWaiterIfTerminal();
+    }
+
+    private void CompleteGuiOutcomeWaiterIfTerminal()
+    {
+        if (_guiOutcomeWaiter is not { } waiter)
+            return;
+
+        GuiActionIntent? intent = _guiIntents.Intent;
+
+        if (intent?.IntentId != waiter.IntentId)
+        {
+            CompleteGuiOutcomeWaiter(null);
+            return;
+        }
+
+        switch (_guiIntents.State)
+        {
+            case GuiIntentCorrelationState.ServerConfirmed:
+                CompleteGuiOutcomeWaiter(intent.ExpectedServerOutcome);
+                break;
+            case GuiIntentCorrelationState.Consumed:
+            case GuiIntentCorrelationState.Cancelled:
+            case GuiIntentCorrelationState.Interrupted:
+            case GuiIntentCorrelationState.Unconfirmed:
+                CompleteGuiOutcomeWaiter(null);
+                break;
+        }
+    }
+
+    private void CompleteGuiOutcomeWaiter(GuiServerOutcome? outcome, bool canceled = false)
+    {
+        if (_guiOutcomeWaiter is not { } waiter)
+            return;
+
+        _guiOutcomeWaiter = null;
+        waiter.CancellationRegistration.Dispose();
+        waiter.ExpiryTimer?.Dispose();
+
+        if (canceled)
+            waiter.Completed.TrySetCanceled(waiter.CancellationToken);
+        else
+            waiter.Completed.TrySetResult(outcome);
+    }
+
+    private bool ConsumeGuiIntentOnLoop(Guid intentId)
+    {
+        if (_guiIntents.Intent?.IntentId != intentId || _guiIntents.State is not GuiIntentCorrelationState.ServerConfirmed)
+            return false;
+
+        bool consumed = _guiIntents.Consume();
+
+        if (consumed)
+        {
+            _guiMovementIntentId = null;
+            _guiExpectedMovementSeen = false;
+        }
+
+        return consumed;
     }
 
     private bool IsActiveGuiIntent(Guid intentId)
@@ -909,6 +1120,9 @@ public sealed class BotActor : IAsyncDisposable
         PublishState(state, _connected);
         RevokeGuiIntentIfMapChanged(state.MapId);
 
+        bool playerActionStarted = side is RelayDirection.FromClient && PlayerActions.Starts(state, message);
+        bool expectedGuiWalkRequest = ObserveGuiWalkFrame(session, side, message, translationBlocked, before, state, playerActionStarted);
+
         LogPositionTransition(before, state, side, message);
 
         if (before.Use is not null && state.Use is null && message is InteractiveUseEndedEvent)
@@ -933,9 +1147,7 @@ public sealed class BotActor : IAsyncDisposable
         }
 
         // A request to leave changes nothing of the state, so this is the dialog the client sent it in.
-        bool playerActionStarted = side is RelayDirection.FromClient && PlayerActions.Starts(state, message);
-
-        if (playerActionStarted)
+        if (playerActionStarted && !expectedGuiWalkRequest)
             RevokeGuiIntentBeforeClick("A client gameplay action started before the intention was clicked.");
 
         if (playerActionStarted && _behavior is { } behavior)
@@ -969,6 +1181,233 @@ public sealed class BotActor : IAsyncDisposable
             expectation.TryMatch(side, message, state);
 
         _expectations.RemoveAll(expectation => expectation.IsDone);
+    }
+
+    private bool ObserveGuiWalkFrame(
+        GameSession session,
+        RelayDirection side,
+        IMessage message,
+        bool translationBlocked,
+        CharacterState before,
+        CharacterState state,
+        bool playerActionStarted)
+    {
+        if (_guiIntents.Intent is not { } intent
+            || intent.ActionKind is not GuiActionKind.WalkToCell
+            || !IsActiveGuiIntent(intent.IntentId))
+        {
+            return false;
+        }
+
+        if (translationBlocked || session.IsMovementTranslationBlocked)
+        {
+            CancelActiveGuiIntent("Protocol translation was blocked during the intention.");
+            return false;
+        }
+
+        if (_epoch != intent.SessionEpoch)
+        {
+            CancelActiveGuiIntent("The session changed during the intention.");
+            return false;
+        }
+
+        GuiWorldSnapshot current = _guiWorldSnapshots.Capture(this);
+
+        if (current.SessionEpoch != intent.SessionEpoch)
+        {
+            CancelActiveGuiIntent("The session changed during the intention.");
+            return false;
+        }
+
+        if (current.ProtocolObservationStatus is not ProtocolObservationStatus.Complete)
+        {
+            RevokeGuiIntentForUncertainObservation("The actor's map or cell became unknown during the intention.");
+            return false;
+        }
+
+        if (side is RelayDirection.FromClient)
+        {
+            if (message is MapMovementRequest request)
+            {
+                if (_guiIntents.State is not GuiIntentCorrelationState.Clicked)
+                {
+                    if (_guiIntents.State is GuiIntentCorrelationState.ClientRequestSeen)
+                    {
+                        _guiIntents.ObserveClientRequest(new GuiClientRequestObservation(
+                            _epoch,
+                            intent.MapId,
+                            GuiClientAction.Walk,
+                            null,
+                            null,
+                            potentiallyConcurrentHumanInput: false));
+                    }
+
+                    return false;
+                }
+
+                bool valid = TryGetMapMovementRequestEndpoint(request, out int endpoint);
+                var observation = new GuiClientRequestObservation(
+                    _epoch,
+                    request.MapId,
+                    GuiClientAction.Walk,
+                    valid ? new LogicalCell(endpoint) : null,
+                    null,
+                    potentiallyConcurrentHumanInput: false);
+                bool observed = _guiIntents.ObserveClientRequest(observation);
+
+                if (observed && valid && request.MapId == intent.MapId && state.MapId == intent.MapId)
+                {
+                    _guiMovementIntentId = intent.IntentId;
+                    _guiExpectedMovementSeen = false;
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (playerActionStarted && _guiIntents.State is (GuiIntentCorrelationState.Clicked or GuiIntentCorrelationState.ClientRequestSeen))
+            {
+                _guiIntents.ObserveClientRequest(new GuiClientRequestObservation(
+                    _epoch,
+                    intent.MapId,
+                    GuiClientAction.UseElement,
+                    null,
+                    null,
+                    potentiallyConcurrentHumanInput: false));
+            }
+
+            return false;
+        }
+
+        if (message is MapMovementEvent movement)
+        {
+            if (movement.ActorId != Key.CharacterId)
+                return false;
+
+            if (_guiIntents.State is not GuiIntentCorrelationState.ClientRequestSeen)
+            {
+                MarkGuiIntentUnconfirmed("The self movement event arrived before the matching client walk request.");
+                return false;
+            }
+
+            if (_guiMovementIntentId != intent.IntentId)
+            {
+                MarkGuiIntentUnconfirmed("The self movement event did not follow the expected client walk request.");
+                return false;
+            }
+
+            if (movement.Cells.Count is 0 || movement.Cells.Any(cell => !IsValidCell(cell)))
+            {
+                MarkGuiIntentUnconfirmed("The self movement event had an empty or invalid path.");
+                return false;
+            }
+
+            if (movement.Cells[^1] != intent.TargetCellId.Value)
+            {
+                MarkGuiIntentUnconfirmed("The self movement event ended at a different cell from the intention.");
+                return false;
+            }
+
+            if (before.MapId != intent.MapId
+                || state.MapId != intent.MapId
+                || before.PendingMovementMapId != intent.MapId
+                || before.Cell != movement.Cells[0]
+                || !state.IsWalking
+                || !state.Path.SequenceEqual(movement.Cells))
+            {
+                MarkGuiIntentUnconfirmed("The self movement event did not match the pending path on the intention's map.");
+                return false;
+            }
+
+            _guiExpectedMovementSeen = true;
+            return false;
+        }
+
+        if (message is MapMovementRefusedEvent)
+        {
+            MarkGuiIntentUnconfirmed("The server refused movement during the intention.");
+            return false;
+        }
+
+        if (message is not MapMovementConfirmResponse)
+            return false;
+
+        if (_guiIntents.State is not GuiIntentCorrelationState.ClientRequestSeen)
+        {
+            MarkGuiIntentUnconfirmed("The server movement response arrived before the matching client walk request.");
+            return false;
+        }
+
+        if (_guiMovementIntentId != intent.IntentId || !_guiExpectedMovementSeen)
+        {
+            MarkGuiIntentUnconfirmed("The server movement response had no matching self movement event.");
+            return false;
+        }
+
+        if (before.MapId != intent.MapId || !before.IsWalking || before.Path.IsDefaultOrEmpty
+            || before.Path[^1] != intent.TargetCellId.Value)
+        {
+            MarkGuiIntentUnconfirmed("The server movement response had no pending path ending at the intended cell.");
+            return false;
+        }
+
+        if (state.MapId != intent.MapId
+            || state.Cell != intent.TargetCellId.Value
+            || state.Provenance is not CellProvenance.ServerConfirmed)
+        {
+            MarkGuiIntentUnconfirmed("The server movement response did not leave the character confirmed at the intended cell.");
+            return false;
+        }
+
+        _guiIntents.ObserveServerOutcome(new GuiServerOutcomeObservation(
+            _epoch,
+            intent.MapId,
+            GuiServerOutcome.MovementConfirmed,
+            intent.TargetCellId,
+            null));
+
+        return false;
+    }
+
+    private void MarkGuiIntentUnconfirmed(string detail)
+    {
+        if (_guiIntents.State is GuiIntentCorrelationState.Registered)
+            _guiIntents.Cancel(detail);
+        else
+            _guiIntents.MarkUnconfirmed(detail);
+    }
+
+    private void RevokeGuiIntentForUncertainObservation(string detail)
+    {
+        if (_guiIntents.State is GuiIntentCorrelationState.Registered or GuiIntentCorrelationState.Acknowledged)
+            _guiIntents.Cancel(detail);
+        else
+            _guiIntents.MarkUnconfirmed(detail);
+    }
+
+    private static bool TryGetMapMovementRequestEndpoint(MapMovementRequest request, out int endpoint)
+    {
+        endpoint = 0;
+
+        if (request.KeyMovements.Count is 0)
+            return false;
+
+        foreach (int keyMovement in request.KeyMovements)
+        {
+            int direction = keyMovement >> 12;
+            int cell = keyMovement & 0xFFF;
+
+            if (direction is < 0 or > 7 || !IsValidCell(cell))
+                return false;
+        }
+
+        endpoint = request.KeyMovements[request.KeyMovements.Count - 1] & 0xFFF;
+        return true;
+    }
+
+    private static bool IsValidCell(int cell)
+    {
+        return cell >= 0 && cell < MapData.CellCount;
     }
 
     private void LogPositionTransition(CharacterState before, CharacterState state, RelayDirection side, IMessage message)
@@ -1304,6 +1743,16 @@ public sealed class BotActor : IAsyncDisposable
 
     private sealed record Seen(GameSession Session, RelayDirection Side, IMessage Message, bool TranslationBlocked) : Input;
 
+    private sealed record TranslationBlockedInput : Input
+    {
+        public GameSession Session { get; }
+
+        public TranslationBlockedInput(GameSession session)
+        {
+            Session = session;
+        }
+    }
+
     private sealed record Expecting(GameExpectation Expectation) : Input;
 
     private sealed record Starting(TaskCompletionSource<RunningBehavior> Started, Readiness Readiness, CancellationToken CancellationToken) : Input;
@@ -1355,6 +1804,104 @@ public sealed class BotActor : IAsyncDisposable
         string Reason,
         TaskCompletionSource<bool> Completed,
         CancellationToken CancellationToken) : Input;
+
+    private sealed record WaitForGuiOutcome : Input
+    {
+        public Guid IntentId { get; }
+
+        public TaskCompletionSource<GuiServerOutcome?> Completed { get; }
+
+        public CancellationToken CancellationToken { get; }
+
+        public WaitForGuiOutcome(Guid intentId, TaskCompletionSource<GuiServerOutcome?> completed, CancellationToken cancellationToken)
+        {
+            IntentId = intentId;
+            Completed = completed;
+            CancellationToken = cancellationToken;
+        }
+    }
+
+    private sealed record CancelGuiOutcomeWaiter : Input
+    {
+        public GuiOutcomeWaiter Waiter { get; }
+
+        public CancelGuiOutcomeWaiter(GuiOutcomeWaiter waiter)
+        {
+            Waiter = waiter;
+        }
+    }
+
+    private sealed record ExpireGuiOutcomeWaiter : Input
+    {
+        public GuiOutcomeWaiter Waiter { get; }
+
+        public ExpireGuiOutcomeWaiter(GuiOutcomeWaiter waiter)
+        {
+            Waiter = waiter;
+        }
+    }
+
+    private sealed record ConsumeGuiIntent : Input
+    {
+        public Guid IntentId { get; }
+
+        public TaskCompletionSource<bool> Completed { get; }
+
+        public CancellationToken CancellationToken { get; }
+
+        public ConsumeGuiIntent(Guid intentId, TaskCompletionSource<bool> completed, CancellationToken cancellationToken)
+        {
+            IntentId = intentId;
+            Completed = completed;
+            CancellationToken = cancellationToken;
+        }
+    }
+
+    private sealed class GuiWaiterCancellationState
+    {
+        public BotActor Actor { get; }
+
+        public GuiOutcomeWaiter Waiter { get; }
+
+        public GuiWaiterCancellationState(BotActor actor, GuiOutcomeWaiter waiter)
+        {
+            Actor = actor;
+            Waiter = waiter;
+        }
+    }
+
+    private sealed class GuiWaiterTimerState
+    {
+        public BotActor Actor { get; }
+
+        public GuiOutcomeWaiter Waiter { get; }
+
+        public GuiWaiterTimerState(BotActor actor, GuiOutcomeWaiter waiter)
+        {
+            Actor = actor;
+            Waiter = waiter;
+        }
+    }
+
+    private sealed class GuiOutcomeWaiter
+    {
+        public Guid IntentId { get; }
+
+        public TaskCompletionSource<GuiServerOutcome?> Completed { get; }
+
+        public CancellationToken CancellationToken { get; }
+
+        public CancellationTokenRegistration CancellationRegistration { get; set; }
+
+        public ITimer? ExpiryTimer { get; set; }
+
+        public GuiOutcomeWaiter(Guid intentId, TaskCompletionSource<GuiServerOutcome?> completed, CancellationToken cancellationToken)
+        {
+            IntentId = intentId;
+            Completed = completed;
+            CancellationToken = cancellationToken;
+        }
+    }
 
     /// <summary>When a behavior may start.</summary>
     private enum Readiness
