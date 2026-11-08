@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using D3B.Bot.Hosting;
+using D3B.Core.Modules;
 using D3B.Storage;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace D3B.App.Hosting;
@@ -45,7 +47,19 @@ internal sealed class HostRunner
     /// <param name="args">The command-line arguments, read as the host's configuration.</param>
     /// <param name="settings">The host's settings the app changed (D151), which its configuration and command line win over.</param>
     public HostRunner(string[] args, IReadOnlyDictionary<string, string?> settings)
-        : this(cancellationToken => BotHost.StartAsync(BotHost.CreateBuilder(args, settings).AddModule<StorageModule>(), cancellationToken))
+        : this(args, settings, BotHost.StartAsync)
+    {
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="HostRunner"/> class with an injectable host start operation.</summary>
+    /// <param name="args">The command-line arguments, read as the host's configuration.</param>
+    /// <param name="settings">The host's settings the app changed.</param>
+    /// <param name="start">Starts the prepared host builder.</param>
+    internal HostRunner(
+        string[] args,
+        IReadOnlyDictionary<string, string?> settings,
+        Func<BotBuilder, CancellationToken, Task<BotHostStart>> start)
+        : this(CreateStart(args, settings, start))
     {
     }
 
@@ -54,6 +68,25 @@ internal sealed class HostRunner
     internal HostRunner(Func<CancellationToken, Task<BotHostStart>> start)
     {
         _start = start;
+    }
+
+    private static Func<CancellationToken, Task<BotHostStart>> CreateStart(
+        string[] args,
+        IReadOnlyDictionary<string, string?> settings,
+        Func<BotBuilder, CancellationToken, Task<BotHostStart>> start)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(start);
+
+        return cancellationToken =>
+        {
+            var builder = BotHost.CreateBuilder(args, settings).AddModule<StorageModule>();
+            GuiHostCapability capability = GuiHostStartup.Validate(builder.Configuration);
+            builder.Services.AddSingleton(capability);
+
+            return start(builder, cancellationToken);
+        };
     }
 
     /// <summary>Starts getting the host ready, off the caller's thread.</summary>
