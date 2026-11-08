@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using D3B.Gui.Capture;
 using D3B.Gui.Tests.Windowing;
@@ -118,6 +119,36 @@ public sealed class MaimWindowCaptureTests
     }
 
     [Fact]
+    public async Task WindowChangeTakesPrecedenceOverMaimFailure()
+    {
+        GameWindowSnapshot before = CreateTestSnapshot();
+        GameWindowSnapshot after = before with
+        {
+            DesktopOrigin = new DesktopPixels(before.DesktopOrigin.X + 1, before.DesktopOrigin.Y)
+        };
+        SequenceGameWindowLocator locator = new(before, after);
+        string directory = CreateTemporaryDirectory();
+        string fakeMaim = Path.Combine(directory, "failed-maim");
+        XvfbTestCommands.WriteExecutable(fakeMaim, "#!/bin/sh\nexit 1\n");
+        MaimWindowCapture capture = new(locator, new MaimCaptureOptions(fakeMaim), GetTestEnvironmentValue);
+
+        try
+        {
+            using CapturedFrame frame = await capture.CaptureAsync(
+                before.Identity.Xid,
+                new GameWindowExpectation("xterm"),
+                CancellationToken.None);
+
+            Assert.Equal(CaptureStatus.WindowChanged, frame.Status);
+            Assert.False(frame.ContentUsable);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task MissingMaimExecutableReturnsBinaryUnavailable()
     {
         await using XvfbTestDisplay display = await XvfbTestDisplay.StartAsync();
@@ -161,6 +192,49 @@ public sealed class MaimWindowCaptureTests
         int childPid = int.Parse(await File.ReadAllTextAsync(pidFile, TestContext.Current.CancellationToken), CultureInfo.InvariantCulture);
         Assert.True(await XvfbTestCommands.IsProcessStoppedAsync(childPid, TimeSpan.FromSeconds(3)));
         Directory.Delete(directory, recursive: true);
+    }
+
+    [Fact]
+    public async Task CaptureTimeoutBoundsDrainWhenExitedMaimDescendantKeepsPipesOpen()
+    {
+        GameWindowSnapshot snapshot = CreateTestSnapshot();
+        string directory = CreateTemporaryDirectory();
+        string pidFile = Path.Combine(directory, "child.pid");
+        string fakeMaim = Path.Combine(directory, "maim-with-inherited-pipes");
+        string sleep = RequireExecutable("sleep");
+        XvfbTestCommands.WriteExecutable(
+            fakeMaim,
+            $"#!/bin/sh\n'{sleep}' 30 &\nprintf '%s' \"$!\" > '{pidFile}'\nexit 0\n");
+        SequenceGameWindowLocator locator = new(snapshot);
+        MaimWindowCapture capture = new(
+            locator,
+            new MaimCaptureOptions(fakeMaim, TimeSpan.FromMilliseconds(300)),
+            GetTestEnvironmentValue);
+        int? childPid = null;
+
+        try
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            using CapturedFrame frame = await capture.CaptureAsync(
+                snapshot.Identity.Xid,
+                new GameWindowExpectation("xterm"),
+                CancellationToken.None);
+            stopwatch.Stop();
+
+            Assert.True(File.Exists(pidFile));
+            childPid = int.Parse(await File.ReadAllTextAsync(pidFile, TestContext.Current.CancellationToken), CultureInfo.InvariantCulture);
+            Assert.Equal(CaptureStatus.TimedOut, frame.Status);
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), $"Capture returned after {stopwatch.Elapsed}.");
+        }
+        finally
+        {
+            if (childPid is int processId)
+            {
+                TryKillProcess(processId);
+            }
+
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -226,5 +300,57 @@ public sealed class MaimWindowCaptureTests
         string directory = Path.Combine(Path.GetTempPath(), $"d3b-gui-capture-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         return directory;
+    }
+
+    private static GameWindowSnapshot CreateTestSnapshot()
+    {
+        return new GameWindowSnapshot(
+            new GameWindowIdentity(42, 1234, "/usr/bin/xterm", "Synthetic capture window", GameWindowIdentityStatus.Verified),
+            Exists: true,
+            IsMapped: true,
+            IsViewable: true,
+            IsMinimized: false,
+            IsFocused: true,
+            IsActive: true,
+            IsXTestAvailable: true,
+            IsSessionX11: true,
+            HasValidDisplay: true,
+            GeometryReliable: true,
+            DesktopOrigin: new DesktopPixels(20, 30),
+            WindowWidth: 640,
+            WindowHeight: 480,
+            BorderWidth: 0,
+            ClientWidth: 640,
+            ClientHeight: 480,
+            Failure: null,
+            CapturedAt: DateTimeOffset.UtcNow);
+    }
+
+    private static string? GetTestEnvironmentValue(string name)
+    {
+        return name switch
+        {
+            "DISPLAY" => ":100",
+            "HOME" => Environment.GetEnvironmentVariable("HOME"),
+            _ => null
+        };
+    }
+
+    private static void TryKillProcess(int processId)
+    {
+        try
+        {
+            using Process process = Process.GetProcessById(processId);
+            process.Kill(entireProcessTree: true);
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+        }
     }
 }

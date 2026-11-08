@@ -4,6 +4,7 @@ using D3B.Gui.Windowing;
 namespace D3B.Gui.Input;
 
 /// <summary>Emits global XTest clicks through <c>xdotool</c> after rechecking the active window.</summary>
+/// <remarks>Focus is checked immediately before the click, but X11 cannot make the focus observation and global click atomic, so a residual race remains.</remarks>
 public sealed class XdotoolGuiInput : IGuiInput
 {
     private const int ClientAreaMarginPixels = 2;
@@ -72,35 +73,11 @@ public sealed class XdotoolGuiInput : IGuiInput
             return new GuiInputResult(GuiInputStatus.Failed, SanitizeDetail(exception.Message));
         }
 
-        if (!IdentityMatches(expectedWindow.Identity, current.Identity)
-            || !current.Exists
-            || !current.IsMapped
-            || !current.IsViewable
-            || current.IsMinimized
-            || !current.GeometryReliable
-            || current.DesktopOrigin != expectedWindow.DesktopOrigin
-            || current.ClientWidth != expectedWindow.ClientWidth
-            || current.ClientHeight != expectedWindow.ClientHeight
-            || current.BorderWidth != expectedWindow.BorderWidth
-            || current.WindowWidth != expectedWindow.WindowWidth
-            || current.WindowHeight != expectedWindow.WindowHeight)
-        {
-            return new GuiInputResult(GuiInputStatus.WindowChanged, "The expected window identity, mapped state, or geometry changed.");
-        }
+        GuiInputResult? validationFailure = ValidateWindow(point, expectedWindow, current);
 
-        if (!current.IsFocused || !current.IsActive)
+        if (validationFailure is not null)
         {
-            return new GuiInputResult(GuiInputStatus.WindowNotActive, "The expected window is not both focused and active.");
-        }
-
-        if (!current.IsSessionX11 || !current.HasValidDisplay || !current.IsXTestAvailable)
-        {
-            return new GuiInputResult(GuiInputStatus.Failed, "The active X11 display or XTest extension is unavailable.");
-        }
-
-        if (!IsInsideSafeClientArea(point, current))
-        {
-            return new GuiInputResult(GuiInputStatus.OutsideWindow, "The desktop point is outside the safe client area.");
+            return validationFailure;
         }
 
         if (cancellationToken.IsCancellationRequested)
@@ -137,6 +114,33 @@ public sealed class XdotoolGuiInput : IGuiInput
             return new GuiInputResult(GuiInputStatus.Canceled);
         }
 
+        GameWindowSnapshot afterMove;
+
+        try
+        {
+            afterMove = await _locator.LocateAsync(expectedWindow.Identity.Xid, expectation, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return new GuiInputResult(GuiInputStatus.Canceled);
+        }
+        catch (Exception)
+        {
+            return new GuiInputResult(GuiInputStatus.WindowChanged, "The expected window could not be revalidated after pointer movement; no click was sent.");
+        }
+
+        validationFailure = ValidateWindow(point, expectedWindow, afterMove);
+
+        if (validationFailure is not null)
+        {
+            return validationFailure;
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return new GuiInputResult(GuiInputStatus.Canceled);
+        }
+
         CommandResult clickResult;
 
         try
@@ -155,6 +159,45 @@ public sealed class XdotoolGuiInput : IGuiInput
 
         GuiInputResult? clickFailure = GetCommandFailure(clickResult);
         return clickFailure ?? new GuiInputResult(GuiInputStatus.Sent);
+    }
+
+    private static GuiInputResult? ValidateWindow(
+        DesktopPixels point,
+        GameWindowSnapshot expectedWindow,
+        GameWindowSnapshot current)
+    {
+        if (!IdentityMatches(expectedWindow.Identity, current.Identity)
+            || !current.Exists
+            || !current.IsMapped
+            || !current.IsViewable
+            || current.IsMinimized
+            || !current.GeometryReliable
+            || current.DesktopOrigin != expectedWindow.DesktopOrigin
+            || current.ClientWidth != expectedWindow.ClientWidth
+            || current.ClientHeight != expectedWindow.ClientHeight
+            || current.BorderWidth != expectedWindow.BorderWidth
+            || current.WindowWidth != expectedWindow.WindowWidth
+            || current.WindowHeight != expectedWindow.WindowHeight)
+        {
+            return new GuiInputResult(GuiInputStatus.WindowChanged, "The expected window identity, mapped state, or geometry changed.");
+        }
+
+        if (!current.IsFocused || !current.IsActive)
+        {
+            return new GuiInputResult(GuiInputStatus.WindowNotActive, "The expected window is not both focused and active.");
+        }
+
+        if (!current.IsSessionX11 || !current.HasValidDisplay || !current.IsXTestAvailable)
+        {
+            return new GuiInputResult(GuiInputStatus.Failed, "The active X11 display or XTest extension is unavailable.");
+        }
+
+        if (!IsInsideSafeClientArea(point, current))
+        {
+            return new GuiInputResult(GuiInputStatus.OutsideWindow, "The desktop point is outside the safe client area.");
+        }
+
+        return null;
     }
 
     private static bool IdentityMatches(GameWindowIdentity expected, GameWindowIdentity actual)

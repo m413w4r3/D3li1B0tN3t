@@ -71,20 +71,50 @@ internal static class ProcessCommandRunner
         using (CancellationTokenSource timeoutSource = new(timeout))
         using (CancellationTokenSource linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token))
         {
-            Task<byte[]> standardOutputTask = ReadBoundedAsync(process.StandardOutput.BaseStream, cancellationToken);
-            Task<byte[]> standardErrorTask = ReadBoundedAsync(process.StandardError.BaseStream, cancellationToken);
+            Task<byte[]> standardOutputTask = ReadBoundedAsync(process.StandardOutput.BaseStream, linkedSource.Token);
+            Task<byte[]> standardErrorTask = ReadBoundedAsync(process.StandardError.BaseStream, linkedSource.Token);
+            Task exitTask = process.WaitForExitAsync(linkedSource.Token);
+            Task completionTask = Task.WhenAll(exitTask, standardOutputTask, standardErrorTask);
+            ObserveFailure(completionTask);
+            Task cancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, linkedSource.Token);
 
             try
             {
-                await process.WaitForExitAsync(linkedSource.Token).ConfigureAwait(false);
+                Task completedTask = await Task.WhenAny(completionTask, cancellationTask).ConfigureAwait(false);
+
+                if (completedTask != completionTask)
+                {
+                    TerminateAndReleasePipes(process);
+
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    return new CommandResult(null, true, string.Empty, string.Empty, "The process timed out.");
+                }
+
+                await completionTask.ConfigureAwait(false);
+
+                if (linkedSource.IsCancellationRequested)
+                {
+                    TerminateAndReleasePipes(process);
+
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    return new CommandResult(null, true, string.Empty, string.Empty, "The process timed out.");
+                }
+
+                byte[] output = await standardOutputTask.ConfigureAwait(false);
+                byte[] error = await standardErrorTask.ConfigureAwait(false);
+
+                return new CommandResult(
+                    process.ExitCode,
+                    false,
+                    Encoding.UTF8.GetString(output),
+                    Sanitize(Encoding.UTF8.GetString(error), environment),
+                    null);
             }
             catch (OperationCanceledException)
             {
-                TryKill(process);
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-
-                byte[] timeoutOutput = await standardOutputTask.ConfigureAwait(false);
-                byte[] timeoutError = await standardErrorTask.ConfigureAwait(false);
+                TerminateAndReleasePipes(process);
 
                 if (cancellationToken.IsCancellationRequested)
                 {
@@ -94,20 +124,15 @@ internal static class ProcessCommandRunner
                 return new CommandResult(
                     null,
                     true,
-                    Encoding.UTF8.GetString(timeoutOutput),
-                    Sanitize(Encoding.UTF8.GetString(timeoutError), environment),
+                    string.Empty,
+                    string.Empty,
                     "The process timed out.");
             }
-
-            byte[] output = await standardOutputTask.ConfigureAwait(false);
-            byte[] error = await standardErrorTask.ConfigureAwait(false);
-
-            return new CommandResult(
-                process.ExitCode,
-                false,
-                Encoding.UTF8.GetString(output),
-                Sanitize(Encoding.UTF8.GetString(error), environment),
-                null);
+            catch (Exception exception)
+            {
+                TerminateAndReleasePipes(process);
+                return new CommandResult(null, false, string.Empty, string.Empty, Sanitize(exception.Message, environment));
+            }
         }
     }
 
@@ -169,6 +194,7 @@ internal static class ProcessCommandRunner
 
     private static void TryKill(Process process)
     {
+        // A descendant that has already been reparented may survive tree termination; closing our pipes still bounds this call.
         try
         {
             if (!process.HasExited)
@@ -182,5 +208,35 @@ internal static class ProcessCommandRunner
         catch (System.ComponentModel.Win32Exception)
         {
         }
+    }
+
+    private static void TerminateAndReleasePipes(Process process)
+    {
+        TryKill(process);
+        DisposePipe(process.StandardOutput);
+        DisposePipe(process.StandardError);
+    }
+
+    private static void DisposePipe(StreamReader reader)
+    {
+        try
+        {
+            reader.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private static void ObserveFailure(Task task)
+    {
+        _ = task.ContinueWith(
+            static completedTask => _ = completedTask.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 }

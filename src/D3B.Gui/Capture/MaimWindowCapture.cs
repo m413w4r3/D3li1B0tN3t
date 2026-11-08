@@ -79,14 +79,14 @@ public sealed class MaimWindowCapture : IWindowCapture
         BinaryProcessResult processResult = await RunMaimAsync(xid, cancellationToken).ConfigureAwait(false);
         GameWindowSnapshot after = await LocateAfterAsync(xid, expectation, before, cancellationToken).ConfigureAwait(false);
 
-        if (processResult.Status is not null)
-        {
-            return CreateFailureFrame(startedAt, before, after, processResult.Status.Value, processResult.Failure);
-        }
-
         if (!SnapshotsMatch(before, after))
         {
             return CreateFailureFrame(startedAt, before, after, CaptureStatus.WindowChanged, "The window identity, geometry, or mapped state changed during capture.");
+        }
+
+        if (processResult.Status is not null)
+        {
+            return CreateFailureFrame(startedAt, before, after, processResult.Status.Value, processResult.Failure);
         }
 
         if (processResult.StandardOutput is not { Length: > 0 } png)
@@ -237,31 +237,36 @@ public sealed class MaimWindowCapture : IWindowCapture
             Task<BinaryReadResult> outputTask = ReadBinaryOutputAsync(
                 process.StandardOutput.BaseStream,
                 _options.MaxCaptureBytes,
-                process);
-            Task<string> errorTask = ReadStandardErrorAsync(process.StandardError.BaseStream, childEnvironment);
+                process,
+                linkedSource.Token);
+            Task<string> errorTask = ReadStandardErrorAsync(process.StandardError.BaseStream, childEnvironment, linkedSource.Token);
             Task exitTask = process.WaitForExitAsync(linkedSource.Token);
+            Task completionTask = Task.WhenAll(outputTask, errorTask, exitTask);
+            ObserveFailure(completionTask);
+            Task cancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, linkedSource.Token);
 
             try
             {
-                Task firstTask = await Task.WhenAny(outputTask, exitTask).ConfigureAwait(false);
+                Task completedTask = await Task.WhenAny(completionTask, cancellationTask).ConfigureAwait(false);
 
-                if (firstTask == outputTask)
+                if (completedTask != completionTask)
                 {
-                    BinaryReadResult firstOutput = await outputTask.ConfigureAwait(false);
+                    TerminateAndReleasePipes(process);
 
-                    if (firstOutput.TooLarge)
-                    {
-                        TryKill(process);
-                        await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await exitTask.ConfigureAwait(false);
-                    }
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    return new BinaryProcessResult(CaptureStatus.TimedOut, null, "The maim process exceeded its time limit.");
                 }
-                else
+
+                await completionTask.ConfigureAwait(false);
+
+                if (linkedSource.IsCancellationRequested)
                 {
-                    await exitTask.ConfigureAwait(false);
+                    TerminateAndReleasePipes(process);
+
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    return new BinaryProcessResult(CaptureStatus.TimedOut, null, "The maim process exceeded its time limit.");
                 }
 
                 BinaryReadResult output = await outputTask.ConfigureAwait(false);
@@ -282,9 +287,7 @@ public sealed class MaimWindowCapture : IWindowCapture
             }
             catch (OperationCanceledException)
             {
-                TryKill(process);
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-                await DrainAfterKillAsync(outputTask, errorTask).ConfigureAwait(false);
+                TerminateAndReleasePipes(process);
 
                 if (cancellationToken.IsCancellationRequested)
                 {
@@ -295,9 +298,7 @@ public sealed class MaimWindowCapture : IWindowCapture
             }
             catch (Exception exception)
             {
-                TryKill(process);
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-                await DrainAfterKillAsync(outputTask, errorTask).ConfigureAwait(false);
+                TerminateAndReleasePipes(process);
                 return new BinaryProcessResult(CaptureStatus.Failed, null, SanitizeFailure(exception.Message, childEnvironment));
             }
         }
@@ -421,14 +422,18 @@ public sealed class MaimWindowCapture : IWindowCapture
         return environment;
     }
 
-    private static async Task<BinaryReadResult> ReadBinaryOutputAsync(Stream stream, int maxBytes, Process process)
+    private static async Task<BinaryReadResult> ReadBinaryOutputAsync(
+        Stream stream,
+        int maxBytes,
+        Process process,
+        CancellationToken cancellationToken)
     {
         byte[] buffer = new byte[8192];
         using MemoryStream output = new(Math.Min(maxBytes, 16 * 1024));
 
         while (true)
         {
-            int count = await stream.ReadAsync(buffer).ConfigureAwait(false);
+            int count = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
 
             if (count == 0)
             {
@@ -447,14 +452,17 @@ public sealed class MaimWindowCapture : IWindowCapture
         }
     }
 
-    private static async Task<string> ReadStandardErrorAsync(Stream stream, IReadOnlyDictionary<string, string?> environment)
+    private static async Task<string> ReadStandardErrorAsync(
+        Stream stream,
+        IReadOnlyDictionary<string, string?> environment,
+        CancellationToken cancellationToken)
     {
         byte[] buffer = new byte[4096];
         using MemoryStream output = new();
 
         while (true)
         {
-            int count = await stream.ReadAsync(buffer).ConfigureAwait(false);
+            int count = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
 
             if (count == 0)
             {
@@ -471,31 +479,6 @@ public sealed class MaimWindowCapture : IWindowCapture
 
         string text = Encoding.UTF8.GetString(output.ToArray());
         return ProcessCommandRunner.Sanitize(text, environment);
-    }
-
-    private static async Task DrainAfterKillAsync(Task<BinaryReadResult> outputTask, Task<string> errorTask)
-    {
-        try
-        {
-            await outputTask.ConfigureAwait(false);
-        }
-        catch (IOException)
-        {
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-
-        try
-        {
-            await errorTask.ConfigureAwait(false);
-        }
-        catch (IOException)
-        {
-        }
-        catch (ObjectDisposedException)
-        {
-        }
     }
 
     private static CapturedFrame CreateFailureFrame(
@@ -569,6 +552,7 @@ public sealed class MaimWindowCapture : IWindowCapture
 
     private static void TryKill(Process process)
     {
+        // A descendant that has already been reparented may survive tree termination; closing our pipes still bounds this call.
         try
         {
             if (!process.HasExited)
@@ -582,6 +566,36 @@ public sealed class MaimWindowCapture : IWindowCapture
         catch (System.ComponentModel.Win32Exception)
         {
         }
+    }
+
+    private static void TerminateAndReleasePipes(Process process)
+    {
+        TryKill(process);
+        DisposePipe(process.StandardOutput);
+        DisposePipe(process.StandardError);
+    }
+
+    private static void DisposePipe(StreamReader reader)
+    {
+        try
+        {
+            reader.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private static void ObserveFailure(Task task)
+    {
+        _ = task.ContinueWith(
+            static completedTask => _ = completedTask.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private sealed record BinaryProcessResult(CaptureStatus? Status, byte[]? StandardOutput, string? Failure);
