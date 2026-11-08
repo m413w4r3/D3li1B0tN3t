@@ -31,6 +31,16 @@
     <Compile Include="../../scripts/unity/ClientInstall.cs" Link="Scripts/Unity/ClientInstall.cs" />
     <Compile Include="../../scripts/unity/ClientPlatform.cs" Link="Scripts/Unity/ClientPlatform.cs" />
     <Compile Include="../../scripts/schema/CallRegisters.cs" Link="Scripts/Schema/CallRegisters.cs" />
+    <Compile Include="../../scripts/preflight/PreflightOperations.cs" Link="Scripts/Preflight/PreflightOperations.cs" />
+    <Compile Include="../../scripts/preflight/PreflightManifest.cs" Link="Scripts/Preflight/PreflightManifest.cs" />
+    <Compile Include="../../scripts/preflight/PreflightManifestEntry.cs" Link="Scripts/Preflight/PreflightManifestEntry.cs" />
+    <Compile Include="../../scripts/preflight/PreflightManifestJsonContext.cs" Link="Scripts/Preflight/PreflightManifestJsonContext.cs" />
+    <Compile Include="../../scripts/preflight/PreflightBlockedException.cs" Link="Scripts/Preflight/PreflightBlockedException.cs" />
+    <Compile Include="../../scripts/preflight/PreflightManifestCodec.cs" Link="Scripts/Preflight/PreflightManifestCodec.cs" />
+    <Compile Include="../../scripts/preflight/PreflightPath.cs" Link="Scripts/Preflight/PreflightPath.cs" />
+    <Compile Include="../../scripts/preflight/PreflightSnapshot.cs" Link="Scripts/Preflight/PreflightSnapshot.cs" />
+    <Compile Include="../../scripts/preflight/PreflightUnix.cs" Link="Scripts/Preflight/PreflightUnix.cs" />
+    <Compile Include="../../scripts/preflight/PreflightManifestStore.cs" Link="Scripts/Preflight/PreflightManifestStore.cs" />
   </ItemGroup>
 
 </Project>

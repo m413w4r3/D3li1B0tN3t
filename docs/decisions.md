@@ -7370,3 +7370,14 @@ Settled questions leave this table, and the decision that settles one says so.
   authorize movement, harvesting, or any other real GUI action; action requires a separate GO. No Dofus capture or
   action was performed. Synthetic calibration does not prove Unity accuracy, XTest with Dofus is unproven, and
   relevant resource detection is unproven. Production host wiring and network admission remain P2O work.
+
+## D332: P2N-V preflight manifests are canonical and offline
+
+*2026-11-08*
+
+- **Decision**: implement preflight as a Linux C# file-based tool. Its versioned canonical JSON stores base64 relative
+  path bytes, entry kind, size, Unix mode, SHA-256 for regular files, and raw symbolic-link target bytes. Verification
+  requires exact path, byte, mode, kind, and link-target equality. Backups are private and are verified before and
+  after restore.
+- **Why**: the manifest must preserve names and configuration bytes without logging them, and every compare or restore
+  result must be reproducible from local files without launching the client or contacting a service.

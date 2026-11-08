@@ -31,10 +31,34 @@ The expected version is `10.0.403`. The repository uses Microsoft.Testing.Platfo
 - **Unit tests** exercise individual types and modules with in-memory data, fakes, and temporary files. They check local behavior and contracts without launching a game or requiring installed client data.
 - **Characterization tests** pin important current behavior at boundaries. P0.6 added four tests for relay split writes, upstream refusal, varint wire order, and redirect restoration after a later hosted-service start fails. They protect observed behavior during subsequent changes.
 - **Linked-script tests** compile script source into `D3B.Scripts.Tests` to check shared script logic without launching each file-based app. P0.3 added this project; P1.1/P1.3 adds capture health, message extraction, schema/mapping diagnosis, and JSON contract coverage. Script smoke commands separately check that the file-based entry points start and display help.
+- **Preflight tests** use only synthetic temporary trees. They cover canonical manifests, unusual names, modes, symbolic links, tampering, comparison, private backups, restoration, repository output rejection, and FIFO refusal. They never open an installed Ankama directory.
 - **Offline integration tests** combine real repository components using local fixtures or fakes, such as protocol translation, capture replay, pack readers, storage, and host composition. The full automated suite is intended to run without starting the game. These checks prove integration against the supplied fixture/test data, not compatibility with every installed client build.
 - **Manual/supervised client checks** use an installed official client and write generated artifacts to `/tmp`. Extraction and schema generation completed in Phase 0. These checks are not CI tests, and CI must never launch a game.
 
 The Avalonia tests use Avalonia Headless. They do not require a display server.
+
+## Offline filesystem preflight
+
+`scripts/preflight.cs` is an offline file-based tool. Its manifests use canonical JSON with base64 relative path bytes,
+SHA-256 for regular files, Unix modes, and raw symbolic-link target bytes. It never prints file contents or absolute
+private paths. Snapshot and compare outputs are atomically replaced in a private directory (`0700`) with a private
+manifest file (`0600`). Existing output parents must already be private. Backup output contains a `tree/` directory and
+`manifest.json`; restore checks the backup before changing the destination and verifies the restored tree afterward.
+The known historical private manifest contains a `MISSING` line followed by concatenated paths and no verifiable
+SHA-256 lines. This is consistent with a newline-joined file list being passed as one argument, but the original
+command is unrecoverable and is not reconstructed here.
+
+```sh
+/home/nill/.dotnet/dotnet run --file scripts/preflight.cs -- snapshot --root <dir> --output <private-dir>/before.json
+/home/nill/.dotnet/dotnet run --file scripts/preflight.cs -- verify --root <dir> --manifest <private-dir>/before.json
+/home/nill/.dotnet/dotnet run --file scripts/preflight.cs -- compare --root <dir> --before <private-dir>/before.json --after-output <private-dir>/after.json
+/home/nill/.dotnet/dotnet run --file scripts/preflight.cs -- backup --root <dir> --output <private-backup-dir>
+/home/nill/.dotnet/dotnet run --file scripts/preflight.cs -- restore --backup <private-backup-dir> --manifest <private-backup-dir>/manifest.json --root <dir>
+```
+
+Exit codes are `0` for exact success, `1` for `BLOCKED` or verification failure, and `2` for usage or I/O errors.
+Use synthetic fixtures for automated checks; any real-client use remains MANUAL/SUPERVISED and requires its own
+authorization and procedure.
 
 ## Automated commands and recorded oracles
 

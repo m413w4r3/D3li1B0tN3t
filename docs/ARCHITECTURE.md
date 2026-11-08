@@ -18,7 +18,7 @@ This page describes the Linux fork's changes and boundaries. The upstream design
 | `src/D3B.Storage/` | SQLite persistence through EF Core for accounts, profiles, runs, and related records. |
 | `src/D3B.Host/` | Command-line host entry point. |
 | `src/D3B.App/` | Avalonia desktop application; it is a separate executable project and hosts the bot runtime in its process. |
-| `scripts/` | File-based inspection, extraction, schema, mapping, capture, client redirect, and release tools. Shared Unity-client readers live in `scripts/unity/`. |
+| `scripts/` | File-based inspection, extraction, schema, mapping, capture, client redirect, release, and offline preflight tools. Shared Unity-client readers live in `scripts/unity/`. |
 | `tests/` | Automated tests for the compiled `src/` projects, plus the narrow linked-source exception described below. |
 | `tests/D3B.Gui.Tests/` | Synthetic GUI contracts and Linux Xvfb tests against fake windows. |
 
@@ -107,10 +107,11 @@ that acceptance remains MANUAL/SUPERVISED. The default relay configuration inclu
 on Linux.
 
 `tests/D3B.Scripts.Tests/` is a scoped exception to D10's scripts-have-no-tests rule: it links the Windows/Linux
-`scripts/unity/ClientInstall.cs` and `ClientPlatform.cs` seam, `scripts/schema/CallRegisters.cs`, and the capture
-diagnostic DTOs and reader in `scripts/capture/`. These tests exercise linked script sources without adding a second
-capture CLI or protocol dependency to `D3B.Network`. The file-based tools remain outside the compiled application
-projects; this exception does not establish a general scripts test project.
+`scripts/unity/ClientInstall.cs` and `ClientPlatform.cs` seam, `scripts/schema/CallRegisters.cs`, the capture
+diagnostic DTOs and reader in `scripts/capture/`, and the offline manifest logic in `scripts/preflight/`. These tests
+exercise linked script sources without adding another CLI or protocol dependency to `D3B.Network`. The file-based
+tools remain outside the compiled application projects; this exception does not establish a general scripts test
+project.
 
 ## Deliberate non-goals and incomplete work
 

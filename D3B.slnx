@@ -13,6 +13,7 @@
     <File Path="scripts/gui-preview.cs" />
     <File Path="scripts/inspect.cs" />
     <File Path="scripts/mapping.cs" />
+    <File Path="scripts/preflight.cs" />
     <File Path="scripts/release.cs" />
     <File Path="scripts/schema.cs" />
   </Folder>
@@ -48,6 +49,19 @@
   </Folder>
   <Folder Name="/scripts/client/">
     <File Path="scripts/client/ClientCommand.cs" />
+  </Folder>
+  <Folder Name="/scripts/preflight/">
+    <File Path="scripts/preflight/PreflightBlockedException.cs" />
+    <File Path="scripts/preflight/PreflightCommand.cs" />
+    <File Path="scripts/preflight/PreflightManifest.cs" />
+    <File Path="scripts/preflight/PreflightManifestCodec.cs" />
+    <File Path="scripts/preflight/PreflightManifestEntry.cs" />
+    <File Path="scripts/preflight/PreflightManifestJsonContext.cs" />
+    <File Path="scripts/preflight/PreflightManifestStore.cs" />
+    <File Path="scripts/preflight/PreflightOperations.cs" />
+    <File Path="scripts/preflight/PreflightPath.cs" />
+    <File Path="scripts/preflight/PreflightSnapshot.cs" />
+    <File Path="scripts/preflight/PreflightUnix.cs" />
   </Folder>
   <Folder Name="/scripts/embed/">
     <File Path="scripts/embed/EmbedCommand.cs" />
