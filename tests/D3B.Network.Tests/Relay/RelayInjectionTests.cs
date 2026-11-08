@@ -111,6 +111,115 @@ public sealed class RelayInjectionTests
     }
 
     [Fact]
+    public async Task GuiAdmissionPreservesClientAndServerBytesAndRejectsRawInjection()
+    {
+        var interceptor = new RecordingInterceptor();
+        var first = TestFrames.Framed(Payload(24, 20));
+        var injected = Payload(18, 21);
+        var second = TestFrames.Framed(Payload(31, 22));
+        var reply = Payload(27, 23);
+
+        await using var relay = await TestRelay.StartAsync(interceptor: interceptor);
+        var (client, server) = await relay.ConnectAsync();
+
+        using (client)
+        using (server)
+        {
+            var connection = await ConnectionAsync(interceptor);
+
+            await client.SendAsync(first, TestContext.Current.CancellationToken);
+            Assert.Equal(first, await TestRelay.ReadExactlyAsync(server, first.Length));
+
+            ((IRelayAdmissionModeController)connection).SetAdmissionMode(1, requiresTypedAdmission: true);
+
+            await Assert.ThrowsAsync<RelayInjectionException>(() => connection.SendToServerAsync(
+                Payload(12, 24),
+                TestContext.Current.CancellationToken));
+
+            await connection.SendToServerAsync(injected, () => true, TestContext.Current.CancellationToken);
+            Assert.Equal(TestFrames.Framed(injected), await TestRelay.ReadExactlyAsync(server, TestFrames.Framed(injected).Length));
+
+            await client.SendAsync(second, TestContext.Current.CancellationToken);
+            var forwardedSecond = await TestRelay.ReadExactlyAsync(server, second.Length);
+            Assert.Equal(second, forwardedSecond);
+
+            await server.SendAsync(reply, TestContext.Current.CancellationToken);
+            Assert.Equal(reply, await TestRelay.ReadExactlyAsync(client, reply.Length));
+        }
+    }
+
+    [Fact]
+    public async Task AQueuedTypedFrameIsRejectedWhenAdmissionChangesBeforeTheClientFrameEnds()
+    {
+        var interceptor = new RecordingInterceptor();
+        var clientFrame = TestFrames.Framed(Payload(250, 25));
+        var secondFrame = TestFrames.Framed(Payload(22, 26));
+        var injected = Payload(19, 27);
+        var admitted = true;
+
+        await using var relay = await TestRelay.StartAsync(interceptor: interceptor);
+        var (client, server) = await relay.ConnectAsync();
+
+        using (client)
+        using (server)
+        {
+            var connection = await ConnectionAsync(interceptor);
+
+            ((IRelayAdmissionModeController)connection).SetAdmissionMode(1, requiresTypedAdmission: true);
+            await client.SendAsync(clientFrame.AsMemory(0, 80), TestContext.Current.CancellationToken);
+            Assert.Equal(clientFrame[..80], await TestRelay.ReadExactlyAsync(server, 80));
+
+            var sending = connection.SendToServerAsync(injected, () => admitted, TestContext.Current.CancellationToken);
+
+            Assert.False(sending.IsCompleted);
+            admitted = false;
+            await client.SendAsync(clientFrame.AsMemory(80), TestContext.Current.CancellationToken);
+            await Assert.ThrowsAsync<RelayInjectionException>(() => sending);
+
+            await client.SendAsync(secondFrame, TestContext.Current.CancellationToken);
+            var forwardedFrames = await TestRelay.ReadExactlyAsync(server, clientFrame.Length - 80 + secondFrame.Length);
+            byte[] expected = [.. clientFrame[80..], .. secondFrame];
+            Assert.Equal(expected, forwardedFrames);
+        }
+    }
+
+    [Fact]
+    public async Task AThrowingAdmissionPredicateFailsClosedWithoutStoppingClientForwarding()
+    {
+        var interceptor = new RecordingInterceptor();
+        var clientFrame = TestFrames.Framed(Payload(240, 28));
+        var laterFrame = TestFrames.Framed(Payload(17, 29));
+        var injected = Payload(21, 30);
+
+        await using var relay = await TestRelay.StartAsync(interceptor: interceptor);
+        var (client, server) = await relay.ConnectAsync();
+
+        using (client)
+        using (server)
+        {
+            var connection = await ConnectionAsync(interceptor);
+
+            ((IRelayAdmissionModeController)connection).SetAdmissionMode(1, requiresTypedAdmission: true);
+            await client.SendAsync(clientFrame.AsMemory(0, 75), TestContext.Current.CancellationToken);
+            Assert.Equal(clientFrame[..75], await TestRelay.ReadExactlyAsync(server, 75));
+
+            var sending = connection.SendToServerAsync(
+                injected,
+                () => throw new InvalidOperationException("Admission classifier failed."),
+                TestContext.Current.CancellationToken);
+
+            Assert.False(sending.IsCompleted);
+            await client.SendAsync(clientFrame.AsMemory(75), TestContext.Current.CancellationToken);
+            await Assert.ThrowsAsync<RelayInjectionException>(() => sending);
+
+            await client.SendAsync(laterFrame, TestContext.Current.CancellationToken);
+            var forwardedFrames = await TestRelay.ReadExactlyAsync(server, clientFrame.Length - 75 + laterFrame.Length);
+            byte[] expected = [.. clientFrame[75..], .. laterFrame];
+            Assert.Equal(expected, forwardedFrames);
+        }
+    }
+
+    [Fact]
     public async Task AFrameWithdrawnBeforeItWentNeverGoes()
     {
         var interceptor = new RecordingInterceptor();

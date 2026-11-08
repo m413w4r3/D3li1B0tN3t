@@ -46,8 +46,8 @@ internal sealed class InjectedFrames
         _log = log;
     }
 
-    /// <summary>Sends a frame, as <see cref="IRelayConnection.SendToServerAsync"/> describes.</summary>
-    public async Task SendAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken, Func<bool>? stillValid = null)
+    /// <summary>Sends a frame, as <see cref="IRelayConnection.SendToServerAsync(ReadOnlyMemory{byte}, CancellationToken)"/> describes.</summary>
+    public async Task SendAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken, Func<bool>? stillValid = null, Func<bool>? stillAdmitted = null)
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(frame.Length, FrameReader.DefaultMaxLength, nameof(frame));
 
@@ -55,7 +55,7 @@ internal sealed class InjectedFrames
 
         FrameWriter.Write(writer, frame.Span);
 
-        var injected = new Frame(writer.WrittenSpan.ToArray(), stillValid);
+        var injected = new Frame(writer.WrittenSpan.ToArray(), stillValid, stillAdmitted);
 
         // Register before taking the gate: once the gate is released, the client's read loop can drain and claim the
         // frame, and a cancellation registered afterwards would no longer be able to withdraw it.
@@ -141,9 +141,16 @@ internal sealed class InjectedFrames
 
         while (_waiting.TryDequeue(out var frame))
         {
-            if (frame.StillValid is { } stillValid && !stillValid())
+            if (!frame.IsStillValid())
             {
                 frame.Fail("the connection's frames are no longer observable");
+
+                continue;
+            }
+
+            if (!frame.IsStillAdmitted())
+            {
+                frame.Fail("the request is no longer admitted");
 
                 continue;
             }
@@ -229,16 +236,43 @@ internal sealed class InjectedFrames
 
         private readonly TaskCompletionSource _gone = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Func<bool>? StillValid { get; }
+        private Func<bool>? StillAdmitted { get; }
         private int _state;
 
         public byte[] Bytes { get; }
 
         public Task Gone => _gone.Task;
 
-        public Frame(byte[] bytes, Func<bool>? stillValid)
+        public Frame(byte[] bytes, Func<bool>? stillValid, Func<bool>? stillAdmitted)
         {
             Bytes = bytes;
             StillValid = stillValid;
+            StillAdmitted = stillAdmitted;
+        }
+
+        public bool IsStillValid()
+        {
+            return Check(StillValid);
+        }
+
+        public bool IsStillAdmitted()
+        {
+            return Check(StillAdmitted);
+        }
+
+        private static bool Check(Func<bool>? predicate)
+        {
+            if (predicate is null)
+                return true;
+
+            try
+            {
+                return predicate();
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         /// <summary>Takes the frame to write it, unless its sender stopped waiting first.</summary>

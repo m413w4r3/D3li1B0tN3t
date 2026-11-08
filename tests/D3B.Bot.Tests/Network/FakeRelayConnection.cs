@@ -4,12 +4,13 @@ using D3B.Network.Relay;
 namespace D3B.Bot.Tests.Network;
 
 /// <summary>A connection as the relay shows it, keeping the frames sent to its server, or failing them once closed.</summary>
-internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
+internal sealed class FakeRelayConnection : IRelayConnection, IRelayAdmissionModeController, IDisposable
 {
     private readonly CancellationTokenSource _closed = new();
     private readonly CancellationTokenSource _observationFailed = new();
     private readonly object _sendGate = new();
     private readonly ConcurrentQueue<byte[]> _sent = new();
+    private AdmissionSnapshot _admission = new(0, false);
     private int _isObservationFailed;
 
     public Func<CancellationToken, Task> ObservationWait { get; set; } = _ => Task.CompletedTask;
@@ -35,8 +36,26 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
         Route = route;
     }
 
-    public async Task SendToServerAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken = default)
+    void IRelayAdmissionModeController.SetAdmissionMode(long version, bool requiresTypedAdmission)
     {
+        Volatile.Write(ref _admission, new AdmissionSnapshot(version, requiresTypedAdmission));
+    }
+
+    public Task SendToServerAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken = default)
+    {
+        return SendCoreAsync(frame, stillAdmitted: null, cancellationToken);
+    }
+
+    public Task SendToServerAsync(ReadOnlyMemory<byte> frame, Func<bool> stillAdmitted, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stillAdmitted);
+
+        return SendCoreAsync(frame, stillAdmitted, cancellationToken);
+    }
+
+    private async Task SendCoreAsync(ReadOnlyMemory<byte> frame, Func<bool>? stillAdmitted, CancellationToken cancellationToken)
+    {
+        var admission = Volatile.Read(ref _admission);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (SendWait is { } wait)
@@ -53,6 +72,11 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
 
             if (IsObservationFailed)
                 throw new RelayInjectionException("The frame did not go: the connection's frames are no longer observable.");
+
+            var current = Volatile.Read(ref _admission);
+
+            if (current.Version != admission.Version || (admission.RequiresTypedAdmission && stillAdmitted is null) || !Check(stillAdmitted))
+                throw new RelayInjectionException("The frame did not go: its game input admission changed before it was written.");
 
             _sent.Enqueue(frame.ToArray());
             sentCount = _sent.Count;
@@ -103,5 +127,33 @@ internal sealed class FakeRelayConnection : IRelayConnection, IDisposable
     {
         _closed.Dispose();
         _observationFailed.Dispose();
+    }
+
+    private static bool Check(Func<bool>? predicate)
+    {
+        if (predicate is null)
+            return true;
+
+        try
+        {
+            return predicate();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private sealed class AdmissionSnapshot
+    {
+        public long Version { get; }
+
+        public bool RequiresTypedAdmission { get; }
+
+        public AdmissionSnapshot(long version, bool requiresTypedAdmission)
+        {
+            Version = version;
+            RequiresTypedAdmission = requiresTypedAdmission;
+        }
     }
 }
