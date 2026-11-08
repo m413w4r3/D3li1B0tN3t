@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using D3B.Gui.Input;
 using D3B.Gui.Tests.Capture;
 using D3B.Gui.Tests.Windowing;
@@ -190,6 +191,38 @@ public sealed class XdotoolGuiInputTests
             Assert.Equal(GuiInputStatus.Failed, result.Status);
             Assert.True(result.ClickMayHaveBeenEmitted);
             Assert.True(File.Exists(clickMarker));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ClickCommandTimeoutAfterLaunchMayHaveEmittedInput()
+    {
+        GameWindowSnapshot snapshot = CreateTestSnapshot();
+        SequenceGameWindowLocator locator = new(snapshot, snapshot);
+        string directory = Path.Combine(Path.GetTempPath(), $"d3b-gui-input-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string clickMarker = Path.Combine(directory, "click");
+        string fakeXdotool = Path.Combine(directory, "fake-xdotool");
+        XvfbTestCommands.WriteExecutable(
+            fakeXdotool,
+            $"#!/bin/sh\nif [ \"$1\" = \"mousemove\" ]; then exit 0; fi\nif [ \"$1\" = \"click\" ]; then printf started > '{clickMarker}'; exec sleep 5; fi\nexit 1\n");
+        XdotoolGuiInput input = new(locator, fakeXdotool);
+
+        try
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            GuiInputResult result = await input.ClickAsync(GetClientCenter(snapshot), snapshot, CancellationToken.None);
+            stopwatch.Stop();
+
+            Assert.Equal(GuiInputStatus.TimedOut, result.Status);
+            Assert.NotEqual(GuiInputStatus.Sent, result.Status);
+            Assert.True(result.ClickMayHaveBeenEmitted);
+            Assert.True(File.Exists(clickMarker));
+            Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(10));
         }
         finally
         {
