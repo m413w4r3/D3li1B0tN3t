@@ -22,16 +22,18 @@ separately measured; see P2N_LINUX_BACKEND.md.
 
 GameWindowIdentity carries Xid, optional ProcessId, optional ExecutablePath, descriptive Title, and Status.
 
-- Xid is always compared.
-- ProcessId and ExecutablePath are compared only when both identities provide that value.
-- Title and Status are ignored by identity equality. A title is never identity evidence.
-- Independently, GuiActionGate requires Status=Verified on the current window snapshot before returning Ready.
-- An explicit XID with unavailable process identity can be inspected and captured for Preview; it cannot pass the action
-  gate.
+- `TemplateTargetLocator` uses a permissive preview comparison: Xid must match; ProcessId and ExecutablePath are
+  compared only when both identities provide the corresponding value. It ignores Title and Status. This rule is for
+  preview target matching only.
+- Action readiness is strict. Both identities being compared must have Status=Verified, and Xid, ProcessId, and
+  ExecutablePath must all match exactly. An identity marked unverified, including one with unavailable process data,
+  blocks readiness; an unverified calibration profile also blocks it. Title is never evidence and is not part of the
+  comparison.
+- An explicit XID with unavailable process identity can still be inspected and captured for Preview; it cannot pass the
+  action gate.
 
-The equality rule above is used by the action gate and target matcher. It does not make a title trustworthy or allow an
-unverified current window to authorize input. Calibration profile revalidation uses a stricter exact process-identity
-check, described below.
+The permissive preview matcher rule is not used by `GuiActionGate`. Calibration profile revalidation also requires
+verified, exact Xid, ProcessId, and ExecutablePath equality; a missing process value invalidates the profile.
 
 ## CapturedFrame and CaptureStatus
 
@@ -58,8 +60,8 @@ check only; it is not scene, map, UI, or resource recognition.
 
 For capture stability, `MaimWindowCapture` compares XID, ProcessId, ExecutablePath, Status, and window geometry exactly
 between the before and after snapshots. A metadata availability or status change during capture therefore produces
-WindowChanged. The action gate's identity comparison instead uses the optional-value rule above, then independently
-requires the current window status to be Verified.
+WindowChanged. The action gate independently requires verified identities and exact Xid, ProcessId, and
+ExecutablePath equality as described above.
 
 ## Calibration
 
@@ -80,6 +82,10 @@ Fit and invalidation requirements, the seeded OpenCV RANSAC settings, minimum co
 synthetic metrics are recorded in P2N_CALIBRATION.md. The maximum profile age is 30 seconds; map, build, XID, known
 process identity, resolution, scale, client geometry, calibration version, or contradictory scene evidence can make
 a profile stale or invalid.
+
+The preview JSON report records aggregate errors and inlier ratio plus each fit-anchor residual, each independent
+validation error, rejected fit-anchor indexes in the source document, and the affine coefficients `a`, `b`, `tx`, `c`,
+`d`, and `ty`.
 
 The gate checks that a profile is calibrated, fresh, bound to the current map/window and capture dimensions, and
 consistent with measured client geometry. The standalone `CalibrationValidator.ValidateProfile` compares stored and
@@ -116,7 +122,9 @@ GuiWorldSnapshot is immutable and contains:
 GuiWorldSnapshotAdapter reads the atomically published BotActor view. It includes the movement-translation latch in
 the snapshot's protocol status and checks the latch around the view read so a racing latch closure fails closed.
 Unknown, partial, contradictory, and translation-blocked observations do not count as positive movement evidence.
-The adapter currently exists as a contract; it is not called by a gameplay trigger.
+StateRevision combines the published view revision with the translation-latch state, so either latch transition changes
+the revision and invalidates intentions bound to the previous state. The adapter currently exists as a contract; it is
+not called by a gameplay trigger.
 
 ## GuiOptions and bounds
 
@@ -132,8 +140,10 @@ The adapter currently exists as a contract; it is not called by a gameplay trigg
 | Gui:MaxHeight | 2160 | 1–2160 pixels. |
 | Gui:CalibrationMaxAgeSeconds | 30 | 1–30 seconds. |
 
-The options validator is a pure validation component. The host does not bind or register the GUI feature, so these are
-contract defaults and limits rather than an active host configuration.
+The options validator is a pure validation component. `GuiActionGate` calls `GuiOptionsValidator.ValidateOrThrow` when
+it is constructed, so invalid options fail at composition. P2O must also validate the options when the host starts. The
+host does not bind or register the GUI feature, so these are contract defaults and limits rather than an active host
+configuration.
 
 ## GameInputMode and GuiClientInput
 
@@ -142,9 +152,11 @@ the future rule that client-originated requests may pass while D3B-originated ga
 D3B-originated non-gameplay requests are allowed only when the classifier marks them as such. Unknown origins fail
 closed.
 
-GuiInputModePolicy and IGameInputRequestClassifier implement this as a pure seam. They are not integrated at the final
-network admission point. The latch and existing network protections are not changed by P2N. A future real GUI action
-must not be enabled until that admission boundary is implemented and separately audited.
+GuiInputModePolicy and IGameInputRequestClassifier implement this as a policy seam. A fake-relay integration test
+verifies unchanged client/server forwarding, refusal of D3B gameplay requests, admission of client requests and
+D3B non-gameplay requests, and zero XTest input. Production GameSession admission is still not wired to this policy;
+that integration remains P2O work. The latch and existing network protections are not changed by P2N. A future real GUI
+action must not be enabled until the production admission boundary is implemented and separately audited.
 
 ## GuiActionIntent and GuiActionOutcome
 
@@ -160,12 +172,17 @@ are outside this contract.
 | --- | --- |
 | Pass | One click was reported and the compatible client request plus expected server outcome were confirmed. |
 | Blocked | A safety gate or disabled-input rule rejected the intent before a click. |
-| Failed | Input failed before a click was reported. |
-| Interrupted | Cancellation or interruption occurred. ClickEmitted states whether it happened before interruption. |
-| Unconfirmed | A click may have happened, but matching confirmation was absent, late, or contradictory. |
+| Failed | Input failed before a click command was launched. |
+| Interrupted | Cancellation or interruption occurred. The outcome records whether a click may have been emitted. |
+| Unconfirmed | A click may have happened, but matching confirmation was absent, late, or contradictory, or the launched click command failed uncertainly. |
 
 A click by itself is never Pass. The P2N default confirmation implementation, NeverConfirms, does not confirm anything.
-The executor consumes each submitted intent identifier, allows one active intent per executor, and never retries input.
+`GuiInputResult.ClickMayHaveBeenEmitted` records whether the click command was launched. A failure, cancellation, or
+timeout after launch is converted to Unconfirmed with this flag true; the executor never retries it. Refusals and
+failures before launch report no possible click. The executor consumes each submitted intent identifier and allows one
+active intent per executor. If cancellation arrives after the input backend has reported Sent, while the executor is
+waiting for confirmation, the outcome is Interrupted with the click recorded as emitted; this path is also terminal
+and is not retried.
 
 ## GuiReadiness and GuiSafetyReason
 
@@ -177,7 +194,7 @@ classifier's checks; it does not override Preview mode or authorize a click by i
 | Disabled | Gui:Enabled is false. |
 | NotX11 | Backend is not X11, XDG_SESSION_TYPE is not x11, DISPLAY is invalid, or XTEST is unavailable. |
 | WindowNotFound | The selected window does not exist, has NotFound status, or has a non-positive XID. |
-| WindowIdentityUnverified | The current selected window's Status is not Verified. |
+| WindowIdentityUnverified | The current window or calibration profile identity is not Verified. |
 | WindowNotActive | The window is not mapped/viewable, is minimized, or is not both focused and active. |
 | CaptureFailed | CaptureStatus is not Captured. |
 | SceneUnverified | Image content is unusable, empty, dimensionally invalid, or exceeds configured dimensions. |
@@ -237,6 +254,9 @@ GameSession, and it is not a live confirmation provider for GuiActionExecutor.
 
 - Preview reads local files and writes an annotated PNG and JSON report under a private directory. It does not capture
   a live window or send input.
+- Both the preview output guard and writer walk upward from the destination and reject any path under a directory marked
+  by `D3B.slnx`, regardless of the current working directory. CLI input errors expose only the file name and a stable
+  diagnostic code, not the private path.
 - The executor is not registered by the host or application, and no gameplay trigger or periodic capture exists.
 - Xdotool input is tested only against fake Xvfb windows. No real Dofus click, movement, or harvest is claimed.
 - There is no /dev/uinput access, root requirement, Linux capability, Frida use, Python inference runtime, or Unity

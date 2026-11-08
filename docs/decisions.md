@@ -7300,3 +7300,55 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Limits**: no Dofus screenshot or capture, real click, movement, harvest, or game connection was used. XTest with
   Dofus, Unity calibration accuracy, and resource detection are unproven. Details and the verified/inferred split are
   recorded in [P2N_REPORT.md](P2N_REPORT.md).
+
+## D325: P2N action readiness requires strict verified window identity
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: action readiness requires both compared identities to be `Verified` and requires exact equality of Xid,
+  ProcessId, and ExecutablePath. An identity marked unverified, including one with unavailable process data, and an
+  unverified calibration profile block readiness. Title is never identity evidence. `TemplateTargetLocator` retains the
+  permissive comparison of known process values for preview matching only; that rule does not authorize an action.
+- **Supersedes**: the action-gate identity wording in D321. Calibration identity revalidation remains exact as recorded
+  there.
+
+## D326: P2N reports uncertainty after a click command launches
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: `GuiInputResult.ClickMayHaveBeenEmitted` marks whether a click command launched. Failure, cancellation,
+  timeout, or other uncertain completion after launch produces `UNCONFIRMED`; the executor never retries that intent.
+  Refusals before launch report no possible click. Cancellation during confirmation after input returned `Sent` is
+  `INTERRUPTED` with the click marked emitted; it is also terminal and not retried. A click alone is never success;
+  confirmation remains required.
+
+## D327: P2N state revision includes the translation latch
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: compose `StateRevision` from the published view revision and translation-latch state. A latch transition
+  changes the revision so an intention bound to the prior state cannot remain current.
+
+## D328: P2N preview output rejects D3B repository paths by marker
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: both the preview output guard and writer walk upward from the destination and reject a path beneath an
+  ancestor containing `D3B.slnx`. The check is independent of the current working directory. CLI input errors disclose
+  only the file name and a stable diagnostic code, not the directory path.
+
+## D329: P2N validates GUI options at composition
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: `GuiActionGate` calls `GuiOptionsValidator.ValidateOrThrow` during construction and fails fast on invalid
+  configuration. P2O must also call the validator when the host starts.
+
+## D330: P2N verifies the GUI input policy with a fake relay
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: keep the relay policy test at the fake-relay seam. It verifies unchanged client/server forwarding,
+  refusal of D3B gameplay requests, admission of client requests and D3B non-gameplay requests, and zero XTest input.
+  Production GameSession admission remains P2O work and must be implemented and separately audited before a real GUI
+  action.

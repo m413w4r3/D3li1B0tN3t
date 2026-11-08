@@ -85,8 +85,10 @@ BotActor, a client connection, or mutable character state.
 4. Render the overlay and write preview.png plus report.json under a private output directory.
 5. Report a calibration or target verdict with explicit synthetic provenance when the fixture is synthetic.
 
-The output guard rejects paths inside the repository. The default is a private child of the user's local share directory;
-the writer uses mode 0700 for the directory and 0600 for files. Preview never captures a desktop window or emits input.
+Both the output guard and writer walk upward from the destination and reject paths beneath an ancestor marked by
+`D3B.slnx`, regardless of the current working directory. The default is a private child of the user's local share
+directory; the writer uses mode 0700 for the directory and 0600 for files. Preview never captures a desktop window or
+emits input.
 
 ## Not wired in P2N
 
