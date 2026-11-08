@@ -12,6 +12,7 @@ This page describes the Linux fork's changes and boundaries. The upstream design
 | `src/D3B.Protocol/` | Readable connection and game messages, per-build schemas and mappings, pins, and translation between readable messages and obfuscated frames. |
 | `src/D3B.Core/Modules/` | `IModule` and `BotBuilder`, the composition contract for host features. |
 | `src/D3B.Bot/` | Runtime and one `BotActor` per selected character; network and protocol integration; character state; movement, harvesting, fighting, interactives, inventory, and activities. |
+| `src/D3B.Gui/` | X11 windowing and capture, affine calibration, bounded template localization, input and safety contracts, and offline preview. |
 | `src/D3B.Engine/` | I/O-free map and world pathfinding, fight rules, tactics, and effects. |
 | `src/D3B.Data/` | Client build identity, versioned packs, maps, world graph, and game data readers. |
 | `src/D3B.Storage/` | SQLite persistence through EF Core for accounts, profiles, runs, and related records. |
@@ -19,10 +20,12 @@ This page describes the Linux fork's changes and boundaries. The upstream design
 | `src/D3B.App/` | Avalonia desktop application; it is a separate executable project and hosts the bot runtime in its process. |
 | `scripts/` | File-based inspection, extraction, schema, mapping, capture, client redirect, and release tools. Shared Unity-client readers live in `scripts/unity/`. |
 | `tests/` | Automated tests for the compiled `src/` projects, plus the narrow linked-source exception described below. |
+| `tests/D3B.Gui.Tests/` | Synthetic GUI contracts and Linux Xvfb tests against fake windows. |
 
 The layers still follow the upstream module model: `src/D3B.Bot/DefaultModules.cs` composes features, and modules register
 services through `src/D3B.Core/Modules/IModule.cs` and `src/D3B.Core/Modules/BotBuilder.cs`. The Linux changes do not
-add a platform-specific host or a second runtime stack.
+add a platform-specific host or a second runtime stack. P2N adds no host or second runtime, and `D3B.Gui` is not wired
+to a host or gameplay trigger.
 
 ## Caller-facing contracts
 

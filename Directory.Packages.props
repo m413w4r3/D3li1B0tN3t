@@ -41,6 +41,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageVersion Include="OpenCvSharp5" Version="5.0.0.20261018" />
+    <PackageVersion Include="OpenCvSharp5.official.runtime.linux-x64.slim" Version="5.0.0.20261018" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="Avalonia.Headless" Version="12.1.4" />
     <PackageVersion Include="CsCheck" Version="5.0.0" />

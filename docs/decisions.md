@@ -7206,3 +7206,167 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Decision**: semantic identity requires exact structure, two-way global uniqueness including unobserved tokens, and a valid matching `SemanticProof`; structural pins and BillBot/SNS references cannot prove identity. The corrected offline inventory has 0 `VERIFIED`, 4,995 `CANDIDATE`, 241 `CONFLICT`, and 48 `UNKNOWN` rows. No identity is demonstrated. All 62 observed blockers remain latch-closed; `kbi` is unobserved. The detailed record is [P2M_REPORT.md](P2M_REPORT.md).
 - **Next proposed mission**: use the installed client's IL2CPP/code and retained GO 1 observations to investigate the priority tokens and initialization families, without a new capture or infrastructure. Produce independently reviewed semantic proofs bound to build, schema, and artifact digest, re-resolve offline, then apply the existing P2K2 promotion gates and obtain owner approval before any promotion. No live host/client, movement, or mapping promotion is in scope for that lot.
 - **Boundary and evidence**: local only; no push, live client/host/relay, new capture, latch change, mapping promotion, or movement. Build 0 warnings/0 errors, targeted 137/137, full serialized suite 1,741/1,741 with 0 failed/0 skipped, format exit 0, replay byte-identical to the recorded full inventory hash. A1 and A2 initial REJECT findings were fixed and their deltas APPROVED. Residual risks include unauthenticated artifact bytes behind `artifactSha256`, trusted proof source strings, reflection-based test accessors, and untested Windows behavior.
+
+## D318: P2N-C uses a validated affine preview profile
+
+*2026-11-08, P2N-C calibration slice.*
+
+- **Decision**: map logical cells through `MapGeometry.PointOf` and fit a six-parameter affine transform with OpenCV RANSAC. Require eight distributed fit anchors and three unique, independent validation anchors; use the initial 4 px median fit, 8 px maximum validation, 12 px per-point validation, and 80% inlier thresholds. Keep client-area geometry measured, profile identity stable and window-bound, annotation JSON versioned, and profile age limited to 30 seconds. An explicit XID with unverified process identity can produce a calibrated Preview profile and retains its identity status; future action authorization remains the GUI action gate's responsibility.
+- **Evidence**: the deterministic exact fixture reports 0.000 px median fit error, 0.000 px maximum validation error, and 12/12 fit inliers. The two-outlier fixture rejects both and accepts 10/12 fit anchors. GUI tests passed 36/36; the serialized full suite passed 1,773 tests with 4 conditional skips (1,777 total); build had 0 warnings and 0 errors; format verification exited 0. Details and limits are in [P2N_CALIBRATION.md](P2N_CALIBRATION.md).
+- **Limit and boundary**: synthetic fixtures establish implementation behavior only. No Unity screenshot, live client, capture, vision, action gate, or executor was used or accepted in this slice. The thresholds remain initial design values pending supervised real-client measurements.
+
+## D319: P2N selects the hybrid protocol-observation and GUI-execution architecture
+
+*2026-11-08, P2N final documentation.*
+
+- **Decision**: the target flow is Protocol Read-Only → CharacterState → World Planner → GUI Executor →
+  Protocol/Visual Feedback. The official client remains responsible for requests caused by a future GUI action.
+  D3B.Gui depends on D3B.Engine and D3B.Data; D3B.Bot depends on D3B.Gui for its P2N snapshot and correlation
+  contracts. D3B.Gui must not depend on D3B.Bot, D3B.Host, D3B.App, D3B.Protocol, or D3B.Network.
+- **Current state**: D3B.Gui supplies windowing, capture, calibration, template localization, input seams, safety
+  contracts, and offline preview. D3B.Bot supplies an immutable snapshot adapter and an isolated correlation model.
+  Neither the host nor app registers an executor, capture loop, or gameplay trigger.
+- **Boundary**: existing protocol injection remains a separate path; P2N neither removes it nor enables GUI gameplay.
+  See [P2N_ARCHITECTURE.md](P2N_ARCHITECTURE.md).
+
+## D320: P2N uses the X11, maim, xdotool, and OpenCvSharp stack
+
+*2026-11-08, P2N final documentation.*
+
+- **Decision**: Xorg/X11 is the only P2N desktop backend. Use maim for explicit-XID PNG capture, xdotool with XTest
+  for window discovery/geometry and future global input, and OpenCvSharp5 plus its linux-x64 slim runtime for
+  OpenCV on Linux x64. Use xprop and xwininfo for complementary identity, state, and geometry checks.
+- **Boundaries**: external maim and xdotool binaries are not bundled or linked. P2N uses no /dev/uinput, ydotool,
+  root service, Linux capability, Frida, or Unity process injection. Wayland is not implemented.
+- **Evidence**: 21 X11 tests passed on Xvfb against fake windows; this is not Dofus input evidence. Exact source
+  commits and package notices are in [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) and backend details are in
+  [P2N_LINUX_BACKEND.md](P2N_LINUX_BACKEND.md).
+
+## D321: P2N uses a measured affine calibration with independent validation
+
+*2026-11-08, P2N final documentation.*
+
+- **Decision**: map D3B logical points through MapGeometry.PointOf and fit a complete six-parameter affine transform
+  with seeded OpenCV RANSAC. Require at least eight distributed fit anchors, three independent validation anchors,
+  median fit error at most 4 px, maximum validation error at most 8 px, no validation point above 12 px, and at least
+  80% fit inliers. Bind the profile to the build, map, measured client geometry, image dimensions, scale, version,
+  and a 30-second maximum age.
+- **Window matching rule**: the action gate and target matcher always compare XID; they compare ProcessId and
+  ExecutablePath only when both identities know the respective value, and ignore Title and Status in equality. A
+  title is never evidence. The gate separately requires Status=Verified for the current window. Calibration profile
+  revalidation has a stricter exact XID/PID/executable check, documented in [P2N_CALIBRATION.md](P2N_CALIBRATION.md).
+- **Limit**: synthetic measurements do not establish accuracy on a Unity screenshot. See
+  [P2N_CALIBRATION.md](P2N_CALIBRATION.md).
+
+## D322: P2N keeps GUI readiness fail-closed and Preview-only
+
+*2026-11-08, P2N final documentation.*
+
+- **Decision**: readiness fails on the first unmet window, capture, scene, calibration, target, protocol, state,
+  position, expiry, fight, busy, or interruption guard. Readiness binds one intent, session epoch, state revision,
+  window, calibration, frame, and target. The binding is process-local and is not a cryptographic authorization.
+- **Action contract**: only WalkToCell and UseElement are represented. Each submitted intent is consumed once and
+  emits at most one click. A click is not success; PASS requires the compatible client request and expected server
+  outcome. Missing or contradictory confirmation is UNCONFIRMED with no retry. NeverConfirms is the P2N default.
+- **Boundary**: Preview is the only defined application mode; AllowRealInput=true is rejected by the options
+  validator, and the host does not register the executor or input backend.
+- **Protocol-neutral GUI input**: GameInputMode.GuiClientInput models accepting client-originated requests while
+  refusing D3B-originated gameplay requests. Its policy is not integrated at the final network admission point and
+  existing network protections remain unchanged. See [P2N_GUI_CONTRACT.md](P2N_GUI_CONTRACT.md).
+
+## D323: P2N does not connect the planner or correlation model to gameplay
+
+*2026-11-08, P2N final documentation.*
+
+- **Decision**: keep GuiWorldSnapshotAdapter, GuiIntentCorrelation, and GameInputModePolicy as isolated contracts.
+  Do not register an automatic capture loop, gameplay trigger, or executor in the host. Do not change PlayerActions'
+  priority, relay admission, or protocol injection behavior in this documentation lot.
+- **Boundary**: any future real action requires a separate supervised GO and a separately implemented and audited
+  network-admission boundary.
+
+## D324: P2N implementation evidence is synthetic and final audits are pending
+
+*2026-11-08, P2N final documentation; integrated tree 3c22fe6.*
+
+- **Evidence**: solution build 0 warnings/0 errors; full serialized suite 1,943 total, 1,939 passed, 4 skipped because
+  Rust was not configured, 0 failed, exit 0; D3B.Gui.Tests 179/179; D3B.Bot.Tests 648/648; format verification exit 0.
+  Xvfb passed 21/21 X11 tests. The exact synthetic affine fixture measured 0.000 px median fit, 0.000 px maximum
+  validation error, and 12/12 inliers; the two-outlier fixture retained 10/12 (83.3%). The synthetic target scored
+  1.0000 with second peak 0.0000 and margin 1.0000; box {159,141,24,20}, point {171,151}. Preview output was private,
+  repository output was rejected, and the preview help smoke exited 0.
+- **Audit state**: the early audit's 1 BLOCKER, 4 MAJOR, and 3 MINOR findings were corrected and verified. The final
+  independent audits remain to be executed. Therefore P2N is BLOCKED under the section 19 exit criteria until those
+  required audit results are recorded.
+- **Limits**: no Dofus screenshot or capture, real click, movement, harvest, or game connection was used. XTest with
+  Dofus, Unity calibration accuracy, and resource detection are unproven. Details and the verified/inferred split are
+  recorded in [P2N_REPORT.md](P2N_REPORT.md).
+
+## D325: P2N action readiness requires strict verified window identity
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: action readiness requires both compared identities to be `Verified` and requires exact equality of Xid,
+  ProcessId, and ExecutablePath. An identity marked unverified, including one with unavailable process data, and an
+  unverified calibration profile block readiness. Title is never identity evidence. `TemplateTargetLocator` retains the
+  permissive comparison of known process values for preview matching only; that rule does not authorize an action.
+- **Supersedes**: the action-gate identity wording in D321. Calibration identity revalidation remains exact as recorded
+  there.
+
+## D326: P2N reports uncertainty after a click command launches
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: `GuiInputResult.ClickMayHaveBeenEmitted` marks whether a click command launched. Failure, cancellation,
+  timeout, or other uncertain completion after launch produces `UNCONFIRMED`; the executor never retries that intent.
+  Refusals before launch report no possible click. Cancellation during confirmation after input returned `Sent` is
+  `INTERRUPTED` with the click marked emitted; it is also terminal and not retried. A click alone is never success;
+  confirmation remains required.
+
+## D327: P2N state revision includes the translation latch
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: compose `StateRevision` from the published view revision and translation-latch state. A latch transition
+  changes the revision so an intention bound to the prior state cannot remain current.
+
+## D328: P2N preview output rejects D3B repository paths by marker
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: both the preview output guard and writer walk upward from the destination and reject a path beneath an
+  ancestor containing `D3B.slnx`. The check is independent of the current working directory. CLI input errors disclose
+  only the file name and a stable diagnostic code, not the directory path.
+
+## D329: P2N validates GUI options at composition
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: `GuiActionGate` calls `GuiOptionsValidator.ValidateOrThrow` during construction and fails fast on invalid
+  configuration. P2O must also call the validator when the host starts.
+
+## D330: P2N verifies the GUI input policy with a fake relay
+
+*2026-11-08, P2N audit corrections; merged implementation `de6745b`.*
+
+- **Decision**: keep the relay policy test at the fake-relay seam. It verifies unchanged client/server forwarding,
+  refusal of D3B gameplay requests, admission of client requests and D3B non-gameplay requests, and zero XTest input.
+  Production GameSession admission remains P2O work and must be implemented and separately audited before a real GUI
+  action.
+
+## D331: P2N final outcome
+
+*2026-11-08, P2N final documentation; verified tree `531c337`.*
+
+- **Decision**: P2N is **READY FOR P2N VISUAL GO**. The early audit's initial REJECT (1 BLOCKER, 4 MAJOR, 3 MINOR)
+  was corrected and verified. The final code audit on `3c22fe6` returned REJECT (1 BLOCKER, 3 MAJOR, 5 MINOR/NIT);
+  all findings were corrected, and the delta audit on `de6745b` returned APPROVE with one MINOR timeout-coverage
+  finding corrected by `87f87ef`. The final security, boundary, and compliance audit on `531c337` returned APPROVE
+  with no BLOCKER or MAJOR findings; its one documentation MINOR in [P2N_REPORT.md](P2N_REPORT.md) is corrected by
+  this update.
+- **Evidence**: build 0 warnings/0 errors; full serialized suite 1,955 total, 1,951 passed, 4 skipped because Rust was
+  not configured, 0 failed, exit 0; D3B.Gui.Tests 190/190; 21 Xvfb X11 tests; format verification exit 0; and
+  `gui-preview --help` exit 0.
+- **Scope**: this GO authorizes only future supervised real-client capture and visual calibration. It does not
+  authorize movement, harvesting, or any other real GUI action; action requires a separate GO. No Dofus capture or
+  action was performed. Synthetic calibration does not prove Unity accuracy, XTest with Dofus is unproven, and
+  relevant resource detection is unproven. Production host wiring and network admission remain P2O work.

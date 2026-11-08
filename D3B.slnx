@@ -10,6 +10,7 @@
     <File Path="scripts/embed.cs" />
     <File Path="scripts/extract.cs" />
     <File Path="scripts/fights.cs" />
+    <File Path="scripts/gui-preview.cs" />
     <File Path="scripts/inspect.cs" />
     <File Path="scripts/mapping.cs" />
     <File Path="scripts/release.cs" />
@@ -81,6 +82,9 @@
     <File Path="scripts/fights/LiveBench.cs" />
     <File Path="scripts/fights/Tally.cs" />
     <File Path="scripts/fights/TurnBench.cs" />
+  </Folder>
+  <Folder Name="/scripts/gui-preview/">
+    <File Path="scripts/gui-preview/GuiPreviewCommand.cs" />
   </Folder>
   <Folder Name="/scripts/inspect/">
     <File Path="scripts/inspect/BundleBlock.cs" />
@@ -157,6 +161,7 @@
     <Project Path="src/D3B.Data/D3B.Data.csproj" />
     <Project Path="src/D3B.Diagnostic/D3B.Diagnostic.csproj" />
     <Project Path="src/D3B.Engine/D3B.Engine.csproj" />
+    <Project Path="src/D3B.Gui/D3B.Gui.csproj" />
     <Project Path="src/D3B.Host/D3B.Host.csproj" />
     <Project Path="src/D3B.Network/D3B.Network.csproj" />
     <Project Path="src/D3B.Protocol/D3B.Protocol.csproj" />
@@ -169,6 +174,7 @@
     <Project Path="tests/D3B.Data.Tests/D3B.Data.Tests.csproj" />
     <Project Path="tests/D3B.Diagnostic.Tests/D3B.Diagnostic.Tests.csproj" />
     <Project Path="tests/D3B.Engine.Tests/D3B.Engine.Tests.csproj" />
+    <Project Path="tests/D3B.Gui.Tests/D3B.Gui.Tests.csproj" />
     <Project Path="tests/D3B.Network.Tests/D3B.Network.Tests.csproj" />
     <Project Path="tests/D3B.Protocol.Tests/D3B.Protocol.Tests.csproj" />
     <Project Path="tests/D3B.Scripts.Tests/D3B.Scripts.Tests.csproj" />
