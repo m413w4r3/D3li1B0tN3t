@@ -2,20 +2,41 @@
 
 ## Decision
 
-**BLOCKED — final independent code and security/documentation audits are in progress.**
+**READY FOR P2N VISUAL GO**
 
-The implementation and recorded checks below are verified, but the final audits required by section 19 have not yet
-been recorded as passed. This report does not claim READY FOR P2N VISUAL GO.
+The section 19 criteria are satisfied by the recorded implementation evidence and independent audit outcomes below.
+This GO authorizes only future supervised real-client capture and visual calibration. It does not authorize movement,
+harvesting, or any other real GUI action; that requires a separate GO.
+
+### Section 19 exit criteria
+
+- **GUI project compiles:** verified by the pinned-SDK solution build with 0 warnings and 0 errors.
+- **OpenCV works with the selected runtime:** verified through the X11 capture tests and the synthetic OpenCV
+  calibration and template-matching measurements below.
+- **X11 capture works on a fake window:** verified by the Xvfb capture tests; all 21 X11 tests passed on fake windows.
+- **Calibration, tests, and metrics pass:** the full GUI suite passed 190/190, and the synthetic calibration metrics
+  below were produced.
+- **Preview cannot emit a Dofus click:** Preview reads local files and does not capture a desktop or invoke input;
+  real input is rejected in Preview, and the host and app do not register the executor or a gameplay trigger.
+- **Safety guards and integration boundaries remain fail-closed:** verified by the final security/boundary audit;
+  action readiness requires verified exact window identity and a valid current profile. Existing relay admission
+  protections remain unchanged, and production GUI admission remains outside P2N.
+- **BotActor contracts are defined:** the snapshot adapter and intent-correlation contracts are documented in
+  [P2N_GUI_CONTRACT.md](P2N_GUI_CONTRACT.md) and [P2N_ARCHITECTURE.md](P2N_ARCHITECTURE.md).
+- **Full suite and independent audits pass:** the full suite exited 0 and the final code delta and
+  security/boundary/compliance audits were approved after their recorded findings were corrected.
+- **No network, root, or Python dependency was added:** verified by the final security/boundary/compliance audit and
+  the documented dependency boundary.
 
 ## Verified evidence
 
-The parent verified the final integrated tree at `de6745b`:
+The parent verified the final integrated tree at `531c337`:
 
 | Check | Result |
 | --- | --- |
 | Solution build with the pinned .NET SDK | Pass; 0 warnings, 0 errors. |
-| Full serialized test suite | Pass; 1,954 total, 1,950 passed, 4 skipped because Rust was not configured, 0 failed; exit 0. |
-| D3B.Gui.Tests | Pass; 189/189. |
+| Full serialized test suite | Pass; 1,955 total, 1,951 passed, 4 skipped because Rust was not configured, 0 failed; exit 0. |
+| D3B.Gui.Tests | Pass; 190/190. |
 | D3B.Bot.Tests | Pass; 649/649. |
 | X11 backend tests | 21 Xvfb tests passed with no skips: 8 windowing, 8 capture, and 5 XTest input tests against fake windows. |
 | Formatting | Pass; `dotnet format --verify-no-changes` exited 0. |
@@ -53,8 +74,17 @@ coefficients `a`, `b`, `tx`, `c`, `d`, and `ty`, in addition to aggregate fit an
   errors redact directory paths.
 - **Cleanup:** owned Xvfb test resources are cleaned up on completion or failure.
 
-These corrections are present in the merged implementation. The final independent audits remain in progress; their
-approval is not inferred from the test results.
+These corrections are present in the merged implementation.
+
+## Independent audit outcomes
+
+- **Early audit:** initial `REJECT` with 1 BLOCKER, 4 MAJOR, and 3 MINOR findings. The findings were corrected in code
+  and verified.
+- **Final code audit:** audit of `3c22fe6` returned `REJECT` with 1 BLOCKER, 3 MAJOR, and 5 MINOR/NIT findings. All
+  findings were corrected. The subsequent delta audit on `de6745b` returned `APPROVE`, with one MINOR finding about
+  post-launch timeout coverage; commit `87f87ef` corrected it.
+- **Final security, boundary, and compliance audit:** audit of `531c337` returned `APPROVE`, with no BLOCKER or MAJOR
+  findings. It identified one documentation MINOR in this report, corrected by this update.
 
 ## Synthetic measurements
 
@@ -94,5 +124,6 @@ Dofus screenshot or localization accuracy on a real resource.
 - X11 focus and global click are not atomic. Window-manager decoration extents outside the selected XID are not
   measured separately.
 - No network, root, Linux capability, Python, Frida, or Unity process-injection dependency was added.
-- Final independent code and security/documentation audits are in progress. Record their outcomes before changing the
-  verdict to READY FOR P2N VISUAL GO. The P2O plan is prospective and does not authorize or perform a real action.
+- The P2O plan is prospective and does not authorize or perform a real action. READY FOR P2N VISUAL GO authorizes only
+  supervised real-client capture and visual calibration; movement, harvesting, and other real actions require a
+  separate GO.
