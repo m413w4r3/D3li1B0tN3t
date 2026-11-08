@@ -59,6 +59,7 @@ public sealed record TargetRegion
     public int FrameHeight { get; }
 
     /// <summary>Creates a candidate result tied to one frame and calibration.</summary>
+    /// <remarks>Zero frame dimensions are permitted only for unverified results when no image dimensions are available.</remarks>
     public TargetRegion(
         long mapId,
         int elementId,
@@ -79,8 +80,16 @@ public sealed record TargetRegion
     {
         ArgumentNullException.ThrowIfNull(confidence);
         ArgumentException.ThrowIfNullOrWhiteSpace(calibrationId);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameWidth);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameHeight);
+        if (status == TargetStatus.Verified)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameWidth);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameHeight);
+        }
+        else
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(frameWidth);
+            ArgumentOutOfRangeException.ThrowIfNegative(frameHeight);
+        }
 
         MapId = mapId;
         ElementId = elementId;
