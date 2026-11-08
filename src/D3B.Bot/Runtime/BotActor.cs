@@ -70,6 +70,7 @@ public sealed class BotActor : IAsyncDisposable
     // The loop writes these, and anyone reads them.
     private volatile CharacterState _state;
     private volatile bool _connected;
+    private volatile BotStateView _view;
     private volatile bool _paused;
     private volatile bool _acting;
     private volatile bool _fightsAlone;
@@ -80,6 +81,8 @@ public sealed class BotActor : IAsyncDisposable
     private int _fightsBegun;
     private int _handlerFailures;
     private int _lastEndedFight;
+    private long _revision;
+    private long _epoch;
     private long _placedAt;
     private int _translationAtFirstPlacement;
     private long _useEndedAt = NeverEnded;
@@ -91,6 +94,8 @@ public sealed class BotActor : IAsyncDisposable
 
     /// <summary>Gets the character's state now: an immutable snapshot, which the bot's loop replaces as messages come.</summary>
     public CharacterState State => _state;
+
+    internal BotStateView View => _view;
 
     /// <summary>Gets whether a game connection plays the character now.</summary>
     public bool IsConnected => _connected;
@@ -231,6 +236,7 @@ public sealed class BotActor : IAsyncDisposable
     {
         Key = state.Key;
         _state = state;
+        _view = new BotStateView(state, _revision, _epoch, _connected);
         Maps = maps;
         _world = world;
         _banks = banks;
@@ -526,7 +532,7 @@ public sealed class BotActor : IAsyncDisposable
                     var before = _state;
                     var settled = CharacterEvents.NotConfirmed(before);
 
-                    _state = settled;
+                    PublishState(settled, _connected);
 
                     if (before.IsWalking && settled.MapId is { } map && settled.Cell is { } cell)
                         BotLog.WalkSettled(_log, Key.CharacterId, map, cell);
@@ -546,7 +552,7 @@ public sealed class BotActor : IAsyncDisposable
                 }
             case MovementRequested movement:
                 if (movement.MapId is null || movement.MapId == _state.MapId)
-                    _state = _state with { PendingMovementMapId = movement.MapId };
+                    PublishState(_state with { PendingMovementMapId = movement.MapId }, _connected);
                 break;
         }
     }
@@ -559,7 +565,7 @@ public sealed class BotActor : IAsyncDisposable
         var before = _state;
         var state = CharacterEvents.Apply(before, side, message);
 
-        _state = state;
+        PublishState(state, _connected);
 
         LogPositionTransition(before, state, side, message);
 
@@ -856,8 +862,8 @@ public sealed class BotActor : IAsyncDisposable
             Interrupt(behavior, Interruption.Disconnected);
 
         _session = session;
-        _state = state;
-        _connected = true;
+        _epoch++;
+        PublishState(state, true);
         Volatile.Write(ref _translationAtFirstPlacement, PlacementNotSeen);
 
         if (state.MapId is { } map && state.Cell is { } cell)
@@ -879,7 +885,7 @@ public sealed class BotActor : IAsyncDisposable
             Interrupt(behavior, Interruption.Disconnected);
 
         _session = null;
-        _connected = false;
+        PublishState(_state, false);
 
         if (_state.MapId is { } map && _state.Cell is { } cell)
             BotLog.DetachedAt(_log, Key.CharacterId, session.Id, map, cell);
@@ -905,7 +911,14 @@ public sealed class BotActor : IAsyncDisposable
         _parked.Clear();
         _waiters.Clear();
         _session = null;
-        _connected = false;
+        PublishState(_state, false);
+    }
+
+    private void PublishState(CharacterState state, bool connected)
+    {
+        _state = state;
+        _connected = connected;
+        _view = new BotStateView(state, ++_revision, _epoch, connected);
     }
 
     private void Write(BotEvent bot)
