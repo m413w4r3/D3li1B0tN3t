@@ -10,6 +10,7 @@
     <File Path="scripts/embed.cs" />
     <File Path="scripts/extract.cs" />
     <File Path="scripts/fights.cs" />
+    <File Path="scripts/gui-preview.cs" />
     <File Path="scripts/inspect.cs" />
     <File Path="scripts/mapping.cs" />
     <File Path="scripts/release.cs" />
@@ -81,6 +82,9 @@
     <File Path="scripts/fights/LiveBench.cs" />
     <File Path="scripts/fights/Tally.cs" />
     <File Path="scripts/fights/TurnBench.cs" />
+  </Folder>
+  <Folder Name="/scripts/gui-preview/">
+    <File Path="scripts/gui-preview/GuiPreviewCommand.cs" />
   </Folder>
   <Folder Name="/scripts/inspect/">
     <File Path="scripts/inspect/BundleBlock.cs" />
