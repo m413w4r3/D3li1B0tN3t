@@ -14,6 +14,7 @@ using D3B.Data;
 using D3B.Data.Maps;
 using D3B.Data.Packs;
 using D3B.Data.World;
+using D3B.Gui.Safety;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -53,6 +54,7 @@ public sealed class BotsModule : IModule
             services.GetRequiredService<ILoggerFactory>())
         {
             Delays = delays,
+            InputMode = services.GetService<GuiHostInputMode>()?.Mode ?? GameInputMode.ProtocolInjection,
 
             // Measuring the AI on fights the player starts, through D3B.Host, which has no card to switch it on (D198, D244).
             FightsAlone = bot.Configuration.GetValue<bool>("Fights:Alone"),

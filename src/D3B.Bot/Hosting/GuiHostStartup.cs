@@ -1,5 +1,7 @@
 using D3B.Gui.Safety;
+using D3B.Core.Modules;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace D3B.Bot.Hosting;
 
@@ -19,6 +21,20 @@ public static class GuiHostStartup
 
         GuiOptionsValidator.ValidateOrThrow(options);
 
-        return new GuiHostCapability(options.Enabled, options.Mode, options.AllowRealInput);
+        return new GuiHostCapability(options.Enabled, options.Mode, options.AllowRealInput, options.InputMode);
+    }
+
+    /// <summary>Validates GUI configuration and wires the validated input mode into the host's bot module.</summary>
+    /// <param name="bot">The host builder.</param>
+    /// <returns>The validated GUI capability.</returns>
+    public static GuiHostCapability Register(BotBuilder bot)
+    {
+        ArgumentNullException.ThrowIfNull(bot);
+
+        GuiHostCapability capability = Validate(bot.Configuration);
+        bot.Services.AddSingleton(capability);
+        bot.AddModule<GuiHostModule>();
+
+        return capability;
     }
 }

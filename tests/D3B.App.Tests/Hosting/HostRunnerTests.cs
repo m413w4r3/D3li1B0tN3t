@@ -2,6 +2,9 @@ using D3B.App.Hosting;
 using D3B.Bot.Hosting;
 using D3B.Bot.Runtime;
 using D3B.Bot.Tests;
+using D3B.Gui.Actions;
+using D3B.Gui.Input;
+using D3B.Gui.Safety;
 using D3B.Network.Relay;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -34,6 +37,8 @@ public sealed class HostRunnerTests : IDisposable
 
         Assert.Equal(HostStatus.Running, runner.Status);
         Assert.NotNull(runner.Services?.GetService<Bots>());
+        Assert.Equal(GameInputMode.ProtocolInjection, runner.Services?.GetRequiredService<Bots>().InputMode);
+        Assert.Equal(GameInputMode.ProtocolInjection, runner.Services?.GetRequiredService<GuiHostCapability>().InputMode);
         Assert.DoesNotContain($"ConfigUrl={_install.ConfigUrl}\n", File.ReadAllText(_install.VersionFile), StringComparison.Ordinal);
 
         await runner.StopAsync().WaitAsync(_timeout, TestContext.Current.CancellationToken);
@@ -41,6 +46,41 @@ public sealed class HostRunnerTests : IDisposable
         Assert.Equal(HostStatus.Stopped, runner.Status);
         Assert.Null(runner.Services);
         Assert.EndsWith($"ConfigUrl={_install.ConfigUrl}\n", File.ReadAllText(_install.VersionFile), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GuiClientInputConfigurationReachesNewBotsWithoutRegisteringInputOrActivity()
+    {
+        _install.WritePack();
+        _install.WriteProtocol();
+
+        var runner = new HostRunner(
+        [.. _install.Arguments, "--Storage:Path", Path.Combine(_install.Root, "d3b.db"), "--Gui:Enabled=true", "--Gui:InputMode=GuiClientInput"],
+            new Dictionary<string, string?>());
+
+        runner.Start();
+        await Waiting.UntilAsync(() => runner.Status is not HostStatus.Starting, _timeout);
+
+        try
+        {
+            Assert.Equal(HostStatus.Running, runner.Status);
+            var services = runner.Services!;
+            var capability = services.GetRequiredService<GuiHostCapability>();
+
+            Assert.True(capability.Enabled);
+            Assert.Equal(GameInputMode.GuiClientInput, capability.InputMode);
+            Assert.Equal(GameInputMode.GuiClientInput, services.GetRequiredService<Bots>().InputMode);
+            Assert.False(capability.AutomaticActivity);
+            Assert.False(capability.SupervisedOneShotAvailable);
+            Assert.False(capability.RealInputAvailable);
+            Assert.Null(services.GetService<GuiActionExecutor>());
+            Assert.Null(services.GetService<IGuiInput>());
+            Assert.Null(services.GetService<XdotoolGuiInput>());
+        }
+        finally
+        {
+            await runner.StopAsync().WaitAsync(_timeout, TestContext.Current.CancellationToken);
+        }
     }
 
     [Fact]

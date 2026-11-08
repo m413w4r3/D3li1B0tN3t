@@ -25,7 +25,9 @@ This page describes the Linux fork's changes and boundaries. The upstream design
 The layers still follow the upstream module model: `src/D3B.Bot/DefaultModules.cs` composes features, and modules register
 services through `src/D3B.Core/Modules/IModule.cs` and `src/D3B.Core/Modules/BotBuilder.cs`. The Linux changes do not
 add a platform-specific host or a second runtime stack. Both host entry points validate `Gui` options at startup and
-expose a `GuiHostCapability`; the hosts register no GUI executor, input, capture loop, or gameplay trigger.
+expose a `GuiHostCapability`. `Gui:InputMode` defaults to `ProtocolInjection`; `GuiClientInput` requires
+`Gui:Enabled=true` and applies to new game sessions. The hosts register no GUI executor, input, capture loop, or gameplay
+trigger, so the switch only refuses D3B gameplay requests while client traffic continues through the relay.
 
 ## Caller-facing contracts
 
@@ -36,7 +38,11 @@ expose a `GuiHostCapability`; the hosts register no GUI executor, input, capture
 - **Relay:** `src/D3B.Network/Relay/IRelayInterceptor.cs` receives each accepted connection and can return
   `src/D3B.Network/Relay/IConnectionInterceptor.cs` to inspect complete frames.
   `src/D3B.Network/Relay/IRelayConnection.cs` exposes `SendToServerAsync(...)`, the narrow way to inject a D3B request
-  between client frames. Without an interceptor, the relay forwards the byte streams unchanged.
+  between client frames. Its public untyped send is refused when a session requires typed admission. Game sessions use an
+  internal, frame-bound capability whose version and request predicate are checked by the relay. The final admission
+  check, claim, write, capture, sent count and written-list update share a lock with mode changes: a mode update that
+  takes the lock first rejects the queued frame; a frame written before the update is not retracted. Without an
+  interceptor, the relay forwards the byte streams unchanged.
 - **Capture replay:** `src/D3B.Network/Captures/CaptureReader.cs` reads ordered records and
   `CaptureReplay.PlayAsync(...)` writes client and server records into pipes; D3B-injected records can be supplied to a
   separate pipe. Replay is deterministic and un-timed. It does not open sockets or contact the game server.

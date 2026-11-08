@@ -1,6 +1,8 @@
 using D3B.Bot.Characters;
 using D3B.Bot.Network;
 using D3B.Bot.Runtime;
+using D3B.Gui.Safety;
+using D3B.Network.Relay;
 using D3B.Protocol.Game;
 using Microsoft.Extensions.Logging;
 
@@ -100,6 +102,56 @@ public sealed class BotsTests : IAsyncDisposable
         await bot.ProcessedAsync();
 
         Assert.Equal(TestPlay.MapId, bot.State.MapId);
+    }
+
+    [Fact]
+    public async Task ReplacingACharacterSessionRejectsItsQueuedSendAndKeepsAdmissionIsolated()
+    {
+        var first = _play.Connect(TestPlay.Account);
+
+        first.Server(TestPlay.Chosen());
+
+        var bot = Assert.Single(_play.Bots.All);
+
+        await bot.ProcessedAsync();
+
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        first.Relay.SendWait = async cancellationToken =>
+        {
+            entered.TrySetResult();
+            await release.Task.WaitAsync(cancellationToken);
+        };
+
+        var queued = first.Session.SendAsync(new DialogLeaveRequest(), TestContext.Current.CancellationToken);
+
+        await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        var classifier = new DescriptorGameInputRequestClassifier([DialogLeaveRequest.Descriptor.FullName]);
+        _play.Bots.InputMode = GameInputMode.GuiClientInput;
+        _play.Bots.GuiClassifier = classifier;
+
+        var second = _play.Connect(TestPlay.Account);
+
+        second.Server(TestPlay.Chosen());
+        await bot.ProcessedAsync();
+
+        Assert.Equal(GameInputMode.GuiClientInput, second.Session.InputMode);
+        Assert.Same(classifier, second.Session.GuiClassifier);
+
+        release.TrySetResult();
+
+        await Assert.ThrowsAsync<RelayInjectionException>(() => queued);
+        Assert.Empty(first.Relay.Sent);
+
+        await second.Session.SendAsync(new DialogLeaveRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Single(second.Relay.Sent);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => second.Session.SendAsync(
+            new MapMovementRequest { MapId = 1 },
+            TestContext.Current.CancellationToken));
+        Assert.Empty(first.Relay.Sent);
+        Assert.Single(second.Relay.Sent);
     }
 
     [Fact]

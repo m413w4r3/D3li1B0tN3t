@@ -10,9 +10,11 @@ using D3B.Data.Maps;
 using D3B.Data.World;
 using D3B.Engine.Tactics;
 using D3B.Engine.World;
+using D3B.Gui.Safety;
 using D3B.Network.Relay;
 using D3B.Protocol.Game;
 using D3B.Protocol.Translation;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 
 namespace D3B.Bot.Runtime;
@@ -46,6 +48,8 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
     private readonly ConcurrentDictionary<CharacterKey, FightPilot> _pilots = new();
     private volatile BotDelays _delays = BotDelays.Measured;
     private volatile bool _fightsAlone;
+    private volatile GameInputMode _inputMode = GameInputMode.ProtocolInjection;
+    private volatile IGameInputRequestClassifier<IMessage> _guiClassifier = new DescriptorGameInputRequestClassifier([]);
 
     /// <summary>Gets every bot, those whose game connection closed included.</summary>
     public IReadOnlyCollection<BotActor> All => [.. _bots.Values];
@@ -62,6 +66,20 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
     {
         get => _fightsAlone;
         set => _fightsAlone = value;
+    }
+
+    /// <summary>Gets or sets how new game sessions admit D3B requests.</summary>
+    public GameInputMode InputMode
+    {
+        get => _inputMode;
+        set => _inputMode = value;
+    }
+
+    /// <summary>Gets or sets the classifier new sessions use to admit D3B requests in GUI input mode.</summary>
+    public IGameInputRequestClassifier<IMessage> GuiClassifier
+    {
+        get => _guiClassifier;
+        set => _guiClassifier = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     /// <summary>Raised when a character's first game connection makes its bot, from the relay's read loop: a handler must be quick.</summary>
@@ -131,6 +149,7 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
 
     void IGameObserver.OnSessionStarted(GameSession session)
     {
+        session.ConfigureInputAdmission(InputMode, GuiClassifier);
         session.SendGate = request => !MovementRequests.IsMovementCapable(request);
         var binding = new Binding();
 
@@ -185,6 +204,9 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
             }
         }
 
+        if (bot.Session is { } previous && !ReferenceEquals(previous, session))
+            previous.Supersede();
+
         session.SendGate = request => bot.CanSendRawRequest(session, request);
         session.SendBarrier = bot.ProcessedAsync;
         bot.Attach(session, state);
@@ -200,6 +222,8 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
 
     private void Close(GameSession session)
     {
+        session.Supersede();
+
         if (_sessions.TryRemove(session, out var binding))
             binding.Bot?.Detach(session);
     }

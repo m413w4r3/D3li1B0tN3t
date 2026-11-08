@@ -59,6 +59,7 @@ public sealed class BotActor : IAsyncDisposable
     private readonly List<Waiter> _waiters = [];
     private readonly List<Starting> _parked = [];
     private readonly Lock _activityLock = new();
+    private readonly object _sessionLock = new();
     private readonly AsyncLocal<RunningBehavior?> _movementSendBehavior = new();
     private readonly GuiIntentCorrelation _guiIntents;
     private readonly GuiWorldSnapshotAdapter _guiWorldSnapshots;
@@ -70,6 +71,7 @@ public sealed class BotActor : IAsyncDisposable
 
     // The loop writes these; the session gate reads the current behavior.
     private volatile GameSession? _session;
+    private GameSession? _activeSession;
     private volatile RunningBehavior? _behavior;
     // Queued inputs can drain before Stopping, so handlers need the synchronous dispose signal.
     private volatile bool _stopping;
@@ -518,6 +520,11 @@ public sealed class BotActor : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         BeginStopping();
+        lock (_sessionLock)
+        {
+            _activeSession?.Supersede();
+            _activeSession = null;
+        }
         _session = null;
         _connected = false;
         Post(new Stopping());
@@ -541,6 +548,14 @@ public sealed class BotActor : IAsyncDisposable
 
     internal void Attach(GameSession session, CharacterState state)
     {
+        lock (_sessionLock)
+        {
+            if (_activeSession is { } previous && !ReferenceEquals(previous, session))
+                previous.Supersede();
+
+            _activeSession = session;
+        }
+
         Post(new Attached(session, state));
     }
 
@@ -556,6 +571,15 @@ public sealed class BotActor : IAsyncDisposable
 
     internal void Detach(GameSession session)
     {
+        lock (_sessionLock)
+        {
+            if (ReferenceEquals(_activeSession, session))
+            {
+                session.Supersede();
+                _activeSession = null;
+            }
+        }
+
         Post(new Detached(session));
     }
 
@@ -1670,6 +1694,9 @@ public sealed class BotActor : IAsyncDisposable
         if (_behavior is { } behavior)
             Interrupt(behavior, Interruption.Disconnected);
 
+        if (_session is { } previous && !ReferenceEquals(previous, session))
+            previous.Supersede();
+
         _session = session;
         _epoch++;
         PublishState(state, true);
@@ -1689,6 +1716,8 @@ public sealed class BotActor : IAsyncDisposable
     {
         if (session != _session)
             return;
+
+        session.Supersede();
 
         CancelActiveGuiIntent("The game session detached during the intention.");
 
@@ -1711,6 +1740,8 @@ public sealed class BotActor : IAsyncDisposable
     private void OnStopping()
     {
         CancelActiveGuiIntent("The bot stopped during the intention.");
+
+        _session?.Supersede();
 
         if (_behavior is { } behavior)
             Interrupt(behavior, Interruption.Stopped);

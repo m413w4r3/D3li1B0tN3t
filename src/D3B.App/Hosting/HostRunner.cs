@@ -2,7 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 using D3B.Bot.Hosting;
 using D3B.Core.Modules;
 using D3B.Storage;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace D3B.App.Hosting;
@@ -82,8 +81,7 @@ internal sealed class HostRunner
         return cancellationToken =>
         {
             var builder = BotHost.CreateBuilder(args, settings).AddModule<StorageModule>();
-            GuiHostCapability capability = GuiHostStartup.Validate(builder.Configuration);
-            builder.Services.AddSingleton(capability);
+            GuiHostStartup.Register(builder);
 
             return start(builder, cancellationToken);
         };

@@ -30,13 +30,19 @@ internal sealed class InjectedFrames
     private readonly CaptureWriter? _capture;
     private readonly ILogger _log;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _admissionLock = new();
     private readonly Queue<Frame> _waiting = new();
     private readonly List<Frame> _written = [];
+    private AdmissionSnapshot _admission = new(0, false);
     private InterceptedSide? _side;
     private string? _closed;
 
     /// <summary>Gets how many frames went to the server.</summary>
     public int Sent { get; private set; }
+
+    internal Action? BeforeFinalAdmissionCheck { get; set; }
+
+    internal Action? AfterFinalAdmissionCheck { get; set; }
 
     public InjectedFrames(string connectionId, PipeWriter output, CaptureWriter? capture, ILogger log)
     {
@@ -47,15 +53,18 @@ internal sealed class InjectedFrames
     }
 
     /// <summary>Sends a frame, as <see cref="IRelayConnection.SendToServerAsync(ReadOnlyMemory{byte}, CancellationToken)"/> describes.</summary>
-    public async Task SendAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken, Func<bool>? stillValid = null, Func<bool>? stillAdmitted = null)
+    public async Task SendAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken, Func<bool>? stillValid = null, RelaySendAdmission? admission = null)
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(frame.Length, FrameReader.DefaultMaxLength, nameof(frame));
+
+        if (admission is not null && !admission.IsBoundTo(frame.Span))
+            throw new RelayInjectionException("The frame did not go: its admission capability belongs to another frame.");
 
         var writer = new ArrayBufferWriter<byte>(FrameWriter.LengthSize(frame.Length) + frame.Length);
 
         FrameWriter.Write(writer, frame.Span);
 
-        var injected = new Frame(writer.WrittenSpan.ToArray(), stillValid, stillAdmitted);
+        var injected = new Frame(writer.WrittenSpan.ToArray(), stillValid, admission);
 
         // Register before taking the gate: once the gate is released, the client's read loop can drain and claim the
         // frame, and a cancellation registered afterwards would no longer be able to withdraw it.
@@ -120,6 +129,13 @@ internal sealed class InjectedFrames
         _gate.Release();
     }
 
+    /// <summary>Changes the session admission watermark under the same lock as the final frame write.</summary>
+    public void SetAdmissionMode(long version, bool requiresTypedAdmission)
+    {
+        lock (_admissionLock)
+            Volatile.Write(ref _admission, new AdmissionSnapshot(version, requiresTypedAdmission));
+    }
+
     /// <summary>Writes the frames waiting, when what went to the server ends on a frame; the gate is held.</summary>
     /// <returns>Whether a frame was written, which a flush then completes.</returns>
     public bool Drain()
@@ -148,22 +164,31 @@ internal sealed class InjectedFrames
                 continue;
             }
 
-            if (!frame.IsStillAdmitted())
+            BeforeFinalAdmissionCheck?.Invoke();
+
+            lock (_admissionLock)
             {
-                frame.Fail("the request is no longer admitted");
+                if (!frame.IsStillAdmitted(Volatile.Read(ref _admission)))
+                {
+                    frame.Fail("the request is no longer admitted");
 
-                continue;
+                    continue;
+                }
+
+                AfterFinalAdmissionCheck?.Invoke();
+
+                if (!frame.TryClaim())
+                    continue;
+
+                // This critical section is the admission linearization point. An update that takes the lock first is
+                // observed by the final check; a frame written here before an update is not retracted.
+                _output.Write(frame.Bytes);
+                _capture?.Write(CaptureRecordKind.Injected, new ReadOnlySequence<byte>(frame.Bytes));
+                _written.Add(frame);
+                Sent++;
+                RelayLog.Injected(_log, _connectionId, frame.Bytes.Length);
+                wrote = true;
             }
-
-            if (!frame.TryClaim())
-                continue;
-
-            _output.Write(frame.Bytes);
-            _capture?.Write(CaptureRecordKind.Injected, new ReadOnlySequence<byte>(frame.Bytes));
-            _written.Add(frame);
-            Sent++;
-            RelayLog.Injected(_log, _connectionId, frame.Bytes.Length);
-            wrote = true;
         }
 
         return wrote;
@@ -236,18 +261,18 @@ internal sealed class InjectedFrames
 
         private readonly TaskCompletionSource _gone = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Func<bool>? StillValid { get; }
-        private Func<bool>? StillAdmitted { get; }
+        private RelaySendAdmission? Admission { get; }
         private int _state;
 
         public byte[] Bytes { get; }
 
         public Task Gone => _gone.Task;
 
-        public Frame(byte[] bytes, Func<bool>? stillValid, Func<bool>? stillAdmitted)
+        public Frame(byte[] bytes, Func<bool>? stillValid, RelaySendAdmission? admission)
         {
             Bytes = bytes;
             StillValid = stillValid;
-            StillAdmitted = stillAdmitted;
+            Admission = admission;
         }
 
         public bool IsStillValid()
@@ -255,9 +280,13 @@ internal sealed class InjectedFrames
             return Check(StillValid);
         }
 
-        public bool IsStillAdmitted()
+        public bool IsStillAdmitted(AdmissionSnapshot current)
         {
-            return Check(StillAdmitted);
+            if (Admission is null)
+                return !current.RequiresTypedAdmission;
+
+            return Admission.Version == current.Version
+                && Admission.IsStillAdmitted();
         }
 
         private static bool Check(Func<bool>? predicate)
@@ -296,6 +325,19 @@ internal sealed class InjectedFrames
         public void Fail(string reason)
         {
             _gone.TrySetException(new RelayInjectionException($"The frame did not go: {reason}."));
+        }
+    }
+
+    private sealed class AdmissionSnapshot
+    {
+        public long Version { get; }
+
+        public bool RequiresTypedAdmission { get; }
+
+        public AdmissionSnapshot(long version, bool requiresTypedAdmission)
+        {
+            Version = version;
+            RequiresTypedAdmission = requiresTypedAdmission;
         }
     }
 }
