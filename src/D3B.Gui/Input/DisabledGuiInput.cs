@@ -6,6 +6,12 @@ namespace D3B.Gui.Input;
 public sealed class DisabledGuiInput : IGuiInput
 {
     /// <inheritdoc />
+    public bool IsEnabled => false;
+
+    /// <inheritdoc />
+    public bool EmitsRealInput => false;
+
+    /// <inheritdoc />
     public Task<GuiInputResult> ClickAsync(DesktopPixels point, GameWindowSnapshot expectedWindow, CancellationToken cancellationToken)
     {
         return Task.FromResult(new GuiInputResult(GuiInputStatus.Disabled));

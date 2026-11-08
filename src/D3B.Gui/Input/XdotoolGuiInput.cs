@@ -15,6 +15,12 @@ public sealed class XdotoolGuiInput : IGuiInput
     private readonly string _binaryPath;
     private readonly Func<string, string?> _environmentReader;
 
+    /// <inheritdoc />
+    public bool IsEnabled => true;
+
+    /// <inheritdoc />
+    public bool EmitsRealInput => true;
+
     /// <summary>Creates XTest input using the default executable path and current process environment.</summary>
     public XdotoolGuiInput(IGameWindowLocator locator, string binaryPath = "/usr/bin/xdotool")
         : this(locator, binaryPath, Environment.GetEnvironmentVariable)
