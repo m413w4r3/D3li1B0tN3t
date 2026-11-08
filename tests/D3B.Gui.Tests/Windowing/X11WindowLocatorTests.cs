@@ -5,6 +5,22 @@ namespace D3B.Gui.Tests.Windowing;
 public sealed class X11WindowLocatorTests
 {
     [Fact]
+    public async Task DisposeRemovesTheOwnedDisplayLockAndSocket()
+    {
+        string lockFilePath;
+        string socketFilePath;
+
+        await using (XvfbTestDisplay display = await XvfbTestDisplay.StartAsync())
+        {
+            lockFilePath = display.LockFilePath;
+            socketFilePath = display.SocketFilePath;
+        }
+
+        Assert.False(File.Exists(lockFilePath));
+        Assert.False(File.Exists(socketFilePath));
+    }
+
+    [Fact]
     public async Task LocateInspectsTheExplicitXidAndVerifiesTheXtermProcess()
     {
         await using XvfbTestDisplay display = await XvfbTestDisplay.StartAsync();
