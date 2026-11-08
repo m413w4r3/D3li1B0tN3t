@@ -256,6 +256,25 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task CancellationOfAcknowledgedIntentIsPreClickEvenWhenClickMayHaveBeenEmitted()
+    {
+        var (connection, bot) = await EnterAsync();
+        var world = _adapter.Capture(bot);
+        var intent = CreateIntent(world);
+        Assert.Equal(GuiIntentRegistrationStatus.Registered,
+            (await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken)).Status);
+        Assert.True(await bot.AcknowledgeGuiIntentAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+
+        Assert.True(await bot.CancelGuiIntentAsync(intent.IntentId, true, "uncertain click", TestContext.Current.CancellationToken));
+
+        Assert.Equal(GuiIntentCorrelationState.Cancelled, bot.GuiIntentState);
+        Assert.Null(await outcome);
+        Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
+        Assert.Empty(connection.Sent);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -482,6 +501,43 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
 
         Assert.Null(await outcome);
         Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
+    }
+
+    [Theory]
+    [InlineData("movement")]
+    [InlineData("refusal")]
+    [InlineData("response")]
+    public async Task UnexpectedServerMovementBeforeClickCancelsAcknowledgedIntent(string kind)
+    {
+        var (connection, bot) = await EnterAsync();
+        var world = _adapter.Capture(bot);
+        var intent = CreateIntent(world);
+        Assert.Equal(GuiIntentRegistrationStatus.Registered,
+            (await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken)).Status);
+        Assert.True(await bot.AcknowledgeGuiIntentAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
+        Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
+
+        switch (kind)
+        {
+            case "movement":
+                connection.Server(new MapMovementEvent { ActorId = TestPlay.Key.CharacterId, Cells = { StartCell, TargetCell } });
+                break;
+            case "refusal":
+                connection.Server(new MapMovementRefusedEvent());
+                break;
+            case "response":
+                connection.Response(new MapMovementConfirmResponse());
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        await bot.ProcessedAsync();
+
+        Assert.True(bot.GuiIntentState is GuiIntentCorrelationState.Cancelled or GuiIntentCorrelationState.Interrupted, bot.GuiIntentDetail);
+        Assert.Null(await outcome);
+        Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, _adapter.Capture(bot), _fixture.Window, TestContext.Current.CancellationToken));
+        Assert.Empty(connection.Sent);
     }
 
     [Theory]

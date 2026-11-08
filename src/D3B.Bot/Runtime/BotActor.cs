@@ -849,6 +849,12 @@ public sealed class BotActor : IAsyncDisposable
         if (!IsActiveGuiIntent(intentId))
             return false;
 
+        if (_guiIntents.State is GuiIntentCorrelationState.Registered or GuiIntentCorrelationState.Acknowledged)
+            return _guiIntents.Cancel(reason);
+
+        if (_guiIntents.State is not (GuiIntentCorrelationState.Clicked or GuiIntentCorrelationState.ClientRequestSeen))
+            return false;
+
         return clickMayHaveBeenEmitted
             ? _guiIntents.MarkUnconfirmed(reason)
             : _guiIntents.Cancel(reason);
@@ -1018,7 +1024,7 @@ public sealed class BotActor : IAsyncDisposable
     private void CancelActiveGuiIntent(string detail)
     {
         if (_guiIntents.Intent is { } intent && IsActiveGuiIntent(intent.IntentId))
-            _guiIntents.Cancel(detail);
+            TerminateGuiIntentByClickState(detail);
     }
 
     private static bool IsSafeGuiIntentWorld(GuiWorldSnapshot world)
@@ -1371,18 +1377,27 @@ public sealed class BotActor : IAsyncDisposable
 
     private void MarkGuiIntentUnconfirmed(string detail)
     {
-        if (_guiIntents.State is GuiIntentCorrelationState.Registered)
-            _guiIntents.Cancel(detail);
-        else
-            _guiIntents.MarkUnconfirmed(detail);
+        TerminateGuiIntentByClickState(detail);
     }
 
     private void RevokeGuiIntentForUncertainObservation(string detail)
     {
-        if (_guiIntents.State is GuiIntentCorrelationState.Registered or GuiIntentCorrelationState.Acknowledged)
-            _guiIntents.Cancel(detail);
-        else
-            _guiIntents.MarkUnconfirmed(detail);
+        TerminateGuiIntentByClickState(detail);
+    }
+
+    private void TerminateGuiIntentByClickState(string detail)
+    {
+        switch (_guiIntents.State)
+        {
+            case GuiIntentCorrelationState.Registered:
+            case GuiIntentCorrelationState.Acknowledged:
+                _guiIntents.Cancel(detail);
+                break;
+            case GuiIntentCorrelationState.Clicked:
+            case GuiIntentCorrelationState.ClientRequestSeen:
+                _guiIntents.MarkUnconfirmed(detail);
+                break;
+        }
     }
 
     private static bool TryGetMapMovementRequestEndpoint(MapMovementRequest request, out int endpoint)
