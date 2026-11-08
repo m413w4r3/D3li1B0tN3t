@@ -128,6 +128,31 @@ public sealed class GuiActionExecutorTests
         Assert.Equal(1, input.ClickCount);
     }
 
+    [Theory]
+    [InlineData(GuiInputStatus.Canceled)]
+    [InlineData(GuiInputStatus.TimedOut)]
+    [InlineData(GuiInputStatus.Failed)]
+    public async Task UncertainInputFailureIsUnconfirmedAndNeverRetried(GuiInputStatus status)
+    {
+        using GuiActionTestFixture fixture = new();
+        RecordingGuiInput input = new()
+        {
+            Result = new GuiInputResult(status, "synthetic uncertainty", ClickMayHaveBeenEmitted: true),
+        };
+        FakeGuiOutcomeConfirmation confirmation = new() { Outcome = GuiServerOutcome.MovementConfirmed };
+        GuiActionExecutor executor = CreateExecutor(fixture, confirmation);
+
+        GuiActionOutcome outcome = await Execute(fixture, executor, input, TestContext.Current.CancellationToken);
+        GuiActionOutcome repeated = await Execute(fixture, executor, input, TestContext.Current.CancellationToken);
+
+        Assert.Equal(GuiActionOutcomeStatus.Unconfirmed, outcome.Status);
+        Assert.True(outcome.ClickEmitted);
+        Assert.Equal(GuiActionOutcomeStatus.Blocked, repeated.Status);
+        Assert.Equal(GuiSafetyReason.Busy, repeated.BlockedReason);
+        Assert.Equal(0, confirmation.CallCount);
+        Assert.Equal(1, input.ClickCount);
+    }
+
     [Fact]
     public async Task ConcurrentSecondIntentionIsBlockedWhileFirstWaitsForConfirmation()
     {

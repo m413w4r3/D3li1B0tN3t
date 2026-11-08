@@ -118,6 +118,9 @@ public sealed class GuiActionExecutor
                 return Failed(false, "The input operation failed.");
             }
 
+            if (inputResult.Status != GuiInputStatus.Sent && inputResult.ClickMayHaveBeenEmitted)
+                return Unconfirmed(true, inputResult.Detail ?? "The click command started but its outcome is uncertain.");
+
             if (inputResult.Status != GuiInputStatus.Sent)
                 return ConvertInputFailure(inputResult);
 

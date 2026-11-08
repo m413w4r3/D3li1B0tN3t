@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using D3B.Gui.Windowing;
 
@@ -147,24 +148,148 @@ public sealed class XdotoolGuiInput : IGuiInput
             return new GuiInputResult(GuiInputStatus.Canceled);
         }
 
-        CommandResult clickResult;
+        return await RunClickCommandAsync(childEnvironment, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<GuiInputResult> RunClickCommandAsync(
+        IReadOnlyDictionary<string, string?> environment,
+        CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+            return new GuiInputResult(GuiInputStatus.Canceled);
+
+        ProcessStartInfo startInfo = new()
+        {
+            FileName = _binaryPath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add("click");
+        startInfo.ArgumentList.Add("1");
+
+        foreach (KeyValuePair<string, string?> entry in environment)
+            startInfo.Environment[entry.Key] = entry.Value;
+
+        using Process process = new() { StartInfo = startInfo };
+        bool started;
 
         try
         {
-            clickResult = await ProcessCommandRunner.RunAsync(
-                _binaryPath,
-                ["click", "1"],
-                _commandTimeout,
-                childEnvironment,
-                cancellationToken).ConfigureAwait(false);
+            started = process.Start();
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (
+            exception is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
         {
-            return new GuiInputResult(GuiInputStatus.Canceled);
+            return new GuiInputResult(GuiInputStatus.Failed, SanitizeDetail(exception.Message));
         }
 
-        GuiInputResult? clickFailure = GetCommandFailure(clickResult);
-        return clickFailure ?? new GuiInputResult(GuiInputStatus.Sent);
+        if (!started)
+            return new GuiInputResult(GuiInputStatus.Failed, "The click command did not start.");
+
+        try
+        {
+            // Keep the Process.Start boundary visible because later click failures may follow emitted input.
+            Task standardOutputTask = DrainOutputAsync(process.StandardOutput.BaseStream);
+            Task standardErrorTask = DrainOutputAsync(process.StandardError.BaseStream);
+            using CancellationTokenSource timeoutSource = new(_commandTimeout);
+            using CancellationTokenSource linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                timeoutSource.Token);
+            Task completionTask = Task.WhenAll(
+                process.WaitForExitAsync(linkedSource.Token),
+                standardOutputTask,
+                standardErrorTask);
+            Task cancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, linkedSource.Token);
+            Task completedTask = await Task.WhenAny(completionTask, cancellationTask).ConfigureAwait(false);
+
+            if (completedTask != completionTask)
+            {
+                TerminateProcess(process);
+
+                if (cancellationToken.IsCancellationRequested)
+                    return new GuiInputResult(GuiInputStatus.Canceled, "The click command was canceled after launch.", true);
+
+                return new GuiInputResult(GuiInputStatus.TimedOut, "The click command timed out after launch.", true);
+            }
+
+            await completionTask.ConfigureAwait(false);
+
+            if (process.ExitCode != 0)
+            {
+                return new GuiInputResult(
+                    GuiInputStatus.Failed,
+                    $"The click command exited with code {process.ExitCode.ToString(CultureInfo.InvariantCulture)}.",
+                    true);
+            }
+
+            return new GuiInputResult(GuiInputStatus.Sent, ClickMayHaveBeenEmitted: true);
+        }
+        catch (OperationCanceledException)
+        {
+            TerminateProcess(process);
+
+            if (cancellationToken.IsCancellationRequested)
+                return new GuiInputResult(GuiInputStatus.Canceled, "The click command was canceled after launch.", true);
+
+            return new GuiInputResult(GuiInputStatus.TimedOut, "The click command timed out after launch.", true);
+        }
+        catch (Exception exception)
+        {
+            TerminateProcess(process);
+            return new GuiInputResult(GuiInputStatus.Failed, SanitizeDetail(exception.Message), true);
+        }
+    }
+
+    private static void TerminateProcess(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+        }
+
+        DisposePipe(process.StandardOutput);
+        DisposePipe(process.StandardError);
+    }
+
+    private static async Task DrainOutputAsync(Stream stream)
+    {
+        byte[] buffer = new byte[4096];
+
+        try
+        {
+            while (await stream.ReadAsync(buffer.AsMemory()).ConfigureAwait(false) != 0)
+            {
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private static void DisposePipe(StreamReader reader)
+    {
+        try
+        {
+            reader.Dispose();
+        }
+        catch (IOException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private static GuiInputResult? ValidateWindow(

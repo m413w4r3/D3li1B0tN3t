@@ -40,4 +40,23 @@ public static class GuiOptionsValidator
 
         return new GuiOptionsValidation(problems.Count is 0, problems.ToImmutable());
     }
+
+    /// <summary>Validates options at a composition boundary and rejects invalid startup configuration.</summary>
+    /// <remarks>P2O must also call this validator when the host starts.</remarks>
+    /// <param name="options">The options to validate.</param>
+    /// <exception cref="ArgumentNullException">The options are null.</exception>
+    /// <exception cref="ArgumentException">One or more GUI options violate the P2N policy.</exception>
+    public static void ValidateOrThrow(GuiOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        GuiOptionsValidation validation = Validate(options);
+
+        if (!validation.IsValid)
+        {
+            throw new ArgumentException(
+                $"Invalid GUI options: {string.Join(" ", validation.Problems)}",
+                nameof(options));
+        }
+    }
 }

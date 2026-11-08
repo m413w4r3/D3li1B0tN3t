@@ -18,6 +18,7 @@ public sealed class GuiActionGate
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
+        GuiOptionsValidator.ValidateOrThrow(options);
         _options = options;
         _timeProvider = timeProvider;
     }
@@ -97,6 +98,9 @@ public sealed class GuiActionGate
         {
             return Blocked(GuiSafetyReason.NotCalibrated, "A calibrated profile is required.");
         }
+
+        if (profile.WindowIdentity.Status != GameWindowIdentityStatus.Verified)
+            return Blocked(GuiSafetyReason.WindowIdentityUnverified, "The calibration window process identity is not verified.");
 
         DateTimeOffset now = _timeProvider.GetUtcNow();
         TimeSpan calibrationAge = now - profile.CreatedAt;
