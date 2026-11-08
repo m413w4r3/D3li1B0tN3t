@@ -1,7 +1,9 @@
 # Third-party notices
 
 The app published from this repository (D171) ships the components below, each under its own license: Lucide's icons
-in its code, and the libraries, runtime and typeface it is built with. Their licenses' texts follow the list.
+in its code, and the libraries, runtime and typeface it is built with. Their licenses' texts follow the list. The
+P2N reference table records package and source provenance, including external tools that are not distributed with
+or linked into the app.
 
 ## Lucide
 
@@ -59,7 +61,7 @@ SOFTWARE.
 | Component | Copyright | License |
 | --- | --- | --- |
 | .NET runtime, ASP.NET Core, Microsoft.Extensions, Entity Framework Core, Microsoft.Data.Sqlite | Microsoft Corporation and the .NET Foundation | MIT; the runtime's own notices: <https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT> |
-| Avalonia, with its Windows, Skia, HarfBuzz, Inter and themes packages | The AvaloniaUI Project | MIT |
+| Avalonia, with its Windows, Skia, HarfBuzz, Inter and themes packages | The AvaloniaUI Project | MIT; `references/Avalonia` HEAD `c4d24e9dab0310935664d0d3479ca7775b229228` |
 | ANGLE, in Avalonia.Angle.Windows.Natives | The ANGLE Project Authors | BSD-3-Clause |
 | SkiaSharp, HarfBuzzSharp | Xamarin, Inc. and Microsoft Corporation | MIT |
 | Skia | Google Inc. | BSD-3-Clause |
@@ -77,10 +79,20 @@ SOFTWARE.
 | SQLite | Its authors | Public domain |
 | Velopack | Velopack Ltd. | MIT |
 
+## P2N package and reference provenance
+
+| Package or reference | Version / source commit | License | Use in this repository |
+| --- | --- | --- | --- |
+| OpenCvSharp5 and OpenCvSharp5.official.runtime.linux-x64.slim | NuGet `5.0.0.20261018`; package nuspec at `references/opencvsharp` commit `d1768701c0731e40938debffa26a4c1747bac139`; source HEAD `c097fd06c2b2a8548273d8c5fbbe3aedd622414f` | Apache-2.0 | Package dependencies of `src/D3B.Gui`; Linux x64 slim runtime package supplies native OpenCV runtime assets. |
+| OpenCV | `references/opencv` HEAD `43f8b1f5dacd967e5f632dd4a45109f182d41dce` | Apache-2.0 | Native computer-vision library used through OpenCvSharp. |
+| xdotool | `references/xdotool` HEAD `14ca26a2c95035f9c635a6a11d075e8d7d0d6529` | BSD-3-Clause | External X11 utility; not distributed with or linked into this repository's app. |
+| maim | `references/maim` HEAD `14095622ab8dbb39533ea4152dded11d1d8843b3` | GPL-3.0 | External X11 utility; not distributed with or linked into this repository's app. |
+| Hybrid-Computer-Use | `references/Hybrid-Computer-Use` HEAD `697d3fbda04cb322915866bab1aad79c726a61e3` | MIT | Concepts only; no code, SDK, or daemon is copied into this repository. |
+
 ## SniffSniffSquared (adapted)
 
-The Rust diagnostic crate adapts selected code and approaches from SniffSniffSquared (SNS), commit
-`c780035c9020058a772ac8a2eef09555acd5a173`, under the MIT License. Adapted files are:
+The Rust diagnostic crate adapts selected code and approaches from SniffSniffSquared (SNS),
+`references/SniffSniffSquared` HEAD commit `c780035c9020058a772ac8a2eef09555acd5a173`, under the MIT License. Adapted files are:
 
 - `rust/d3b-diagnostic/src/wire/reader.rs` from `sniffer/src/pb.rs`
 - `rust/d3b-diagnostic/src/schema/model.rs` and `rust/d3b-diagnostic/src/schema/walker.rs` from the approach in `sniffer/src/schema.rs`
@@ -243,7 +255,7 @@ DISCLAIMER
 THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER DEALINGS IN THE FONT SOFTWARE.
 ```
 
-## Apache-2.0, for SQLitePCLRaw
+## Apache-2.0, for SQLitePCLRaw, OpenCvSharp5, and OpenCV
 
 ```text
 Apache License

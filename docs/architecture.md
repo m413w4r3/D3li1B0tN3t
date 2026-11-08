@@ -86,9 +86,11 @@ each step adds the references it needs.
 | `src/D3B.Data` | Data pack format and runtime readers: maps, cells, world graph, items, spells, monsters, interactives, texts. |
 | `src/D3B.Engine` | Pure logic with no I/O: cell and world pathfinding, line of sight, fight simulation. |
 | `src/D3B.Bot` | The bot's run time: actor, state, behaviors, recovery, activities and their settings, pages, the default modules, and the host's composition the app and `D3B.Host` share. |
+| `src/D3B.Gui` | X11 windowing and capture, affine calibration, bounded template localization, input and safety contracts, and offline preview. |
 | `src/D3B.Host` | The bots' host without the app, for measurements: its entry point alone, with the database (D91, D100). |
 | `src/D3B.Storage` | D3B's database, SQLite through EF Core and its migrations: the accounts seen and the profiles, which the app and `D3B.Host` share (D100). |
 | `src/D3B.App` | The Avalonia desktop app, which runs the bots' host in its process (D91). |
+| `tests/D3B.Gui.Tests` | Synthetic GUI contracts and Linux Xvfb tests against fake windows. |
 | `scripts/` | Inspection, extraction, release and mapping tools, and the bench of the fights' effects, as file-based apps. |
 | `tests/`, `benchmarks/` | One test project per `src/` project that has logic; benchmarks for the codec and pathfinding. |
 

@@ -98,3 +98,18 @@ within the initial 4 px median fit and 8 px maximum validation limits.
 These fixtures test only the coordinate math and file contract. No real-client screenshot, capture path, automatic
 vision, action gate, or executor is part of P2N-C. Initial thresholds are design values and require later measurement
 against supervised, manually annotated client screenshots.
+
+## Final window identity rule
+
+The action gate and target matcher compare the numeric XID every time. They compare ProcessId and ExecutablePath only
+when both identities provide the corresponding value, and ignore Title and Status for equality. A title is never
+identity evidence. Separately, GuiActionGate requires Status=Verified on the current window snapshot before returning
+Ready. An explicitly selected XID with unavailable process identity may still be used for Preview, but it cannot
+authorize an action.
+
+Calibration profile revalidation has a stricter implementation check: `CalibrationValidator.ValidateProfile`
+compares XID, ProcessId, and ExecutablePath exactly, so a process identity appearing or disappearing invalidates
+that stored profile. Its environment does not include a current client-build value, so this revalidation does not
+compare `ClientBuild`; the build is recorded in the profile. `CalibrationId` includes XID, optional ProcessId,
+ExecutablePath, and Status, but not Title. The action gate's current-window `Verified` requirement remains separate
+from its identity equality rule.
