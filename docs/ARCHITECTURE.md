@@ -24,8 +24,8 @@ This page describes the Linux fork's changes and boundaries. The upstream design
 
 The layers still follow the upstream module model: `src/D3B.Bot/DefaultModules.cs` composes features, and modules register
 services through `src/D3B.Core/Modules/IModule.cs` and `src/D3B.Core/Modules/BotBuilder.cs`. The Linux changes do not
-add a platform-specific host or a second runtime stack. P2N adds no host or second runtime, and `D3B.Gui` is not wired
-to a host or gameplay trigger.
+add a platform-specific host or a second runtime stack. Both host entry points validate `Gui` options at startup and
+expose a `GuiHostCapability`; the hosts register no GUI executor, input, capture loop, or gameplay trigger.
 
 ## Caller-facing contracts
 
