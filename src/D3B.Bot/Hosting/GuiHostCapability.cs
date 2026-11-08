@@ -11,6 +11,9 @@ public sealed class GuiHostCapability
     /// <summary>Gets the configured GUI operating mode.</summary>
     public GuiMode Mode { get; }
 
+    /// <summary>Gets how new game sessions admit D3B requests.</summary>
+    public GameInputMode InputMode { get; }
+
     /// <summary>Gets whether real GUI input is allowed by configuration.</summary>
     public bool AllowRealInput { get; }
 
@@ -25,14 +28,15 @@ public sealed class GuiHostCapability
 
     /// <summary>Initializes a new disabled GUI capability with preview mode and no input or activity.</summary>
     public GuiHostCapability()
-        : this(false, GuiMode.Preview, false)
+        : this(false, GuiMode.Preview, false, GameInputMode.ProtocolInjection)
     {
     }
 
-    internal GuiHostCapability(bool enabled, GuiMode mode, bool allowRealInput)
+    internal GuiHostCapability(bool enabled, GuiMode mode, bool allowRealInput, GameInputMode inputMode = GameInputMode.ProtocolInjection)
     {
         Enabled = enabled;
         Mode = mode;
+        InputMode = inputMode;
         AllowRealInput = allowRealInput;
         AutomaticActivity = false;
         SupervisedOneShotAvailable = false;

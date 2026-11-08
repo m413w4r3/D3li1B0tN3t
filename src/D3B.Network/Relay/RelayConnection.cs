@@ -1,12 +1,10 @@
 namespace D3B.Network.Relay;
 
 /// <summary>A connection the relay took, as it shows it to its interceptor.</summary>
-internal sealed class RelayConnection : IRelayConnection, IRelayAdmissionModeController
+internal sealed class RelayConnection : IRelayConnection, IRelayAdmissionConnection, IRelayAdmissionModeController
 {
     private readonly InjectedFrames _injected;
     private readonly RelayObservationTracker _observation;
-    private AdmissionSnapshot _admission = new(0, false);
-
     public string Id { get; }
 
     public RelayRoute Route { get; }
@@ -24,45 +22,47 @@ internal sealed class RelayConnection : IRelayConnection, IRelayAdmissionModeCon
 
     void IRelayAdmissionModeController.SetAdmissionMode(long version, bool requiresTypedAdmission)
     {
-        Volatile.Write(ref _admission, new AdmissionSnapshot(version, requiresTypedAdmission));
+        _injected.SetAdmissionMode(version, requiresTypedAdmission);
     }
 
     public Task SendToServerAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken = default)
     {
-        return SendCoreAsync(frame, stillAdmitted: null, cancellationToken);
+        return SendCoreAsync(frame, admission: null, cancellationToken);
     }
 
-    public Task SendToServerAsync(ReadOnlyMemory<byte> frame, Func<bool> stillAdmitted, CancellationToken cancellationToken = default)
+    Task IRelayAdmissionConnection.SendAdmittedAsync(ReadOnlyMemory<byte> frame, RelaySendAdmission admission, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(stillAdmitted);
+        ArgumentNullException.ThrowIfNull(admission);
+        var snapshot = frame.ToArray();
 
-        return SendCoreAsync(frame, stillAdmitted, cancellationToken);
+        if (!admission.IsBoundTo(snapshot))
+            throw new RelayInjectionException("The frame did not go: its admission capability belongs to another frame.");
+
+        return SendCoreAsync(snapshot, admission, cancellationToken);
     }
 
-    private async Task SendCoreAsync(ReadOnlyMemory<byte> frame, Func<bool>? stillAdmitted, CancellationToken cancellationToken)
+    internal Action? BeforeFinalAdmissionCheck
     {
-        var admission = Volatile.Read(ref _admission);
+        get => _injected.BeforeFinalAdmissionCheck;
+        set => _injected.BeforeFinalAdmissionCheck = value;
+    }
+
+    internal Action? AfterFinalAdmissionCheck
+    {
+        get => _injected.AfterFinalAdmissionCheck;
+        set => _injected.AfterFinalAdmissionCheck = value;
+    }
+
+    private async Task SendCoreAsync(ReadOnlyMemory<byte> frame, RelaySendAdmission? admission, CancellationToken cancellationToken)
+    {
 
         if (_observation.IsFailed)
             throw new RelayInjectionException("The frame did not go: the connection's frames are no longer observable, so there are no frames safe to insert between.");
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _observation.Failed);
-        var admissionCheck = new Func<bool>(() =>
-        {
-            var current = Volatile.Read(ref _admission);
-
-            if (current.Version != admission.Version)
-                return false;
-
-            if (admission.RequiresTypedAdmission && stillAdmitted is null)
-                return false;
-
-            return stillAdmitted?.Invoke() ?? true;
-        });
-
         try
         {
-            await _injected.SendAsync(frame, linked.Token, () => !_observation.IsFailed, admissionCheck).ConfigureAwait(false);
+            await _injected.SendAsync(frame, linked.Token, () => !_observation.IsFailed, admission).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (_observation.IsFailed && !cancellationToken.IsCancellationRequested)
         {
@@ -75,16 +75,4 @@ internal sealed class RelayConnection : IRelayConnection, IRelayAdmissionModeCon
         return _observation.WaitAsync(cancellationToken);
     }
 
-    private sealed class AdmissionSnapshot
-    {
-        public long Version { get; }
-
-        public bool RequiresTypedAdmission { get; }
-
-        public AdmissionSnapshot(long version, bool requiresTypedAdmission)
-        {
-            Version = version;
-            RequiresTypedAdmission = requiresTypedAdmission;
-        }
-    }
 }

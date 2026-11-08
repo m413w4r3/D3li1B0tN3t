@@ -20,6 +20,12 @@ public static class GuiOptionsValidator
         if (!Enum.IsDefined(options.Mode))
             problems.Add("Gui:Mode must name a supported mode.");
 
+        if (!Enum.IsDefined(options.InputMode))
+            problems.Add("Gui:InputMode must name a supported game input mode.");
+
+        if (options.InputMode is GameInputMode.GuiClientInput && !options.Enabled)
+            problems.Add("Gui:InputMode=GuiClientInput requires Gui:Enabled=true.");
+
         if (options.AllowRealInput)
             problems.Add("Real input is refused in P2N (Gui:AllowRealInput).");
 

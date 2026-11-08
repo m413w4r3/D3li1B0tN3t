@@ -29,6 +29,7 @@ namespace D3B.Bot.Network;
 public sealed class GameSession : IConnectionInterceptor
 {
     private readonly IRelayConnection _connection;
+    private readonly IRelayAdmissionConnection? _admissionConnection;
     private readonly IRelayAdmissionModeController? _admissionModeController;
     private readonly ProtocolTranslation _translation;
     private readonly GameAccounts _accounts;
@@ -39,6 +40,7 @@ public sealed class GameSession : IConnectionInterceptor
     private RelayInjectionException? _translationFailure;
     private readonly CancellationTokenSource _translationFailureSignal = new();
     private readonly object _inputAdmissionLock = new();
+    private volatile bool _superseded;
     private InputAdmissionSnapshot _inputAdmission = new(
         GameInputMode.ProtocolInjection,
         new DescriptorGameInputRequestClassifier([]),
@@ -91,6 +93,12 @@ public sealed class GameSession : IConnectionInterceptor
         }
     }
 
+    internal void ConfigureInputAdmission(GameInputMode mode, IGameInputRequestClassifier<IMessage> classifier)
+    {
+        ArgumentNullException.ThrowIfNull(classifier);
+        UpdateInputAdmission(mode, classifier);
+    }
+
     internal Func<IMessage, bool>? SendGate
     {
         get
@@ -125,6 +133,7 @@ public sealed class GameSession : IConnectionInterceptor
     private GameSession(IRelayConnection connection, ProtocolTranslation translation, GameAccounts accounts, IReadOnlyList<IGameObserver> observers, ILogger log)
     {
         _connection = connection;
+        _admissionConnection = connection as IRelayAdmissionConnection;
         _admissionModeController = connection as IRelayAdmissionModeController;
         _translation = translation;
         _accounts = accounts;
@@ -208,26 +217,21 @@ public sealed class GameSession : IConnectionInterceptor
             ThrowIfTranslationFailed();
 
         var frame = _translation.EncodeGameRequest(request);
-        Func<bool> stillAdmitted = () => IsStillAdmitted(admission, request);
+        var relay = _admissionConnection
+            ?? throw new RelayInjectionException("The frame did not go: the connection does not support session-bound admission.");
+        var relayAdmission = new RelaySendAdmission(admission.Version, frame, () => IsStillAdmitted(admission, request));
+        using var linked = movement
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _translationFailureSignal.Token)
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        if (!movement)
+        try
         {
-            await _connection.SendToServerAsync(frame, stillAdmitted, cancellationToken);
+            await relay.SendAdmittedAsync(frame, relayAdmission, linked.Token).ConfigureAwait(false);
         }
-        else
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested && movement && IsMovementTranslationBlocked)
         {
-            // The relay can queue the frame behind the client's injection gate after the check above. Link its token to
-            // the latch so a frame still queued when an unread frame arrives is withdrawn instead of written.
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _translationFailureSignal.Token);
-
-            try
-            {
-                await _connection.SendToServerAsync(frame, stillAdmitted, linked.Token);
-            }
-            catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested && IsMovementTranslationBlocked)
-            {
-                throw new RelayInjectionException("The frame did not go: the session's movement translation latch closed.", exception);
-            }
+            // The relay can queue a movement frame behind its injection gate after the earlier latch check.
+            throw new RelayInjectionException("The frame did not go: the session's movement translation latch closed.", exception);
         }
 
         GameLog.Sent(_log, Id, request.Descriptor.Name, frame.Length);
@@ -312,7 +316,10 @@ public sealed class GameSession : IConnectionInterceptor
     {
         lock (_inputAdmissionLock)
         {
-            var current = _inputAdmission;
+            if (_superseded)
+                return;
+
+            var current = Volatile.Read(ref _inputAdmission);
             var nextMode = mode ?? current.Mode;
             var nextClassifier = classifier ?? current.Classifier;
 
@@ -328,9 +335,12 @@ public sealed class GameSession : IConnectionInterceptor
 
     private InputAdmissionSnapshot EnsureAdmitted(IMessage request)
     {
+        if (_superseded)
+            throw new InvalidOperationException("The request is not allowed because its game session was superseded.");
+
         var admission = Volatile.Read(ref _inputAdmission);
 
-        if (!IsAllowed(admission, request))
+        if (!IsAllowed(admission, request) || !IsCurrent(admission))
             throw new InvalidOperationException("The request is not allowed by the current game input mode.");
 
         return admission;
@@ -338,17 +348,35 @@ public sealed class GameSession : IConnectionInterceptor
 
     private bool IsStillAdmitted(InputAdmissionSnapshot admission, IMessage request)
     {
+        return IsCurrent(admission)
+            && IsAllowed(admission, request)
+            && IsCurrent(admission);
+    }
+
+    private bool IsCurrent(InputAdmissionSnapshot admission)
+    {
+        var current = Volatile.Read(ref _inputAdmission);
+
+        return !_superseded && current.Version == admission.Version && current.Mode == admission.Mode;
+    }
+
+    /// <summary>Invalidates queued requests when this game connection no longer owns its character.</summary>
+    internal void Supersede()
+    {
         lock (_inputAdmissionLock)
         {
+            if (_superseded)
+                return;
+
             var current = Volatile.Read(ref _inputAdmission);
+            var next = new InputAdmissionSnapshot(current.Mode, current.Classifier, current.Version + 1);
 
-            if (current.Version != admission.Version || current.Mode != admission.Mode)
-                return false;
+            _superseded = true;
 
-            var allowed = IsAllowed(admission, request);
-            var afterClassification = Volatile.Read(ref _inputAdmission);
-
-            return allowed && afterClassification.Version == admission.Version;
+            // The relay watermark shares its lock with the final check and write. A drain that already passed that
+            // check writes first; any later drain observes this version and rejects the frame.
+            _admissionModeController?.SetAdmissionMode(next.Version, requiresTypedAdmission: true);
+            Volatile.Write(ref _inputAdmission, next);
         }
     }
 

@@ -12,6 +12,9 @@ public sealed record GuiOptions
     /// <summary>Gets the GUI operating mode.</summary>
     public GuiMode Mode { get; init; } = GuiMode.Preview;
 
+    /// <summary>Gets how new game sessions admit D3B requests.</summary>
+    public GameInputMode InputMode { get; init; } = GameInputMode.ProtocolInjection;
+
     /// <summary>Gets whether real GUI input is allowed.</summary>
     public bool AllowRealInput { get; init; }
 

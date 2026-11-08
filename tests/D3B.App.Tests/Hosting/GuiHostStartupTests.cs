@@ -38,6 +38,8 @@ public sealed class GuiHostStartupTests
     [InlineData("Gui:CalibrationMaxAgeSeconds", "31")]
     [InlineData("Gui:Mode", "999")]
     [InlineData("Gui:Backend", "999")]
+    [InlineData("Gui:InputMode", "999")]
+    [InlineData("Gui:InputMode", "GuiClientInput")]
     public void InvalidGuiOptionsAreRejected(string key, string value)
     {
         IConfiguration configuration = CreateConfiguration(new Dictionary<string, string?> { [key] = value });
@@ -73,6 +75,8 @@ public sealed class GuiHostStartupTests
     [InlineData("Gui:CalibrationMaxAgeSeconds", "31")]
     [InlineData("Gui:Mode", "999")]
     [InlineData("Gui:Backend", "999")]
+    [InlineData("Gui:InputMode", "999")]
+    [InlineData("Gui:InputMode", "GuiClientInput")]
     public async Task InvalidGuiOptionsFailTheAppRunnerBeforeTheStartDelegateRuns(string key, string value)
     {
         var startCount = 0;
@@ -141,6 +145,7 @@ public sealed class GuiHostStartupTests
     {
         Assert.False(capability.Enabled);
         Assert.Equal(GuiMode.Preview, capability.Mode);
+        Assert.Equal(GameInputMode.ProtocolInjection, capability.InputMode);
         Assert.False(capability.AllowRealInput);
         Assert.False(capability.AutomaticActivity);
         Assert.False(capability.SupervisedOneShotAvailable);
