@@ -64,5 +64,38 @@ public enum TargetEvidence
     TemplateIncompatible,
 
     /// <summary>The template is larger than the bounded search region.</summary>
-    TemplateTooLarge
+    TemplateTooLarge,
+
+    /// <summary>The requested map differs from the calibration map.</summary>
+    MapMismatch,
+
+    /// <summary>The requested map identifier is not positive.</summary>
+    InvalidMapId,
+
+    /// <summary>The captured frame and calibration name different verified windows.</summary>
+    WindowMismatch,
+
+    /// <summary>The frame dimensions or capture observations do not bind to the calibration.</summary>
+    FrameBindingMismatch,
+
+    /// <summary>The supplied measured client geometry is invalid or differs from the profile.</summary>
+    InvalidClientAreaGeometry,
+
+    /// <summary>The projected point is outside the measured client area.</summary>
+    OutsideClientArea,
+
+    /// <summary>The projected point does not retain the requested client-area margin.</summary>
+    InsufficientClientAreaMargin,
+
+    /// <summary>The target cell is known to contain an interactive element.</summary>
+    InteractiveElementCell,
+
+    /// <summary>The configured safety margin is negative.</summary>
+    InvalidSafetyMargin,
+
+    /// <summary>An interactive-element cell is outside the valid logical cell range.</summary>
+    InvalidInteractiveCell,
+
+    /// <summary>The affine projection cannot be represented as integer pixel coordinates.</summary>
+    ProjectionUnrepresentable
 }

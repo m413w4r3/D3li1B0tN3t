@@ -106,6 +106,11 @@ rectangles and known other element cells are checked. Verified proposes the cand
 pass. Ambiguous records competing peaks or known-cell overlap; Unverified records missing or failed evidence. There
 is no fallback click at the projected cell center.
 
+`TerrainCellTargetLocator` provides a separate projection-only result for a future terrain-cell action. It uses the
+calibration's `MapGeometry` projection and checks the measured client area, caller margin, caller-supplied exclusions,
+and known interactive cells. Its Verified status establishes only those geometric checks; it does not recognize terrain,
+prove that a cell is walkable, or identify visual scene content. It has no template or fallback click path.
+
 These initial thresholds are not universal safety guarantees. No Dofus resource imagery was used to establish them.
 
 ## GuiWorldSnapshot
