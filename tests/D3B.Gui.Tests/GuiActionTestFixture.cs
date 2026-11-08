@@ -184,7 +184,9 @@ internal sealed class GuiActionTestFixture : IDisposable
         int elementId = ElementId,
         Guid? captureId = null,
         string? calibrationId = null,
-        WindowLocalPixels? proposedClickPoint = null)
+        WindowLocalPixels? proposedClickPoint = null,
+        int? frameWidth = null,
+        int? frameHeight = null)
     {
         return new TargetRegion(
             mapId ?? MapId,
@@ -199,7 +201,10 @@ internal sealed class GuiActionTestFixture : IDisposable
             status,
             null,
             captureId ?? Frame.CaptureId,
-            calibrationId ?? Calibration.Profile!.CalibrationId);
+            calibrationId ?? Calibration.Profile!.CalibrationId,
+            new WindowLocalPixels(500, 400),
+            frameWidth ?? Frame.PixelWidth,
+            frameHeight ?? Frame.PixelHeight);
     }
 
     public void ReplaceFrame(CapturedFrame frame)

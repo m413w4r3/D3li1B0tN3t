@@ -41,6 +41,14 @@ public sealed class TemplateTargetLocatorTests
         Assert.Contains(TargetEvidence.NearExpectedCell, result.Confidence.Evidence);
         Assert.Equal(frame.CaptureId, result.CaptureId);
         Assert.Equal(calibration.CalibrationId, result.CalibrationId);
+        Assert.Equal(frame.PixelWidth, result.FrameWidth);
+        Assert.Equal(frame.PixelHeight, result.FrameHeight);
+        Assert.Equal(SyntheticTargetLocatorFixtures.ProjectedCellCenter(calibration), result.ExpectedVisualCenter);
+        Assert.Equal(expectation.MapId, result.MapId);
+        Assert.Equal(expectation.ElementId, result.ElementId);
+        Assert.Equal(expectation.Cell, result.Cell);
+        Assert.Equal(expectation.GfxId, result.GfxId);
+        Assert.Equal(expectation.ExpectedSkillId, result.ExpectedSkillId);
     }
 
     [Fact]
@@ -170,7 +178,7 @@ public sealed class TemplateTargetLocatorTests
     }
 
     [Fact]
-    public void SearchRegionClippedByImageEdgeIsRejected()
+    public void SearchRegionClipsSafelyAtImageEdgeWithoutAProposal()
     {
         using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
         var mapper = SyntheticTargetLocatorFixtures.CreateMapper(translateX: -33, translateY: 244);
@@ -182,7 +190,7 @@ public sealed class TemplateTargetLocatorTests
         var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
 
         Assert.Equal(TargetStatus.Unverified, result.Status);
-        Assert.Equal(TargetEvidence.RegionOutOfFrame, result.Reason);
+        Assert.Equal(TargetEvidence.ScoreTooLow, result.Reason);
         Assert.Null(result.ProposedClickPoint);
     }
 
@@ -380,6 +388,223 @@ public sealed class TemplateTargetLocatorTests
 
         Assert.Equal(TargetStatus.Unverified, result.Status);
         Assert.Equal(TargetEvidence.TemplateTooLarge, result.Reason);
+        Assert.Null(result.ProposedClickPoint);
+    }
+
+    [Fact]
+    public void TallTemplateRequiresAnAnchorAndLargerSearchRadius()
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate(75, 130);
+        var projectedCenter = new WindowLocalPixels(1591, 824);
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibrationAt(projectedCenter);
+        var bounds = new WindowLocalRect(1554, 705, 75, 130);
+        using var image = SyntheticTargetLocatorFixtures.CreateImage(1920, 1175, template, bounds);
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration);
+        var defaultExpectation = SyntheticTargetLocatorFixtures.CreateExpectation(template);
+        var adjustedExpectation = SyntheticTargetLocatorFixtures.CreateExpectation(
+            template,
+            searchRadiusPixels: 128,
+            anchorOffset: new WindowLocalOffset(0, -14));
+
+        var defaultResult = new TemplateTargetLocator().Locate(frame, calibration, defaultExpectation);
+        var adjustedResult = new TemplateTargetLocator().Locate(frame, calibration, adjustedExpectation);
+
+        Assert.Equal(TargetStatus.Unverified, defaultResult.Status);
+        Assert.Null(defaultResult.ProposedClickPoint);
+        Assert.Contains(TargetEvidence.ScoreTooLow, defaultResult.Confidence.Evidence);
+        Assert.Equal(TargetStatus.Verified, adjustedResult.Status);
+        Assert.Equal(bounds, adjustedResult.VisualBoundingBox);
+        Assert.Equal(new WindowLocalPixels(1591, 810), adjustedResult.ExpectedVisualCenter);
+        Assert.Equal(new WindowLocalPixels(1591, 770), adjustedResult.ProposedClickPoint);
+    }
+
+    [Fact]
+    public void CandidateDistanceUsesTheAnchorAdjustedVisualCenter()
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
+        var projectedCenter = SyntheticTargetLocatorFixtures.ProjectedCellCenter();
+        var expectedCenter = new WindowLocalPixels(projectedCenter.X, projectedCenter.Y - 40);
+        var targetCenter = new WindowLocalPixels(projectedCenter.X, projectedCenter.Y - 90);
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibration();
+        var bounds = new WindowLocalRect(
+            targetCenter.X - (template.Cols / 2),
+            targetCenter.Y - (template.Rows / 2),
+            template.Cols,
+            template.Rows);
+        using var image = SyntheticTargetLocatorFixtures.CreateImage(template, bounds);
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration);
+        var expectation = SyntheticTargetLocatorFixtures.CreateExpectation(
+            template,
+            searchRadiusPixels: 128,
+            maxCenterDistancePixels: 64,
+            anchorOffset: new WindowLocalOffset(0, -40));
+
+        var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
+
+        Assert.Equal(TargetStatus.Verified, result.Status);
+        Assert.Equal(expectedCenter, result.ExpectedVisualCenter);
+        Assert.Equal(targetCenter, result.ProposedClickPoint);
+    }
+
+    [Fact]
+    public void TargetSpecificClickOffsetMovesTheProposedPoint()
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibration();
+        var bounds = SyntheticTargetLocatorFixtures.CenteredTargetBounds(calibration);
+        using var image = SyntheticTargetLocatorFixtures.CreateImage(template, bounds);
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration);
+        var expectation = SyntheticTargetLocatorFixtures.CreateExpectation(
+            template,
+            clickOffset: new WindowLocalOffset(3, -4));
+
+        var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
+
+        Assert.Equal(TargetStatus.Verified, result.Status);
+        var projectedCenter = SyntheticTargetLocatorFixtures.ProjectedCellCenter(calibration);
+        var expectedClickPoint = new WindowLocalPixels(projectedCenter.X + 3, projectedCenter.Y - 4);
+        Assert.Equal(expectedClickPoint, result.ProposedClickPoint);
+    }
+
+    [Fact]
+    public void TopLeftNameplateExclusionBlocksCandidate()
+    {
+        AssertExclusionBlocksCandidate(
+            new WindowLocalPixels(120, 80),
+            new WindowLocalRect(0, 0, 220, 120));
+    }
+
+    [Fact]
+    public void TopRightIconsExclusionBlocksCandidate()
+    {
+        AssertExclusionBlocksCandidate(
+            new WindowLocalPixels(1810, 45),
+            new WindowLocalRect(1690, 0, 230, 100));
+    }
+
+    [Fact]
+    public void RightSideBarExclusionBlocksCandidate()
+    {
+        AssertExclusionBlocksCandidate(
+            new WindowLocalPixels(1900, 600),
+            new WindowLocalRect(1880, 100, 40, 900));
+    }
+
+    [Fact]
+    public void ClickPointInsideExclusionBlocksCandidateEvenWhenItsBoxIsClear()
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibration();
+        var bounds = SyntheticTargetLocatorFixtures.CenteredTargetBounds(calibration);
+        using var image = SyntheticTargetLocatorFixtures.CreateImage(template, bounds);
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration);
+        var projectedCenter = SyntheticTargetLocatorFixtures.ProjectedCellCenter(calibration);
+        var clickPoint = new WindowLocalPixels(projectedCenter.X + 100, projectedCenter.Y);
+        var exclusion = new WindowLocalRect(clickPoint.X - 4, clickPoint.Y - 4, 8, 8);
+        var expectation = SyntheticTargetLocatorFixtures.CreateExpectation(
+            template,
+            exclusions: [exclusion],
+            clickOffset: new WindowLocalOffset(100, 0));
+
+        var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
+
+        Assert.Equal(TargetStatus.Unverified, result.Status);
+        Assert.Equal(TargetEvidence.BlockedByExclusion, result.Reason);
+        Assert.Null(result.ProposedClickPoint);
+    }
+
+    [Fact]
+    public void ClickOffsetOutsideFrameIsRejectedWithoutAProposal()
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibration();
+        var bounds = SyntheticTargetLocatorFixtures.CenteredTargetBounds(calibration);
+        using var image = SyntheticTargetLocatorFixtures.CreateImage(template, bounds);
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration);
+        var expectation = SyntheticTargetLocatorFixtures.CreateExpectation(
+            template,
+            clickOffset: new WindowLocalOffset(8192, 0));
+
+        var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
+
+        Assert.Equal(TargetStatus.Unverified, result.Status);
+        Assert.Equal(TargetEvidence.ClickPointOutOfFrame, result.Reason);
+        Assert.Null(result.ProposedClickPoint);
+    }
+
+    [Fact]
+    public void OffsetOverflowIsRejectedWithoutAProposal()
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
+        var logicalPoint = MapGeometry.PointOf(SyntheticTargetLocatorFixtures.CellId);
+        Assert.True(AffineScreenMapper.TryCreate(
+            [1, 0, int.MaxValue - logicalPoint.X - 50, 0, 1, 200 - logicalPoint.Y],
+            out var mapper));
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibration(mapper);
+        using var image = SyntheticTargetLocatorFixtures.CreateImage();
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration);
+        var expectation = SyntheticTargetLocatorFixtures.CreateExpectation(
+            template,
+            anchorOffset: new WindowLocalOffset(100, 0));
+
+        var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
+
+        Assert.Equal(TargetStatus.Unverified, result.Status);
+        Assert.Equal(TargetEvidence.InvalidOffset, result.Reason);
+        Assert.Null(result.ProposedClickPoint);
+    }
+
+    [Fact]
+    public void InvalidOffsetsSearchBoundsAndExclusionRectanglesAreRejected()
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => new WindowLocalOffset(double.NaN, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new WindowLocalOffset(0, double.PositiveInfinity));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new WindowLocalOffset(8193, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SyntheticTargetLocatorFixtures.CreateExpectation(template, searchRadiusPixels: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SyntheticTargetLocatorFixtures.CreateExpectation(template, searchRadiusPixels: 4097));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SyntheticTargetLocatorFixtures.CreateExpectation(template, maxCenterDistancePixels: 8193));
+        Assert.Throws<ArgumentException>(() => SyntheticTargetLocatorFixtures.CreateExpectation(template, exclusions: [new WindowLocalRect(1, 1, 0, 5)]));
+        Assert.Throws<ArgumentException>(() => SyntheticTargetLocatorFixtures.CreateExpectation(template, exclusions: [new WindowLocalRect(int.MaxValue, 0, 2, 1)]));
+        Assert.Throws<ArgumentException>(() => SyntheticTargetLocatorFixtures.CreateExpectation(template, exclusions: [new WindowLocalRect(-1, 0, 2, 1)]));
+        AssertInvalidExclusionOutsideFrame(template);
+    }
+
+    private static void AssertExclusionBlocksCandidate(WindowLocalPixels center, WindowLocalRect exclusion)
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibrationAt(center);
+        Assert.Equal(center, SyntheticTargetLocatorFixtures.ProjectedCellCenter(calibration));
+        var bounds = new WindowLocalRect(
+            center.X - (template.Cols / 2),
+            center.Y - (template.Rows / 2),
+            template.Cols,
+            template.Rows);
+        using var image = SyntheticTargetLocatorFixtures.CreateImage(1920, 1175, template, bounds);
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration);
+        var expectation = SyntheticTargetLocatorFixtures.CreateExpectation(template, exclusions: [exclusion]);
+
+        var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
+
+        Assert.Equal(TargetStatus.Unverified, result.Status);
+        Assert.Equal(TargetEvidence.BlockedByExclusion, result.Reason);
+        Assert.Null(result.ProposedClickPoint);
+    }
+
+    private static void AssertInvalidExclusionOutsideFrame(Mat template)
+    {
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibration();
+        using var image = SyntheticTargetLocatorFixtures.CreateImage();
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration);
+        var expectation = SyntheticTargetLocatorFixtures.CreateExpectation(
+            template,
+            exclusions: [new WindowLocalRect(frame.PixelWidth - 4, 0, 8, 8)]);
+
+        var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
+
+        Assert.Equal(TargetStatus.Unverified, result.Status);
+        Assert.Equal(TargetEvidence.InvalidExclusion, result.Reason);
         Assert.Null(result.ProposedClickPoint);
     }
 }

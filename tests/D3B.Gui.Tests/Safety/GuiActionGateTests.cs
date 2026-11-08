@@ -27,6 +27,8 @@ public sealed class GuiActionGateTests
     [InlineData("CalibrationIdentityUnverified", GuiSafetyReason.WindowIdentityUnverified)]
     [InlineData("TargetUnverified", GuiSafetyReason.TargetUnverified)]
     [InlineData("TargetIdentityChanged", GuiSafetyReason.TargetUnverified)]
+    [InlineData("TargetFrameWidthChanged", GuiSafetyReason.TargetUnverified)]
+    [InlineData("TargetFrameHeightChanged", GuiSafetyReason.TargetUnverified)]
     [InlineData("AmbiguousTarget", GuiSafetyReason.AmbiguousTarget)]
     [InlineData("Disconnected", GuiSafetyReason.Disconnected)]
     [InlineData("MapUnknown", GuiSafetyReason.MapUnknown)]
@@ -263,6 +265,12 @@ public sealed class GuiActionGateTests
                 break;
             case "TargetIdentityChanged":
                 fixture.Target = fixture.CreateTarget(calibrationId: "another-profile");
+                break;
+            case "TargetFrameWidthChanged":
+                fixture.Target = fixture.CreateTarget(frameWidth: fixture.Frame.PixelWidth - 1);
+                break;
+            case "TargetFrameHeightChanged":
+                fixture.Target = fixture.CreateTarget(frameHeight: fixture.Frame.PixelHeight - 1);
                 break;
             case "AmbiguousTarget":
                 fixture.Target = fixture.CreateTarget(TargetStatus.Ambiguous);

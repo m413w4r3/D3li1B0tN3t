@@ -51,7 +51,7 @@ internal static class SyntheticTargetLocatorFixtures
             identity,
             captureWidth,
             captureHeight,
-            new ClientAreaGeometry(new DesktopPixels(0, 0), new ClientAreaPixels(0, 0), ImageWidth, ImageHeight),
+            new ClientAreaGeometry(new DesktopPixels(0, 0), new ClientAreaPixels(0, 0), captureWidth, captureHeight),
             1.0,
             1,
             actualMapper,
@@ -63,11 +63,16 @@ internal static class SyntheticTargetLocatorFixtures
 
     public static Mat CreateTemplate(bool similarVariant = false)
     {
-        var template = new Mat(TemplateHeight, TemplateWidth, MatType.CV_8UC3);
+        return CreateTemplate(TemplateWidth, TemplateHeight, similarVariant);
+    }
 
-        for (var y = 0; y < TemplateHeight; y++)
+    public static Mat CreateTemplate(int width, int height, bool similarVariant = false)
+    {
+        var template = new Mat(height, width, MatType.CV_8UC3);
+
+        for (var y = 0; y < height; y++)
         {
-            for (var x = 0; x < TemplateWidth; x++)
+            for (var x = 0; x < width; x++)
             {
                 var blue = (x * 17 + y * 31 + x * y * 3) % 256;
                 var green = (x * 43 + y * 11 + x * y * 5 + 61) % 256;
@@ -89,7 +94,12 @@ internal static class SyntheticTargetLocatorFixtures
 
     public static Mat CreateImage(Mat? target = null, params WindowLocalRect[] targetBounds)
     {
-        var image = new Mat(ImageHeight, ImageWidth, MatType.CV_8UC3, Scalar.All(19));
+        return CreateImage(ImageWidth, ImageHeight, target, targetBounds);
+    }
+
+    public static Mat CreateImage(int width, int height, Mat? target = null, params WindowLocalRect[] targetBounds)
+    {
+        var image = new Mat(height, width, MatType.CV_8UC3, Scalar.All(19));
 
         if (target is null)
         {
@@ -111,6 +121,23 @@ internal static class SyntheticTargetLocatorFixtures
         return profile.Mapper.Map(MapGeometry.PointOf(CellId));
     }
 
+    public static CalibrationProfile CreateCalibrationAt(
+        WindowLocalPixels center,
+        int width = 1920,
+        int height = 1175)
+    {
+        var logicalPoint = MapGeometry.PointOf(CellId);
+        if (!AffineScreenMapper.TryCreate(
+                [1, 0, center.X - logicalPoint.X, 0, 1, center.Y - logicalPoint.Y],
+                out var mapper)
+            || mapper is null)
+        {
+            throw new InvalidOperationException("The synthetic target fixture requires a non-singular affine mapper.");
+        }
+
+        return CreateCalibration(mapper, captureWidth: width, captureHeight: height);
+    }
+
     public static WindowLocalRect CenteredTargetBounds(CalibrationProfile? calibration = null)
     {
         var center = ProjectedCellCenter(calibration);
@@ -127,9 +154,11 @@ internal static class SyntheticTargetLocatorFixtures
         ImmutableArray<LogicalCell> otherElements = default,
         int searchRadiusPixels = 96,
         int minMarginPixels = 8,
-        int maxDistanceFromProjectedCellPixels = 64,
+        int maxCenterDistancePixels = 64,
         int cellId = CellId,
-        long mapId = MapId)
+        long mapId = MapId,
+        WindowLocalOffset anchorOffset = default,
+        WindowLocalOffset clickOffset = default)
     {
         return new TargetExpectation(
             mapId,
@@ -140,9 +169,11 @@ internal static class SyntheticTargetLocatorFixtures
             template,
             searchRadiusPixels,
             minMarginPixels,
-            maxDistanceFromProjectedCellPixels,
+            maxCenterDistancePixels,
             exclusions,
-            otherElements);
+            otherElements,
+            anchorOffset,
+            clickOffset);
     }
 
     public static CapturedFrame CreateFrame(

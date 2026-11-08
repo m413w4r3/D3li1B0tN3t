@@ -7,7 +7,7 @@ using OpenCvSharp;
 
 namespace D3B.Gui.Vision;
 
-/// <summary>Finds a non-degenerate template with normalized correlation in a bounded cell-centered region.</summary>
+/// <summary>Finds a non-degenerate template with normalized correlation in a bounded target-centered region.</summary>
 public sealed class TemplateTargetLocator : ITargetLocator
 {
     /// <summary>The initial minimum accepted normalized correlation score.</summary>
@@ -30,6 +30,7 @@ public sealed class TemplateTargetLocator : ITargetLocator
         var runnerUpScore = -1.0;
         var margin = 0.0;
         var projectedCenter = default(WindowLocalPixels);
+        var expectedVisualCenter = default(WindowLocalPixels);
         WindowLocalRect? boundingBox = null;
         var imageWidth = frame.Image.Cols;
         var imageHeight = frame.Image.Rows;
@@ -51,6 +52,15 @@ public sealed class TemplateTargetLocator : ITargetLocator
         if (expectation.Template.Empty())
         {
             return Build(TargetStatus.Unverified, TargetEvidence.TemplateDegenerate);
+        }
+
+        foreach (var exclusion in expectation.Exclusions)
+        {
+            if ((long)exclusion.X + exclusion.Width > imageWidth
+                || (long)exclusion.Y + exclusion.Height > imageHeight)
+            {
+                return Build(TargetStatus.Unverified, TargetEvidence.InvalidExclusion);
+            }
         }
 
         var templateWidth = expectation.Template.Cols;
@@ -78,13 +88,19 @@ public sealed class TemplateTargetLocator : ITargetLocator
 
         evidence.Add(TargetEvidence.ProjectedByCalibration);
 
-        if (projectedCenter.X < 0 || projectedCenter.Y < 0
-            || projectedCenter.X >= imageWidth || projectedCenter.Y >= imageHeight)
+        // Matching window identity and dimensions cannot reveal a Unity zoom or scene change; callers must remeasure.
+        if (!TryApplyOffset(projectedCenter, expectation.AnchorOffset, out expectedVisualCenter))
+        {
+            return Build(TargetStatus.Unverified, TargetEvidence.InvalidOffset);
+        }
+
+        if (expectedVisualCenter.X < 0 || expectedVisualCenter.Y < 0
+            || expectedVisualCenter.X >= imageWidth || expectedVisualCenter.Y >= imageHeight)
         {
             return Build(TargetStatus.Unverified, TargetEvidence.RegionOutOfFrame);
         }
 
-        if (!TryCreateSearchRegion(projectedCenter, expectation.SearchRadiusPixels, imageWidth, imageHeight, out var region))
+        if (!TryCreateSearchRegion(expectedVisualCenter, expectation.SearchRadiusPixels, imageWidth, imageHeight, out var region))
         {
             return Build(TargetStatus.Unverified, TargetEvidence.RegionOutOfFrame);
         }
@@ -148,8 +164,6 @@ public sealed class TemplateTargetLocator : ITargetLocator
             return Build(TargetStatus.Unverified, TargetEvidence.RegionOutOfFrame);
         }
 
-        evidence.Add(TargetEvidence.InsideFrame);
-
         if (candidateCenter.X < expectation.MinMarginPixels
             || candidateCenter.Y < expectation.MinMarginPixels
             || candidateCenter.X >= imageWidth - expectation.MinMarginPixels
@@ -158,26 +172,47 @@ public sealed class TemplateTargetLocator : ITargetLocator
             return Build(TargetStatus.Unverified, TargetEvidence.InsufficientEdgeMargin);
         }
 
+        var dx = (double)candidateCenter.X - expectedVisualCenter.X;
+        var dy = (double)candidateCenter.Y - expectedVisualCenter.Y;
+        var distance = Math.Sqrt((dx * dx) + (dy * dy));
+
+        if (distance > expectation.MaxCenterDistancePixels)
+        {
+            return Build(TargetStatus.Ambiguous, TargetEvidence.TooFarFromExpectedCell);
+        }
+
+        evidence.Add(TargetEvidence.NearExpectedCell);
+
+        if (!TryApplyOffset(candidateCenter, expectation.ClickOffset, out var proposedClickPoint))
+        {
+            return Build(TargetStatus.Unverified, TargetEvidence.InvalidOffset);
+        }
+
+        if (proposedClickPoint.X < 0 || proposedClickPoint.Y < 0
+            || proposedClickPoint.X >= imageWidth || proposedClickPoint.Y >= imageHeight)
+        {
+            return Build(TargetStatus.Unverified, TargetEvidence.ClickPointOutOfFrame);
+        }
+
+        if (proposedClickPoint.X < expectation.MinMarginPixels
+            || proposedClickPoint.Y < expectation.MinMarginPixels
+            || proposedClickPoint.X >= imageWidth - expectation.MinMarginPixels
+            || proposedClickPoint.Y >= imageHeight - expectation.MinMarginPixels)
+        {
+            return Build(TargetStatus.Unverified, TargetEvidence.InsufficientEdgeMargin);
+        }
+
+        evidence.Add(TargetEvidence.InsideFrame);
+
         foreach (var exclusion in expectation.Exclusions)
         {
-            if (candidate.Intersects(exclusion))
+            if (candidate.Intersects(exclusion) || exclusion.Contains(proposedClickPoint))
             {
                 return Build(TargetStatus.Unverified, TargetEvidence.BlockedByExclusion);
             }
         }
 
         evidence.Add(TargetEvidence.ClearOfExclusions);
-
-        var dx = (double)candidateCenter.X - projectedCenter.X;
-        var dy = (double)candidateCenter.Y - projectedCenter.Y;
-        var distance = Math.Sqrt((dx * dx) + (dy * dy));
-
-        if (distance > expectation.MaxDistanceFromProjectedCellPixels)
-        {
-            return Build(TargetStatus.Ambiguous, TargetEvidence.TooFarFromExpectedCell);
-        }
-
-        evidence.Add(TargetEvidence.NearExpectedCell);
 
         foreach (var otherCell in expectation.OtherElements)
         {
@@ -198,7 +233,6 @@ public sealed class TemplateTargetLocator : ITargetLocator
             }
         }
 
-        var proposedClickPoint = candidateCenter;
         return Build(TargetStatus.Verified, null, proposedClickPoint);
 
         TargetRegion Build(TargetStatus status, TargetEvidence? reason, WindowLocalPixels? proposedClickPoint = null)
@@ -229,8 +263,30 @@ public sealed class TemplateTargetLocator : ITargetLocator
                 status,
                 reason,
                 frame.CaptureId,
-                calibration.CalibrationId);
+                calibration.CalibrationId,
+                expectedVisualCenter,
+                frame.PixelWidth,
+                frame.PixelHeight);
         }
+    }
+
+    private static bool TryApplyOffset(WindowLocalPixels point, WindowLocalOffset offset, out WindowLocalPixels adjusted)
+    {
+        var x = point.X + offset.X;
+        var y = point.Y + offset.Y;
+
+        if (!double.IsFinite(x) || !double.IsFinite(y)
+            || x < int.MinValue || x > int.MaxValue
+            || y < int.MinValue || y > int.MaxValue)
+        {
+            adjusted = default;
+            return false;
+        }
+
+        adjusted = new WindowLocalPixels(
+            (int)Math.Round(x, MidpointRounding.AwayFromZero),
+            (int)Math.Round(y, MidpointRounding.AwayFromZero));
+        return true;
     }
 
     private static bool IdentityMatches(GameWindowIdentity expected, GameWindowIdentity actual)
@@ -304,8 +360,7 @@ public sealed class TemplateTargetLocator : ITargetLocator
 
         region = default;
 
-        if (left != requestedLeft || top != requestedTop || right != requestedRight || bottom != requestedBottom
-            || right <= left || bottom <= top)
+        if (right <= left || bottom <= top)
         {
             return false;
         }

@@ -12,13 +12,13 @@ public enum TargetEvidence
     /// <summary>The best candidate is separated from an independent peak by the required margin.</summary>
     UniquePeak,
 
-    /// <summary>The candidate bounds and proposed point satisfy the frame-edge checks.</summary>
+    /// <summary>The candidate bounds and proposed point satisfy the frame and edge-margin checks.</summary>
     InsideFrame,
 
-    /// <summary>The candidate bounds do not intersect any configured exclusion.</summary>
+    /// <summary>The candidate bounds and proposed point do not intersect any configured exclusion.</summary>
     ClearOfExclusions,
 
-    /// <summary>The candidate center is within the configured distance of the projected cell.</summary>
+    /// <summary>The candidate center is within the configured distance of the expected visual center.</summary>
     NearExpectedCell,
 
     /// <summary>The template is empty or has no spatial variance.</summary>
@@ -26,6 +26,12 @@ public enum TargetEvidence
 
     /// <summary>The projected cell, search region, or safe point lies outside the captured image.</summary>
     RegionOutOfFrame,
+
+    /// <summary>The measured offset could not be represented as a window-local pixel point.</summary>
+    InvalidOffset,
+
+    /// <summary>The target-specific proposed click point lies outside the captured image.</summary>
+    ClickPointOutOfFrame,
 
     /// <summary>The candidate center does not retain the configured distance from the frame edge.</summary>
     InsufficientEdgeMargin,
@@ -48,7 +54,10 @@ public enum TargetEvidence
     /// <summary>The candidate intersects a configured UI or occlusion exclusion.</summary>
     BlockedByExclusion,
 
-    /// <summary>The candidate is farther from the projected cell than the configured bound.</summary>
+    /// <summary>A configured exclusion does not fit the captured frame.</summary>
+    InvalidExclusion,
+
+    /// <summary>The candidate is farther from the expected visual center than the configured bound.</summary>
     TooFarFromExpectedCell,
 
     /// <summary>The template type is incompatible with the captured image type.</summary>
