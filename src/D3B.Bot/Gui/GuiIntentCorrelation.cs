@@ -258,8 +258,7 @@ public sealed class GuiIntentCorrelation
     {
         lock (_sync)
         {
-            if (_activeIntent is null || _state is not (GuiIntentCorrelationState.Acknowledged
-                or GuiIntentCorrelationState.Clicked or GuiIntentCorrelationState.ClientRequestSeen))
+            if (_activeIntent is null || _state is not (GuiIntentCorrelationState.Clicked or GuiIntentCorrelationState.ClientRequestSeen))
                 return false;
 
             SetTerminal(GuiIntentCorrelationState.Unconfirmed, detail ?? "No matching server confirmation arrived.");
