@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="OpenCvSharp5" />
+    <PackageReference Include="OpenCvSharp5.official.runtime.linux-x64.slim" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\D3B.Data\D3B.Data.csproj" />
+    <ProjectReference Include="..\D3B.Engine\D3B.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="D3B.Gui.Tests" />
+  </ItemGroup>
+
+</Project>
