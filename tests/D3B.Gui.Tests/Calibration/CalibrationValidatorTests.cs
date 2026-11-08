@@ -48,6 +48,24 @@ public sealed class CalibrationValidatorTests
     }
 
     [Fact]
+    public void CalibrationRequestDefaultsToThirtySeconds()
+    {
+        var request = SyntheticCalibrationFixtures.CreateRequest();
+
+        Assert.Equal(TimeSpan.FromSeconds(30), request.MaxAge);
+    }
+
+    [Fact]
+    public void CalibrationRejectsARequestedAgeAboveThirtySeconds()
+    {
+        var request = SyntheticCalibrationFixtures.CreateRequest(maxAge: TimeSpan.FromSeconds(31));
+        var result = SyntheticCalibrationFixtures.Calibrate(request: request);
+
+        AssertProblem(result, CalibrationProblemCode.InvalidInput);
+        Assert.Null(result.Profile);
+    }
+
+    [Fact]
     public void DeterministicPixelNoiseStaysWithinTheInitialErrorThresholds()
     {
         var result = SyntheticCalibrationFixtures.Calibrate(SyntheticCalibrationFixtures.CreateDocument(noisy: true));
@@ -438,8 +456,10 @@ public sealed class CalibrationValidatorTests
         Assert.Equal(createdAt, profile.CreatedAt);
         var environment = SyntheticCalibrationFixtures.CreateEnvironment(profile);
         var now = profile.CreatedAt.AddSeconds(CalibrationValidator.CalibrationMaxAgeSeconds + 1);
-        var staleResult = CalibrationValidator.ValidateProfile(profile, environment, now, TimeSpan.FromSeconds(CalibrationValidator.CalibrationMaxAgeSeconds));
+        var currentAtLimit = CalibrationValidator.ValidateProfile(profile, environment, profile.CreatedAt.AddSeconds(30), TimeSpan.FromHours(1));
+        var staleResult = CalibrationValidator.ValidateProfile(profile, environment, now, TimeSpan.FromHours(1));
 
+        Assert.True(currentAtLimit.IsCalibrated);
         AssertProblem(staleResult, CalibrationProblemCode.Stale);
         Assert.Equal(CalibrationStatus.Stale, staleResult.Status);
     }

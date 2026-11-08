@@ -236,7 +236,7 @@ public sealed class BotActor : IAsyncDisposable
     {
         Key = state.Key;
         _state = state;
-        _view = new BotStateView(state, _revision, _epoch, _connected);
+        _view = new BotStateView(state, _revision, _epoch, _connected, _paused, false);
         Maps = maps;
         _world = world;
         _banks = banks;
@@ -598,6 +598,7 @@ public sealed class BotActor : IAsyncDisposable
                 Write(BotEvent.PausedByPlayer);
 
             _paused = true;
+            PublishState(_state, _connected);
             Interrupt(behavior, Interruption.Player);
             BotLog.PausedByPlayer(_log, Key.CharacterId, message.Descriptor.Name);
         }
@@ -839,6 +840,7 @@ public sealed class BotActor : IAsyncDisposable
             return;
 
         _paused = false;
+        PublishState(_state, _connected);
         BotLog.Resumed(_log, Key.CharacterId);
         Write(BotEvent.Resumed);
     }
@@ -849,6 +851,7 @@ public sealed class BotActor : IAsyncDisposable
             return;
 
         _paused = true;
+        PublishState(_state, _connected);
         BotLog.PausedAfterFight(_log, Key.CharacterId);
         Write(BotEvent.PausedAfterFight);
     }
@@ -918,7 +921,8 @@ public sealed class BotActor : IAsyncDisposable
     {
         _state = state;
         _connected = connected;
-        _view = new BotStateView(state, ++_revision, _epoch, connected);
+        var translationBlocked = _session is { } session && session.IsMovementTranslationBlocked;
+        _view = new BotStateView(state, ++_revision, _epoch, connected, _paused, translationBlocked);
     }
 
     private void Write(BotEvent bot)

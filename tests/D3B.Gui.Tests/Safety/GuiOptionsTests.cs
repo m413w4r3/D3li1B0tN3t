@@ -40,7 +40,7 @@ public sealed class GuiOptionsTests
 
     [Theory]
     [InlineData(99)]
-    [InlineData(10001)]
+    [InlineData(2001)]
     public void CaptureTimeoutMustBeWithinItsBounds(int value)
     {
         AssertInvalid(new GuiOptions { CaptureTimeoutMs = value }, "CaptureTimeoutMs");
@@ -48,7 +48,7 @@ public sealed class GuiOptionsTests
 
     [Theory]
     [InlineData(1048575)]
-    [InlineData(67108865)]
+    [InlineData(16777217)]
     public void CaptureBytesMustBeWithinTheirBounds(int value)
     {
         AssertInvalid(new GuiOptions { MaxCaptureBytes = value }, "MaxCaptureBytes");
@@ -56,7 +56,7 @@ public sealed class GuiOptionsTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(7681)]
+    [InlineData(3841)]
     public void WidthMustBeWithinItsBounds(int value)
     {
         AssertInvalid(new GuiOptions { MaxWidth = value }, "MaxWidth");
@@ -64,7 +64,7 @@ public sealed class GuiOptionsTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(7681)]
+    [InlineData(2161)]
     public void HeightMustBeWithinItsBounds(int value)
     {
         AssertInvalid(new GuiOptions { MaxHeight = value }, "MaxHeight");
@@ -72,7 +72,7 @@ public sealed class GuiOptionsTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(3601)]
+    [InlineData(31)]
     public void CalibrationAgeMustBeWithinItsBounds(int value)
     {
         AssertInvalid(new GuiOptions { CalibrationMaxAgeSeconds = value }, "CalibrationMaxAgeSeconds");
@@ -98,8 +98,24 @@ public sealed class GuiOptionsTests
             CaptureTimeoutMs = 100,
             MaxCaptureBytes = 1_048_576,
             MaxWidth = 1,
-            MaxHeight = 7680,
-            CalibrationMaxAgeSeconds = 3600,
+            MaxHeight = 1,
+            CalibrationMaxAgeSeconds = 1,
+        });
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Problems);
+    }
+
+    [Fact]
+    public void MaximumOptionBoundsAreValid()
+    {
+        var result = GuiOptionsValidator.Validate(new GuiOptions
+        {
+            CaptureTimeoutMs = 2000,
+            MaxCaptureBytes = 16_777_216,
+            MaxWidth = 3840,
+            MaxHeight = 2160,
+            CalibrationMaxAgeSeconds = 30,
         });
 
         Assert.True(result.IsValid);
