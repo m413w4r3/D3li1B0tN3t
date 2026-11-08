@@ -257,6 +257,64 @@ public sealed class TemplateTargetLocatorTests
     }
 
     [Fact]
+    public void CalibrationWindowTitleChangeDoesNotInvalidateTarget()
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibration();
+        var expectedBounds = SyntheticTargetLocatorFixtures.CenteredTargetBounds(calibration);
+        using var image = SyntheticTargetLocatorFixtures.CreateImage(template, expectedBounds);
+        var renamedIdentity = SyntheticTargetLocatorFixtures.WindowIdentity with { Title = "renamed synthetic window" };
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration, identity: renamedIdentity);
+        var expectation = SyntheticTargetLocatorFixtures.CreateExpectation(template);
+
+        var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
+
+        Assert.Equal(TargetStatus.Verified, result.Status);
+        Assert.Null(result.Reason);
+        Assert.DoesNotContain(TargetEvidence.CalibrationMismatch, result.Confidence.Evidence);
+    }
+
+    [Fact]
+    public void CalibrationProcessIdMismatchIsRejected()
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibration();
+        var otherIdentity = SyntheticTargetLocatorFixtures.WindowIdentity with { ProcessId = 9002 };
+        using var image = SyntheticTargetLocatorFixtures.CreateImage();
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration, identity: otherIdentity);
+        var expectation = SyntheticTargetLocatorFixtures.CreateExpectation(template);
+
+        var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
+
+        Assert.Equal(TargetStatus.Unverified, result.Status);
+        Assert.Equal(TargetEvidence.CalibrationMismatch, result.Reason);
+        Assert.Null(result.ProposedClickPoint);
+    }
+
+    [Fact]
+    public void CalibrationStatusChangeDoesNotInvalidateTargetWhenProcessIdentityIsUnavailable()
+    {
+        using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
+        var calibration = SyntheticTargetLocatorFixtures.CreateCalibration();
+        var expectedBounds = SyntheticTargetLocatorFixtures.CenteredTargetBounds(calibration);
+        using var image = SyntheticTargetLocatorFixtures.CreateImage(template, expectedBounds);
+        var unavailableIdentity = SyntheticTargetLocatorFixtures.WindowIdentity with
+        {
+            ProcessId = null,
+            ExecutablePath = null,
+            Status = GameWindowIdentityStatus.UnverifiedProcessIdUnavailable,
+        };
+        using var frame = SyntheticTargetLocatorFixtures.CreateFrame(image, calibration, identity: unavailableIdentity);
+        var expectation = SyntheticTargetLocatorFixtures.CreateExpectation(template);
+
+        var result = new TemplateTargetLocator().Locate(frame, calibration, expectation);
+
+        Assert.Equal(TargetStatus.Verified, result.Status);
+        Assert.Null(result.Reason);
+        Assert.DoesNotContain(TargetEvidence.CalibrationMismatch, result.Confidence.Evidence);
+    }
+
+    [Fact]
     public void CalibrationMapMismatchIsRejected()
     {
         using var template = SyntheticTargetLocatorFixtures.CreateTemplate();
