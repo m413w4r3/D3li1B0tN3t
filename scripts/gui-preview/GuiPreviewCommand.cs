@@ -97,7 +97,6 @@ internal static class GuiPreviewCommand
 
         try
         {
-            var repositoryRoot = FindRepositoryRoot(Environment.CurrentDirectory);
             var homeDirectory = GetHomeDirectory();
             var isExplicitOutput = outputDirectory is not null;
             var selectedOutput = outputDirectory ?? GetDefaultOutputDirectory();
@@ -105,7 +104,6 @@ internal static class GuiPreviewCommand
             if (!PreviewOutputGuard.TryAuthorize(
                 selectedOutput,
                 homeDirectory,
-                repositoryRoot,
                 isExplicitOutput,
                 out var normalizedOutput,
                 out var rejectionReason))
@@ -113,13 +111,18 @@ internal static class GuiPreviewCommand
                 return Fail(rejectionReason ?? "The output directory is not allowed.");
             }
 
-            using var inputImage = Cv2.ImRead(imageFile.FullName, ImreadModes.Color);
-            if (inputImage.Empty())
+            if (!imageFile.Exists)
             {
-                return Fail($"The image could not be decoded: {imageFile.Name}.");
+                return Fail(PreviewInputException.CreateMessage(imageFile.Name, "IMAGE_NOT_FOUND"));
             }
 
-            var anchorDocument = CalibrationAnchorDocument.Load(anchorsFile.FullName);
+            using var inputImage = LoadInput(imageFile, "IMAGE_LOAD_FAILED", () => Cv2.ImRead(imageFile.FullName, ImreadModes.Color));
+            if (inputImage.Empty())
+            {
+                return Fail(PreviewInputException.CreateMessage(imageFile.Name, "IMAGE_DECODE_FAILED"));
+            }
+
+            var anchorDocument = LoadInput(anchorsFile, "ANCHORS_LOAD_FAILED", () => CalibrationAnchorDocument.Load(anchorsFile.FullName));
             var now = DateTimeOffset.UtcNow;
             var identity = new GameWindowIdentity(0, null, null, null, GameWindowIdentityStatus.NotFound);
             var calibrationRequest = new CalibrationRequest(
@@ -137,10 +140,15 @@ internal static class GuiPreviewCommand
 
             if (elementId.HasValue && calibration.IsCalibrated)
             {
-                using var templateImage = Cv2.ImRead(templateFile!.FullName, ImreadModes.Color);
+                if (!templateFile!.Exists)
+                {
+                    return Fail(PreviewInputException.CreateMessage(templateFile.Name, "TEMPLATE_NOT_FOUND"));
+                }
+
+                using var templateImage = LoadInput(templateFile, "TEMPLATE_LOAD_FAILED", () => Cv2.ImRead(templateFile.FullName, ImreadModes.Color));
                 if (templateImage.Empty())
                 {
-                    return Fail($"The template could not be decoded: {templateFile.Name}.");
+                    return Fail(PreviewInputException.CreateMessage(templateFile.Name, "TEMPLATE_DECODE_FAILED"));
                 }
 
                 var snapshot = new GameWindowSnapshot(
@@ -214,28 +222,26 @@ internal static class GuiPreviewCommand
 
             return report.Verdict is GuiPreviewVerdict.Calibrated or GuiPreviewVerdict.TargetVerified ? 0 : 2;
         }
-        catch (Exception exception)
+        catch (PreviewInputException exception)
         {
             return Fail(exception.Message);
         }
+        catch (Exception)
+        {
+            return Fail("Preview failed (PREVIEW_FAILED).");
+        }
     }
 
-    private static string FindRepositoryRoot(string startingDirectory)
+    private static T LoadInput<T>(FileInfo file, string errorCode, Func<T> load)
     {
-        var current = new DirectoryInfo(Path.GetFullPath(startingDirectory));
-        while (current is not null)
+        try
         {
-            if (File.Exists(Path.Combine(current.FullName, "D3B.slnx"))
-                || Directory.Exists(Path.Combine(current.FullName, ".git"))
-                || File.Exists(Path.Combine(current.FullName, ".git")))
-            {
-                return current.FullName;
-            }
-
-            current = current.Parent;
+            return load();
         }
-
-        throw new DirectoryNotFoundException("Could not locate the repository root from the current directory.");
+        catch (Exception)
+        {
+            throw new PreviewInputException(file.Name, errorCode);
+        }
     }
 
     private static string GetHomeDirectory()
@@ -266,5 +272,18 @@ internal static class GuiPreviewCommand
         Console.Out.WriteLine("Verdict: Error");
         Console.Error.WriteLine($"Error: {message}");
         return 1;
+    }
+
+    private sealed class PreviewInputException : Exception
+    {
+        public PreviewInputException(string fileName, string errorCode)
+            : base(CreateMessage(fileName, errorCode))
+        {
+        }
+
+        public static string CreateMessage(string fileName, string errorCode)
+        {
+            return GuiPreviewReport.FormatInputFailure(fileName, errorCode);
+        }
     }
 }

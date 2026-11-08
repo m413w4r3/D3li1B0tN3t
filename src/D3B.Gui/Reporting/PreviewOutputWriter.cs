@@ -41,6 +41,11 @@ public static class PreviewOutputWriter
         }
 
         var fullDirectory = Path.GetFullPath(directory);
+        if (IsWithinD3BRepository(fullDirectory))
+        {
+            throw new IOException("The preview output directory cannot be inside the repository.");
+        }
+
         var root = Path.GetPathRoot(fullDirectory);
         var home = Environment.GetEnvironmentVariable("HOME");
         if (root is null
@@ -113,6 +118,22 @@ public static class PreviewOutputWriter
         {
             throw new IOException("The preview output target must be a regular file path.");
         }
+    }
+
+    private static bool IsWithinD3BRepository(string path)
+    {
+        var current = new DirectoryInfo(path);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "D3B.slnx")))
+            {
+                return true;
+            }
+
+            current = current.Parent;
+        }
+
+        return false;
     }
 
     private static void EnsureNoReparsePointInPath(string path)

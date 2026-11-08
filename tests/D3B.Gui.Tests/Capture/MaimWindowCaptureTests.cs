@@ -182,16 +182,31 @@ public sealed class MaimWindowCaptureTests
             new MaimCaptureOptions(fakeMaim, TimeSpan.FromMilliseconds(300)),
             display.CreateEnvironmentReader());
 
-        using CapturedFrame frame = await capture.CaptureAsync(
-            display.WindowId,
-            new GameWindowExpectation("xterm"),
-            CancellationToken.None);
+        try
+        {
+            using CapturedFrame frame = await capture.CaptureAsync(
+                display.WindowId,
+                new GameWindowExpectation("xterm"),
+                CancellationToken.None);
 
-        Assert.Equal(CaptureStatus.TimedOut, frame.Status);
-        Assert.True(File.Exists(pidFile));
-        int childPid = int.Parse(await File.ReadAllTextAsync(pidFile, TestContext.Current.CancellationToken), CultureInfo.InvariantCulture);
-        Assert.True(await XvfbTestCommands.IsProcessStoppedAsync(childPid, TimeSpan.FromSeconds(3)));
-        Directory.Delete(directory, recursive: true);
+            Assert.Equal(CaptureStatus.TimedOut, frame.Status);
+            Assert.True(File.Exists(pidFile));
+            int childPid = int.Parse(await File.ReadAllTextAsync(pidFile, TestContext.Current.CancellationToken), CultureInfo.InvariantCulture);
+            Assert.True(await XvfbTestCommands.IsProcessStoppedAsync(childPid, TimeSpan.FromSeconds(3)));
+        }
+        finally
+        {
+            if (File.Exists(pidFile)
+                && int.TryParse(File.ReadAllText(pidFile), CultureInfo.InvariantCulture, out var childPid))
+            {
+                TryKillProcess(childPid);
+            }
+
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
     }
 
     [Fact]
