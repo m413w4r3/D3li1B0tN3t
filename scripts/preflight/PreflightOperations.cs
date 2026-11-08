@@ -1,5 +1,8 @@
+using Microsoft.Win32.SafeHandles;
+using System.Runtime.InteropServices;
 using System.Security;
 using System.Runtime.Versioning;
+using System.Globalization;
 
 namespace D3B.Scripts.Preflight;
 
@@ -8,6 +11,7 @@ internal static class PreflightOperations
 {
     private const string BackupTreeName = "tree";
     private const string BackupManifestName = "manifest.json";
+    private const int PrivateFileMode = 0x180;
 
     public static PreflightManifest Snapshot(string root)
     {
@@ -16,11 +20,9 @@ internal static class PreflightOperations
 
     public static PreflightManifest SnapshotToFile(string root, string outputPath)
     {
-        string fullOutput = PreflightPath.FullPath(outputPath);
-        PreflightPath.EnsureNoRepositoryMarker(fullOutput);
-        PreflightPath.EnsureOutsideTree(root, fullOutput);
-        PreflightManifest manifest = Snapshot(root);
-        PreflightManifestStore.WriteAtomically(fullOutput, manifest);
+        using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(root);
+        PreflightManifest manifest = PreflightSnapshot.Capture(source);
+        PreflightManifestStore.WriteAtomically(outputPath, manifest, source);
         return manifest;
     }
 
@@ -41,75 +43,79 @@ internal static class PreflightOperations
 
     public static void Verify(string root, string manifestPath)
     {
-        PreflightPath.EnsureOutsideTree(root, manifestPath);
-        PreflightManifest expected = PreflightManifestStore.Read(manifestPath);
-        Verify(root, expected);
+        using SafeFileHandle rootHandle = PreflightUnix.OpenDirectoryPath(root);
+        PreflightManifest expected = PreflightManifestStore.Read(manifestPath, rootHandle);
+        Verify(rootHandle, expected);
     }
 
     public static void Verify(string root, PreflightManifest expected)
     {
-        PreflightManifest actual = CaptureForVerification(root);
-
-        if (!AreEqual(expected, actual))
-        {
-            throw new PreflightBlockedException("tree_mismatch");
-        }
+        using SafeFileHandle rootHandle = PreflightUnix.OpenDirectoryPath(root);
+        Verify(rootHandle, expected);
     }
 
     public static bool Compare(string root, string beforePath, string afterOutputPath)
     {
-        PreflightPath.EnsureOutsideTree(root, beforePath);
-        PreflightManifest before = PreflightManifestStore.Read(beforePath);
-        string fullOutput = PreflightPath.FullPath(afterOutputPath);
-        PreflightPath.EnsureNoRepositoryMarker(fullOutput);
-        PreflightPath.EnsureOutsideTree(root, fullOutput);
-        PreflightManifest after = CaptureForVerification(root);
-        PreflightManifestStore.WriteAtomically(fullOutput, after);
+        using SafeFileHandle rootHandle = PreflightUnix.OpenDirectoryPath(root);
+        PreflightManifest before = PreflightManifestStore.Read(beforePath, rootHandle);
+        PreflightManifest after = PreflightSnapshot.Capture(rootHandle);
+        PreflightManifestStore.WriteAtomically(afterOutputPath, after, rootHandle);
         return AreEqual(before, after);
     }
 
     public static string Backup(string root, string outputDirectory)
     {
-        PreflightManifest manifest = Snapshot(root);
+        using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(root);
+        PreflightManifest manifest = PreflightSnapshot.Capture(source);
         string fullOutput = PreflightPath.FullPath(outputDirectory);
-        PreflightPath.EnsureNoRepositoryMarker(fullOutput);
-        PreflightPath.EnsureOutsideTree(root, fullOutput);
+        string outputName = Path.GetFileName(fullOutput);
 
-        if (Directory.Exists(fullOutput) || File.Exists(fullOutput))
+        if (string.IsNullOrEmpty(outputName))
+        {
+            throw new PreflightBlockedException("backup_destination_invalid");
+        }
+
+        string parentPath = Path.GetDirectoryName(fullOutput) ?? "/";
+        using SafeFileHandle parent = PreflightUnix.OpenDirectoryPath(
+            parentPath,
+            true,
+            directory =>
+            {
+                PreflightUnix.EnsureNoRepositoryMarker(directory);
+                PreflightUnix.EnsureOutsideTree(directory, source);
+            });
+        byte[] outputNameBytes = PreflightUnix.EncodeName(outputName);
+
+        if (PreflightUnix.TryStatAt(parent, outputNameBytes, out _))
         {
             throw new PreflightBlockedException("backup_destination_exists");
         }
 
-        Directory.CreateDirectory(fullOutput);
-        PreflightUnix.SetPrivateDirectoryMode(fullOutput);
-        string tree = Path.Combine(fullOutput, BackupTreeName);
-        Directory.CreateDirectory(tree);
-        PreflightUnix.SetPrivateDirectoryMode(tree);
-
-        try
-        {
-            CopyEntries(root, tree, manifest, false);
-            VerifyBackupTree(tree, manifest);
-            string manifestPath = Path.Combine(fullOutput, BackupManifestName);
-            PreflightManifestStore.WriteAtomically(manifestPath, manifest);
-            return manifestPath;
-        }
-        catch
-        {
-            if (Directory.Exists(fullOutput))
-            {
-                Directory.Delete(fullOutput, true);
-            }
-
-            throw;
-        }
+        PreflightUnix.CreateDirectoryAt(parent, outputNameBytes);
+        using SafeFileHandle backup = PreflightUnix.OpenDirectoryAt(parent, outputNameBytes);
+        PreflightUnix.CreateDirectoryAt(backup, PreflightUnix.EncodeName(BackupTreeName));
+        using SafeFileHandle tree = PreflightUnix.OpenDirectoryAt(backup, PreflightUnix.EncodeName(BackupTreeName));
+        CopyEntries(source, tree, manifest, false);
+        VerifyBackupTree(tree, manifest);
+        string manifestPath = Path.Combine(fullOutput, BackupManifestName);
+        PreflightManifestStore.WriteAtomically(manifestPath, manifest, source);
+        return manifestPath;
     }
 
     public static void Restore(string backupDirectory, string manifestPath, string root)
     {
+        _ = RestoreWithResult(backupDirectory, manifestPath, root, null);
+    }
+
+    public static string? RestoreWithResult(
+        string backupDirectory,
+        string manifestPath,
+        string root,
+        Action? afterStageCreated = null)
+    {
         try
         {
-            RestoreCore(backupDirectory, manifestPath, root);
+            return RestoreCore(backupDirectory, manifestPath, root, afterStageCreated);
         }
         catch (PreflightBlockedException)
         {
@@ -121,187 +127,152 @@ internal static class PreflightOperations
         }
     }
 
-    private static void RestoreCore(string backupDirectory, string manifestPath, string root)
+    private static string? RestoreCore(
+        string backupDirectory,
+        string manifestPath,
+        string root,
+        Action? afterStageCreated)
     {
-        string fullBackup = PreflightPath.FullPath(backupDirectory);
-        string fullRoot = PreflightPath.FullPath(root);
-        PreflightPath.EnsureNoRepositoryMarker(fullRoot);
-        PreflightPath.EnsureOutsideTree(fullRoot, manifestPath);
-        RejectOverlappingRestorePaths(fullBackup, fullRoot);
-        var backupStatus = PreflightUnix.Stat(fullBackup);
+        using SafeFileHandle backup = PreflightUnix.OpenDirectoryPath(backupDirectory);
+        PreflightFileStatus backupStatus = PreflightUnix.StatHandle(backup);
 
         if (backupStatus.Type != PreflightUnix.DirectoryType)
         {
             throw new PreflightBlockedException("backup_directory_invalid");
         }
 
-        PreflightManifest manifest = PreflightManifestStore.Read(manifestPath);
-        string backupTree = Path.Combine(fullBackup, BackupTreeName);
-        VerifyBackupTree(backupTree, manifest);
-        EnsureRootDirectory(fullRoot);
-        ClearDirectoryContents(fullRoot);
-        CopyEntries(backupTree, fullRoot, manifest, true);
-        Verify(fullRoot, manifest);
+        using SafeFileHandle backupTree = PreflightUnix.OpenDirectoryAt(backup, PreflightUnix.EncodeName(BackupTreeName));
+        string fullRoot = PreflightPath.FullPath(root);
+        string rootName = Path.GetFileName(fullRoot);
+
+        if (string.IsNullOrEmpty(rootName))
+        {
+            throw new PreflightBlockedException("restore_root_invalid");
+        }
+
+        string rootParentPath = Path.GetDirectoryName(fullRoot) ?? "/";
+        using SafeFileHandle rootParent = PreflightUnix.OpenDirectoryPath(rootParentPath);
+        PreflightUnix.EnsureNoRepositoryMarker(rootParent);
+        byte[] rootNameBytes = PreflightUnix.EncodeName(rootName);
+        PreflightFileStatus parentStatus = PreflightUnix.StatHandle(rootParent);
+        SafeFileHandle? originalRoot = null;
+        PreflightFileStatus? originalRootStatus = null;
+
+        if (PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? destinationStatus))
+        {
+            if (destinationStatus!.Type != PreflightUnix.DirectoryType)
+            {
+                throw new PreflightBlockedException("restore_root_invalid");
+            }
+
+            PreflightUnix.EnsureSameMount(destinationStatus, parentStatus);
+            originalRoot = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
+            originalRootStatus = PreflightUnix.StatHandle(originalRoot);
+
+            if (!PreflightUnix.IsSameObject(destinationStatus, originalRootStatus))
+            {
+                originalRoot.Dispose();
+                throw new PreflightBlockedException("restore_root_changed");
+            }
+
+            PreflightUnix.EnsureNoRepositoryMarker(originalRoot);
+            RejectOverlappingRestorePaths(backup, originalRoot);
+        }
+        else
+        {
+            if (PreflightUnix.IsDescendantOrSelf(rootParent, backup))
+            {
+                throw new PreflightBlockedException("restore_paths_overlap");
+            }
+        }
+
+        using (originalRoot)
+        {
+            if (originalRoot is not null)
+            {
+                using SafeFileHandle manifestParent = PreflightUnix.OpenDirectoryPath(Path.GetDirectoryName(PreflightPath.FullPath(manifestPath)) ?? "/");
+                PreflightUnix.EnsureOutsideTree(manifestParent, originalRoot);
+            }
+
+            PreflightManifest manifest = PreflightManifestStore.Read(manifestPath, originalRoot);
+            VerifyBackupTree(backupTree, manifest);
+            byte[] stageName = PreflightUnix.EncodeName(".preflight-stage-" + Guid.NewGuid().ToString("N"));
+            PreflightUnix.CreateDirectoryAt(rootParent, stageName);
+            using SafeFileHandle stage = PreflightUnix.OpenDirectoryAt(rootParent, stageName);
+            afterStageCreated?.Invoke();
+            CopyEntries(backupTree, stage, manifest, true);
+            Verify(stage, manifest, "restore_staging_mismatch");
+            byte[]? supersededName = null;
+
+            if (originalRoot is not null)
+            {
+                supersededName = FindAvailableName(rootParent, ".preflight-superseded-");
+                PreflightUnix.RenameAt(rootParent, rootNameBytes, rootParent, supersededName);
+            }
+
+            try
+            {
+                PreflightUnix.RenameAt(rootParent, stageName, rootParent, rootNameBytes);
+            }
+            catch
+            {
+                if (supersededName is not null)
+                {
+                    PreflightUnix.RenameAt(rootParent, supersededName, rootParent, rootNameBytes);
+                }
+
+                throw;
+            }
+
+            try
+            {
+                using SafeFileHandle installed = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
+                Verify(installed, manifest, "restore_verification_failed");
+                PreflightUnix.SyncDirectory(rootParent);
+                return supersededName is null ? null : System.Text.Encoding.UTF8.GetString(supersededName);
+            }
+            catch
+            {
+                byte[] failedName = FindAvailableName(rootParent, ".preflight-failed-");
+                PreflightUnix.RenameAt(rootParent, rootNameBytes, rootParent, failedName);
+
+                if (supersededName is not null)
+                {
+                    PreflightUnix.RenameAt(rootParent, supersededName, rootParent, rootNameBytes);
+                }
+
+                throw new PreflightBlockedException("restore_verification_failed");
+            }
+        }
     }
 
-    private static void RejectOverlappingRestorePaths(string backup, string root)
+    private static void RejectOverlappingRestorePaths(SafeFileHandle backup, SafeFileHandle root)
     {
-        if (PreflightPath.IsWithin(backup, root) || PreflightPath.IsWithin(root, backup))
+        if (PreflightUnix.IsDescendantOrSelf(backup, root) || PreflightUnix.IsDescendantOrSelf(root, backup))
         {
             throw new PreflightBlockedException("restore_paths_overlap");
         }
     }
 
-    private static void EnsureRootDirectory(string root)
+    private static void Verify(SafeFileHandle root, PreflightManifest expected)
     {
-        if (Directory.Exists(root))
-        {
-            var status = PreflightUnix.Stat(root);
-
-            if (status.Type != PreflightUnix.DirectoryType)
-            {
-                throw new PreflightBlockedException("restore_root_invalid");
-            }
-
-            return;
-        }
-
-        if (File.Exists(root))
-        {
-            throw new PreflightBlockedException("restore_root_invalid");
-        }
-
-        Directory.CreateDirectory(root);
-        PreflightUnix.SetPrivateDirectoryMode(root);
+        Verify(root, expected, "tree_mismatch");
     }
 
-    private static void ClearDirectoryContents(string directory)
+    private static void Verify(SafeFileHandle root, PreflightManifest expected, string mismatchCode)
     {
-        string[] entries;
+        PreflightManifestCodec.Validate(expected);
+        PreflightManifest actual = PreflightSnapshot.Capture(root);
 
-        try
+        if (!AreEqual(expected, actual))
         {
-            entries = Directory.EnumerateFileSystemEntries(directory).ToArray();
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            throw new PreflightBlockedException("restore_root_unreadable");
-        }
-
-        foreach (string entry in entries)
-        {
-            var status = PreflightUnix.Stat(entry);
-
-            if (status.Type == PreflightUnix.DirectoryType)
-            {
-                ClearDirectoryContents(entry);
-                Directory.Delete(entry);
-            }
-            else
-            {
-                File.Delete(entry);
-            }
+            throw new PreflightBlockedException(mismatchCode);
         }
     }
 
-    private static void CopyEntries(string sourceRoot, string destinationRoot, PreflightManifest manifest, bool preserveModes)
+    private static void VerifyBackupTree(SafeFileHandle root, PreflightManifest expected)
     {
-        foreach (PreflightManifestEntry entry in manifest.Entries)
-        {
-            byte[] relativeBytes = PreflightPath.DecodePath(entry.PathBase64!);
-            string relative = PreflightPath.DecodeUtf8(relativeBytes).Replace('/', Path.DirectorySeparatorChar);
-            string sourcePath = Path.Combine(sourceRoot, relative);
-            string destinationPath = Path.Combine(destinationRoot, relative);
-            EnsureParentDirectories(destinationRoot, relative);
-
-            if (entry.Kind == "file")
-            {
-                int destinationMode = preserveModes ? entry.Mode : 0x180;
-                CopyFile(sourcePath, destinationPath, destinationMode);
-            }
-            else if (entry.Kind == "symlink")
-            {
-                byte[] target = Convert.FromBase64String(entry.LinkTargetBase64!);
-                PreflightUnix.CreateSymbolicLink(destinationPath, target);
-            }
-            else
-            {
-                throw new PreflightBlockedException("manifest_kind_invalid");
-            }
-        }
-    }
-
-    private static void EnsureParentDirectories(string root, string relative)
-    {
-        string? parentRelative = Path.GetDirectoryName(relative);
-
-        if (parentRelative is null)
-        {
-            return;
-        }
-
-        string current = root;
-        string[] segments = parentRelative.Split(Path.DirectorySeparatorChar);
-
-        foreach (string segment in segments)
-        {
-            current = Path.Combine(current, segment);
-
-            if (Directory.Exists(current))
-            {
-                if (PreflightUnix.Stat(current).Type != PreflightUnix.DirectoryType)
-                {
-                    throw new PreflightBlockedException("restore_parent_invalid");
-                }
-
-                continue;
-            }
-
-            if (File.Exists(current))
-            {
-                throw new PreflightBlockedException("restore_parent_invalid");
-            }
-
-            Directory.CreateDirectory(current);
-            PreflightUnix.SetPrivateDirectoryMode(current);
-        }
-    }
-
-    private static void CopyFile(string source, string destination, int mode)
-    {
-        using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 131072, FileOptions.SequentialScan);
-        using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 131072, FileOptions.WriteThrough);
-        input.CopyTo(output);
-        output.Flush(true);
-        File.SetUnixFileMode(destination, (UnixFileMode)mode);
-    }
-
-    private static bool AreEqual(PreflightManifest left, PreflightManifest right)
-    {
-        byte[] leftBytes = PreflightManifestCodec.Serialize(left);
-        byte[] rightBytes = PreflightManifestCodec.Serialize(right);
-        return leftBytes.AsSpan().SequenceEqual(rightBytes);
-    }
-
-    private static PreflightManifest CaptureForVerification(string root)
-    {
-        try
-        {
-            return Snapshot(root);
-        }
-        catch (PreflightBlockedException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or SecurityException)
-        {
-            throw new PreflightBlockedException("tree_unreadable");
-        }
-    }
-
-    private static void VerifyBackupTree(string tree, PreflightManifest expected)
-    {
-        PreflightManifest actual = Snapshot(tree);
+        PreflightManifest actual = PreflightSnapshot.Capture(root);
 
         if (expected.SchemaVersion != actual.SchemaVersion || expected.Entries.Count != actual.Entries.Count)
         {
@@ -320,6 +291,196 @@ internal static class PreflightOperations
                 || before.LinkTargetBase64 != backup.LinkTargetBase64)
             {
                 throw new PreflightBlockedException("backup_mismatch");
+            }
+        }
+    }
+
+    private static void CopyEntries(
+        SafeFileHandle sourceRoot,
+        SafeFileHandle destinationRoot,
+        PreflightManifest manifest,
+        bool preserveModes)
+    {
+        PreflightFileStatus sourceRootStatus = PreflightUnix.StatHandle(sourceRoot);
+        PreflightFileStatus destinationRootStatus = PreflightUnix.StatHandle(destinationRoot);
+
+        foreach (PreflightManifestEntry entry in manifest.Entries)
+        {
+            byte[] relativePath = PreflightPath.DecodePath(entry.PathBase64!);
+            List<byte[]> segments = PreflightPath.SplitRelativePath(relativePath);
+            byte[] fileName = segments[^1];
+            using SafeFileHandle sourceParent = OpenRelativeParent(sourceRoot, sourceRootStatus, segments, false);
+            using SafeFileHandle destinationParent = OpenRelativeParent(destinationRoot, destinationRootStatus, segments, true);
+
+            if (entry.Kind == "file")
+            {
+                CopyRegularFile(sourceParent, destinationParent, fileName, entry, sourceRootStatus, preserveModes);
+            }
+            else if (entry.Kind == "symlink")
+            {
+                CopySymbolicLink(sourceParent, destinationParent, fileName, entry, sourceRootStatus);
+            }
+            else
+            {
+                throw new PreflightBlockedException("manifest_kind_invalid");
+            }
+        }
+    }
+
+    private static SafeFileHandle OpenRelativeParent(
+        SafeFileHandle root,
+        PreflightFileStatus rootStatus,
+        List<byte[]> segments,
+        bool createMissing)
+    {
+        SafeFileHandle current = PreflightUnix.DuplicateHandle(root);
+
+        try
+        {
+            for (int index = 0; index < segments.Count - 1; index++)
+            {
+                byte[] segment = segments[index];
+
+                if (!PreflightUnix.TryStatAt(current, segment, out PreflightFileStatus? status))
+                {
+                    if (!createMissing)
+                    {
+                        throw new PreflightBlockedException("backup_entry_missing");
+                    }
+
+                    try
+                    {
+                        PreflightUnix.CreateDirectoryAt(current, segment);
+                    }
+                    catch (IOException) when (Marshal.GetLastPInvokeError() == 17)
+                    {
+                    }
+
+                    status = PreflightUnix.StatAt(current, segment);
+                }
+
+                if (status!.Type != PreflightUnix.DirectoryType)
+                {
+                    throw new PreflightBlockedException("copy_parent_invalid");
+                }
+
+                PreflightUnix.EnsureSameMount(status, rootStatus);
+                SafeFileHandle next = PreflightUnix.OpenDirectoryAt(current, segment);
+                PreflightFileStatus opened = PreflightUnix.StatHandle(next);
+
+                if (!PreflightUnix.IsSameObject(status, opened))
+                {
+                    next.Dispose();
+                    throw new PreflightBlockedException("copy_parent_changed");
+                }
+
+                PreflightUnix.EnsureSameMount(opened, rootStatus);
+
+                current.Dispose();
+                current = next;
+            }
+
+            return current;
+        }
+        catch
+        {
+            current.Dispose();
+            throw;
+        }
+    }
+
+    private static void CopyRegularFile(
+        SafeFileHandle sourceParent,
+        SafeFileHandle destinationParent,
+        byte[] name,
+        PreflightManifestEntry entry,
+        PreflightFileStatus sourceRootStatus,
+        bool preserveModes)
+    {
+        PreflightFileStatus before = PreflightUnix.StatAt(sourceParent, name);
+
+        if (before.Type != PreflightUnix.RegularFileType)
+        {
+            throw new PreflightBlockedException("copy_source_kind_changed");
+        }
+
+        PreflightUnix.EnsureSameMount(before, sourceRootStatus);
+
+        using SafeFileHandle source = PreflightUnix.OpenFileAt(sourceParent, name);
+        PreflightFileStatus opened = PreflightUnix.StatHandle(source);
+
+        if (!PreflightUnix.IsSameObject(before, opened) || opened.Size != before.Size)
+        {
+            throw new PreflightBlockedException("copy_source_changed");
+        }
+
+        PreflightUnix.EnsureSameMount(opened, sourceRootStatus);
+
+        using SafeFileHandle destination = PreflightUnix.CreateFileAt(destinationParent, name);
+        using var input = new FileStream(source, FileAccess.Read, 131072, false);
+        using var output = new FileStream(destination, FileAccess.Write, 131072, false);
+        input.CopyTo(output);
+        output.Flush(true);
+        PreflightFileStatus after = PreflightUnix.StatHandle(source);
+
+        if (after.Size != opened.Size
+            || after.ChangeSeconds != opened.ChangeSeconds
+            || after.ChangeNanoseconds != opened.ChangeNanoseconds
+            || after.ModifiedSeconds != opened.ModifiedSeconds
+            || after.ModifiedNanoseconds != opened.ModifiedNanoseconds)
+        {
+            throw new PreflightBlockedException("copy_source_changed");
+        }
+
+        PreflightUnix.SetMode(destination, preserveModes ? entry.Mode : PrivateFileMode);
+        output.Flush(true);
+    }
+
+    private static void CopySymbolicLink(
+        SafeFileHandle sourceParent,
+        SafeFileHandle destinationParent,
+        byte[] name,
+        PreflightManifestEntry entry,
+        PreflightFileStatus rootStatus)
+    {
+        PreflightFileStatus before = PreflightUnix.StatAt(sourceParent, name);
+
+        if (before.Type != PreflightUnix.SymbolicLinkType)
+        {
+            throw new PreflightBlockedException("copy_source_kind_changed");
+        }
+
+        PreflightUnix.EnsureSameMount(before, rootStatus);
+        byte[] target = PreflightUnix.ReadLinkAt(sourceParent, name);
+        PreflightFileStatus after = PreflightUnix.StatAt(sourceParent, name);
+
+        if (!PreflightUnix.IsSameObject(before, after)
+            || before.ChangeSeconds != after.ChangeSeconds
+            || before.ChangeNanoseconds != after.ChangeNanoseconds
+            || Convert.ToBase64String(target) != entry.LinkTargetBase64)
+        {
+            throw new PreflightBlockedException("copy_source_changed");
+        }
+
+        PreflightUnix.CreateSymbolicLinkAt(destinationParent, name, target);
+    }
+
+    private static bool AreEqual(PreflightManifest left, PreflightManifest right)
+    {
+        byte[] leftBytes = PreflightManifestCodec.Serialize(left);
+        byte[] rightBytes = PreflightManifestCodec.Serialize(right);
+        return leftBytes.AsSpan().SequenceEqual(rightBytes);
+    }
+
+    private static byte[] FindAvailableName(SafeFileHandle parent, string prefix)
+    {
+        for (int index = 1; ; index++)
+        {
+            byte[] name = PreflightUnix.EncodeName(prefix + index.ToString("D4", CultureInfo.InvariantCulture));
+
+            if (!PreflightUnix.TryStatAt(parent, name, out _))
+            {
+                return name;
             }
         }
     }

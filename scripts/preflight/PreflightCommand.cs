@@ -157,8 +157,16 @@ internal static class PreflightCommand
     {
         return RunOperation(() =>
         {
-            PreflightOperations.Restore(backup, manifest, root);
-            Console.WriteLine("OK restore");
+            string? superseded = PreflightOperations.RestoreWithResult(backup, manifest, root);
+
+            if (superseded is null)
+            {
+                Console.WriteLine("OK restore");
+            }
+            else
+            {
+                Console.WriteLine($"OK restore superseded={superseded}");
+            }
         });
     }
 

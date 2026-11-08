@@ -1,3 +1,4 @@
+using Microsoft.Win32.SafeHandles;
 using System.Security.Cryptography;
 using System.Runtime.Versioning;
 
@@ -9,14 +10,14 @@ internal static class PreflightSnapshot
     public static PreflightManifest Capture(string root)
     {
         PreflightUnix.EnsureLinux();
-        string fullRoot = PreflightPath.FullPath(root);
 
-        if (!Directory.Exists(fullRoot))
-        {
-            throw new IOException("The snapshot root is unavailable.");
-        }
+        using SafeFileHandle rootHandle = PreflightUnix.OpenDirectoryPath(root);
+        return Capture(rootHandle);
+    }
 
-        var rootStatus = PreflightUnix.Stat(fullRoot);
+    public static PreflightManifest Capture(SafeFileHandle root)
+    {
+        PreflightFileStatus rootStatus = PreflightUnix.StatHandle(root);
 
         if (rootStatus.Type != PreflightUnix.DirectoryType)
         {
@@ -24,78 +25,94 @@ internal static class PreflightSnapshot
         }
 
         var entries = new List<PreflightManifestEntry>();
-        var normalizedPaths = new HashSet<string>(StringComparer.Ordinal);
-        Walk(fullRoot, fullRoot, entries, normalizedPaths);
+        Walk(root, rootStatus, [], entries);
         entries.Sort(ComparePaths);
         return new PreflightManifest(entries);
     }
 
     private static void Walk(
-        string root,
-        string directory,
-        List<PreflightManifestEntry> entries,
-        HashSet<string> normalizedPaths)
+        SafeFileHandle directory,
+        PreflightFileStatus rootStatus,
+        byte[] relativeDirectory,
+        List<PreflightManifestEntry> entries)
     {
-        var before = GetEntryStatus(directory);
+        PreflightFileStatus before = PreflightUnix.StatHandle(directory);
 
         if (before.Type != PreflightUnix.DirectoryType)
         {
             throw new PreflightBlockedException("directory_changed_during_snapshot");
         }
 
-        IEnumerable<string> children;
+        List<byte[]> children;
 
         try
         {
-            children = Directory.EnumerateFileSystemEntries(directory).ToArray();
+            children = PreflightUnix.EnumerateNames(directory);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (IOException)
         {
             throw new PreflightBlockedException("directory_unreadable");
         }
 
-        foreach (string child in children)
+        foreach (byte[] childName in children)
         {
-            string fullChild = PreflightPath.FullPath(child);
+            byte[] pathBytes = PreflightPath.JoinRelativePath(relativeDirectory, childName);
+            PreflightFileStatus status;
 
-            if (!PreflightPath.IsWithin(root, fullChild))
+            try
             {
-                throw new PreflightBlockedException("entry_escapes_root");
+                status = PreflightUnix.StatAt(directory, childName);
+            }
+            catch (IOException)
+            {
+                throw new PreflightBlockedException("entry_unreadable");
             }
 
-            string relativePath = Path.GetRelativePath(root, fullChild).Replace(Path.DirectorySeparatorChar, '/');
-            byte[] pathBytes = PreflightPath.EncodePath(relativePath);
-            string normalizedPath = PreflightPath.DecodeUtf8(pathBytes);
+            PreflightUnix.EnsureSameMount(status, rootStatus);
 
-            if (!normalizedPaths.Add(normalizedPath))
+            if (status.Type == PreflightUnix.DirectoryType)
             {
-                throw new PreflightBlockedException("duplicate_normalized_path");
-            }
+                SafeFileHandle openedDirectory;
 
-            (int type, long size, int mode, ulong inode, long changeSeconds, uint changeNanoseconds) = GetEntryStatus(fullChild);
+                try
+                {
+                    openedDirectory = PreflightUnix.OpenDirectoryAt(directory, childName);
+                }
+                catch (IOException)
+                {
+                    throw new PreflightBlockedException("entry_unreadable");
+                }
 
-            if (type == PreflightUnix.DirectoryType)
-            {
-                Walk(root, fullChild, entries, normalizedPaths);
+                using SafeFileHandle childDirectory = openedDirectory;
+                PreflightFileStatus openedStatus = PreflightUnix.StatHandle(childDirectory);
+
+                if (!PreflightUnix.IsSameObject(status, openedStatus) || !IsStable(status, openedStatus))
+                {
+                    throw new PreflightBlockedException("entry_changed_during_snapshot");
+                }
+
+                PreflightUnix.EnsureSameMount(openedStatus, rootStatus);
+
+                Walk(childDirectory, rootStatus, pathBytes, entries);
                 continue;
             }
 
-            if (type == PreflightUnix.RegularFileType)
+            if (status.Type == PreflightUnix.RegularFileType)
             {
-                entries.Add(ReadRegularFile(fullChild, pathBytes, size, mode, inode, changeSeconds, changeNanoseconds));
+                entries.Add(ReadRegularFile(directory, childName, pathBytes, status));
                 continue;
             }
 
-            if (type == PreflightUnix.SymbolicLinkType)
+            if (status.Type == PreflightUnix.SymbolicLinkType)
             {
-                entries.Add(ReadSymbolicLink(fullChild, pathBytes, size, mode, inode, changeSeconds, changeNanoseconds));
+                entries.Add(ReadSymbolicLink(directory, childName, pathBytes, status));
                 continue;
             }
 
             throw new PreflightBlockedException("special_file_unsupported");
         }
 
-        var after = GetEntryStatus(directory);
+        PreflightFileStatus after = PreflightUnix.StatHandle(directory);
 
         if (!IsStable(before, after))
         {
@@ -104,26 +121,26 @@ internal static class PreflightSnapshot
     }
 
     private static PreflightManifestEntry ReadRegularFile(
-        string path,
+        SafeFileHandle parent,
+        byte[] name,
         byte[] pathBytes,
-        long size,
-        int mode,
-        ulong inode,
-        long changeSeconds,
-        uint changeNanoseconds)
+        PreflightFileStatus before)
     {
         try
         {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 131072, FileOptions.SequentialScan);
-            byte[] hash = SHA256.HashData(stream);
-            var after = PreflightUnix.Stat(path);
+            using SafeFileHandle file = PreflightUnix.OpenFileAt(parent, name);
+            PreflightFileStatus opened = PreflightUnix.StatHandle(file);
 
-            if (after.Type != PreflightUnix.RegularFileType
-                || after.Size != size
-                || after.Mode != mode
-                || after.Inode != inode
-                || after.ChangeSeconds != changeSeconds
-                || after.ChangeNanoseconds != changeNanoseconds)
+            if (opened.Type != PreflightUnix.RegularFileType || !IsStable(before, opened))
+            {
+                throw new PreflightBlockedException("entry_changed_during_snapshot");
+            }
+
+            using var stream = new FileStream(file, FileAccess.Read, 131072, false);
+            byte[] hash = SHA256.HashData(stream);
+            PreflightFileStatus after = PreflightUnix.StatHandle(file);
+
+            if (!IsStable(opened, after))
             {
                 throw new PreflightBlockedException("entry_changed_during_snapshot");
             }
@@ -131,8 +148,8 @@ internal static class PreflightSnapshot
             return new PreflightManifestEntry(
                 Convert.ToBase64String(pathBytes),
                 "file",
-                size,
-                mode,
+                opened.Size,
+                opened.Mode,
                 Convert.ToHexStringLower(hash),
                 null);
         }
@@ -147,25 +164,17 @@ internal static class PreflightSnapshot
     }
 
     private static PreflightManifestEntry ReadSymbolicLink(
-        string path,
+        SafeFileHandle parent,
+        byte[] name,
         byte[] pathBytes,
-        long size,
-        int mode,
-        ulong inode,
-        long changeSeconds,
-        uint changeNanoseconds)
+        PreflightFileStatus before)
     {
         try
         {
-            byte[] target = PreflightUnix.ReadLink(path);
-            var after = PreflightUnix.Stat(path);
+            byte[] target = PreflightUnix.ReadLinkAt(parent, name);
+            PreflightFileStatus after = PreflightUnix.StatAt(parent, name);
 
-            if (after.Type != PreflightUnix.SymbolicLinkType
-                || after.Size != size
-                || after.Mode != mode
-                || after.Inode != inode
-                || after.ChangeSeconds != changeSeconds
-                || after.ChangeNanoseconds != changeNanoseconds)
+            if (after.Type != PreflightUnix.SymbolicLinkType || !IsStable(before, after))
             {
                 throw new PreflightBlockedException("entry_changed_during_snapshot");
             }
@@ -174,7 +183,7 @@ internal static class PreflightSnapshot
                 Convert.ToBase64String(pathBytes),
                 "symlink",
                 target.Length,
-                mode,
+                before.Mode,
                 null,
                 Convert.ToBase64String(target));
         }
@@ -190,32 +199,23 @@ internal static class PreflightSnapshot
 
     private static int ComparePaths(PreflightManifestEntry left, PreflightManifestEntry right)
     {
-        byte[] leftBytes = Convert.FromBase64String(left.PathBase64!);
-        byte[] rightBytes = Convert.FromBase64String(right.PathBase64!);
-        return leftBytes.AsSpan().SequenceCompareTo(rightBytes);
+        byte[] leftBytes = PreflightPath.DecodePath(left.PathBase64!);
+        byte[] rightBytes = PreflightPath.DecodePath(right.PathBase64!);
+        return PreflightUnix.CompareBytes(leftBytes, rightBytes);
     }
 
-    private static (int Type, long Size, int Mode, ulong Inode, long ChangeSeconds, uint ChangeNanoseconds) GetEntryStatus(string path)
-    {
-        try
-        {
-            return PreflightUnix.Stat(path);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            throw new PreflightBlockedException("entry_unreadable");
-        }
-    }
-
-    private static bool IsStable(
-        (int Type, long Size, int Mode, ulong Inode, long ChangeSeconds, uint ChangeNanoseconds) before,
-        (int Type, long Size, int Mode, ulong Inode, long ChangeSeconds, uint ChangeNanoseconds) after)
+    private static bool IsStable(PreflightFileStatus before, PreflightFileStatus after)
     {
         return before.Type == after.Type
             && before.Size == after.Size
             && before.Mode == after.Mode
             && before.Inode == after.Inode
+            && before.DeviceMajor == after.DeviceMajor
+            && before.DeviceMinor == after.DeviceMinor
+            && before.MountId == after.MountId
             && before.ChangeSeconds == after.ChangeSeconds
-            && before.ChangeNanoseconds == after.ChangeNanoseconds;
+            && before.ChangeNanoseconds == after.ChangeNanoseconds
+            && before.ModifiedSeconds == after.ModifiedSeconds
+            && before.ModifiedNanoseconds == after.ModifiedNanoseconds;
     }
 }
