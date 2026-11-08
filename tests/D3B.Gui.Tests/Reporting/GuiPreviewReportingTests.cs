@@ -6,6 +6,12 @@ using OpenCvSharp;
 
 namespace D3B.Gui.Tests.Reporting;
 
+[CollectionDefinition("Preview output guard tests", DisableParallelization = true)]
+public sealed class PreviewOutputGuardTestGroup
+{
+}
+
+[Collection("Preview output guard tests")]
 [Trait("Fixture", "SYNTHETIC")]
 public sealed class GuiPreviewReportingTests
 {
@@ -28,6 +34,7 @@ public sealed class GuiPreviewReportingTests
 
         using var json = JsonDocument.Parse(report.ToJson());
         var root = json.RootElement;
+        var calibrationSection = root.GetProperty("calibration");
 
         Assert.Equal(CalibrationStatus.Calibrated, calibration.Status);
         Assert.Equal(GuiPreviewVerdict.Calibrated, report.Verdict);
@@ -42,10 +49,19 @@ public sealed class GuiPreviewReportingTests
         Assert.Equal(SyntheticPreviewFixtures.ImageHeight, root.GetProperty("imageHeight").GetInt32());
         Assert.Equal(12, root.GetProperty("fitAnchorCount").GetInt32());
         Assert.Equal(3, root.GetProperty("validationAnchorCount").GetInt32());
+        Assert.Equal(12, calibrationSection.GetProperty("fitResidualsPixels").GetArrayLength());
+        Assert.Equal(3, calibrationSection.GetProperty("validationErrorsPixels").GetArrayLength());
+        Assert.Empty(calibrationSection.GetProperty("rejectedAnchorIndexes").EnumerateArray());
         Assert.Equal(1.0, root.GetProperty("inlierRatio").GetDouble(), 6);
         Assert.True(root.GetProperty("medianFitErrorPixels").GetDouble() < 0.001);
         Assert.True(root.GetProperty("maxFitErrorPixels").GetDouble() < 0.001);
         Assert.True(root.GetProperty("maxValidationErrorPixels").GetDouble() < 0.001);
+        Assert.Equal(calibration.Profile!.Mapper.A, calibrationSection.GetProperty("affineA").GetDouble(), 6);
+        Assert.Equal(calibration.Profile.Mapper.B, calibrationSection.GetProperty("affineB").GetDouble(), 6);
+        Assert.Equal(calibration.Profile.Mapper.Tx, calibrationSection.GetProperty("affineTx").GetDouble(), 6);
+        Assert.Equal(calibration.Profile.Mapper.C, calibrationSection.GetProperty("affineC").GetDouble(), 6);
+        Assert.Equal(calibration.Profile.Mapper.D, calibrationSection.GetProperty("affineD").GetDouble(), 6);
+        Assert.Equal(calibration.Profile.Mapper.Ty, calibrationSection.GetProperty("affineTy").GetDouble(), 6);
         Assert.Contains("A synthetic calibration is not validation on Unity.", report.Limitations);
         Assert.Contains("No real resource detection is performed; localization uses only the supplied local template.", report.Limitations);
         Assert.Contains("No capture, input, click, or network request is performed.", report.Limitations);
@@ -73,6 +89,20 @@ public sealed class GuiPreviewReportingTests
         Assert.NotNull(report.MaxValidationErrorPixels);
         Assert.Contains(calibration.Problems, problem => problem.Code == CalibrationProblemCode.InlierRatioTooLow);
         Assert.Contains(report.Problems, problem => problem.Code == CalibrationProblemCode.InlierRatioTooLow);
+
+        using var json = JsonDocument.Parse(report.ToJson());
+        var root = json.RootElement;
+        var calibrationSection = root.GetProperty("calibration");
+        Assert.Equal(
+            calibration.Metrics!.FitResidualsPixels,
+            calibrationSection.GetProperty("fitResidualsPixels").EnumerateArray().Select(value => value.GetDouble()));
+        Assert.Equal(
+            calibration.Metrics.ValidationErrorsPixels,
+            calibrationSection.GetProperty("validationErrorsPixels").EnumerateArray().Select(value => value.GetDouble()));
+        Assert.Equal(
+            calibration.Metrics.RejectedAnchorIndexes,
+            calibrationSection.GetProperty("rejectedAnchorIndexes").EnumerateArray().Select(value => value.GetInt32()));
+        Assert.Equal(JsonValueKind.Null, calibrationSection.GetProperty("affineA").ValueKind);
     }
 
     [Fact]
@@ -95,6 +125,17 @@ public sealed class GuiPreviewReportingTests
         Assert.Null(report.TargetStatus);
         Assert.Null(report.TargetConfidence);
         Assert.Null(report.ProposedClickPoint);
+    }
+
+    [Fact]
+    public void InputFailureMessageContainsOnlyFileNameAndStableErrorCode()
+    {
+        var message = GuiPreviewReport.FormatInputFailure(
+            "/private/session/anchors.json",
+            "ANCHORS_LOAD_FAILED");
+
+        Assert.Equal("Could not load 'anchors.json' (ANCHORS_LOAD_FAILED).", message);
+        Assert.DoesNotContain("/private/session", message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -178,42 +219,81 @@ public sealed class GuiPreviewReportingTests
     [Fact]
     public void OutputGuardAcceptsHomeRejectsRepositoryAndRelativePaths()
     {
-        var temporaryRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "p2n-output-guard"));
+        var temporaryRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), $"p2n-output-guard-{Guid.NewGuid():N}"));
         var home = Path.Combine(temporaryRoot, "home");
-        var repository = Path.Combine(temporaryRoot, "repository");
+        var repository = Path.Combine(temporaryRoot, "d3b-repository");
+        var otherRepository = Path.Combine(temporaryRoot, "other-repository");
+        Directory.CreateDirectory(repository);
+        File.WriteAllText(Path.Combine(repository, "D3B.slnx"), string.Empty);
+        Directory.CreateDirectory(Path.Combine(otherRepository, ".git"));
+        File.WriteAllText(Path.Combine(otherRepository, "Other.slnx"), string.Empty);
 
-        Assert.True(PreviewOutputGuard.TryAuthorize(
-            Path.Combine(home, ".local", "share", "D3B", "preview"),
-            home,
-            repository,
-            false,
-            out var accepted,
-            out _));
-        Assert.NotNull(accepted);
-        Assert.False(PreviewOutputGuard.TryAuthorize(
-            Path.Combine(repository, "artifacts"),
-            home,
-            repository,
-            true,
-            out _,
-            out _));
-        Assert.False(PreviewOutputGuard.TryAuthorize(home, home, repository, true, out _, out _));
-        Assert.False(PreviewOutputGuard.TryAuthorize(Path.GetTempPath(), home, repository, true, out _, out _));
-        Assert.False(PreviewOutputGuard.TryAuthorize("relative-output", home, repository, true, out _, out _));
-        Assert.True(PreviewOutputGuard.TryAuthorize(
-            Path.Combine(temporaryRoot, "explicit-output"),
-            home,
-            repository,
-            true,
-            out _,
-            out _));
-        Assert.False(PreviewOutputGuard.TryAuthorize(
-            Path.Combine(temporaryRoot, "implicit-output"),
-            home,
-            repository,
-            false,
-            out _,
-            out _));
+        var originalDirectory = Environment.CurrentDirectory;
+        try
+        {
+            Environment.CurrentDirectory = otherRepository;
+
+            Assert.True(PreviewOutputGuard.TryAuthorize(
+                Path.Combine(home, ".local", "share", "D3B", "preview"),
+                home,
+                false,
+                out var accepted,
+                out _));
+            Assert.NotNull(accepted);
+            Assert.False(PreviewOutputGuard.TryAuthorize(
+                Path.Combine(repository, "artifacts"),
+                home,
+                true,
+                out _,
+                out _));
+            Assert.False(Directory.Exists(Path.Combine(repository, "artifacts")));
+            Assert.False(PreviewOutputGuard.TryAuthorize(home, home, true, out _, out _));
+            Assert.False(PreviewOutputGuard.TryAuthorize(Path.GetTempPath(), home, true, out _, out _));
+            Assert.False(PreviewOutputGuard.TryAuthorize("relative-output", home, true, out _, out _));
+            Assert.True(PreviewOutputGuard.TryAuthorize(
+                Path.Combine(temporaryRoot, "explicit-output"),
+                home,
+                true,
+                out _,
+                out _));
+            Assert.False(PreviewOutputGuard.TryAuthorize(
+                Path.Combine(temporaryRoot, "implicit-output"),
+                home,
+                false,
+                out _,
+                out _));
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalDirectory;
+            Directory.Delete(temporaryRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void OutputWriterRejectsD3BRepositoryBeforeCreatingOutputDirectory()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var temporaryRoot = Path.Combine(Path.GetTempPath(), $"p2n-output-writer-{Guid.NewGuid():N}");
+        var repository = Path.Combine(temporaryRoot, "d3b-repository");
+        var output = Path.Combine(repository, "artifacts", "preview");
+        Directory.CreateDirectory(repository);
+        File.WriteAllText(Path.Combine(repository, "D3B.slnx"), string.Empty);
+
+        try
+        {
+            Assert.Throws<IOException>(() => PreviewOutputWriter.WriteText(output, "report.json", "private"));
+            Assert.False(Directory.Exists(output));
+            Assert.Equal(["D3B.slnx"], Directory.GetFiles(repository).Select(Path.GetFileName).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(temporaryRoot, recursive: true);
+        }
     }
 
     [Fact]

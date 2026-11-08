@@ -6,7 +6,6 @@ public static class PreviewOutputGuard
     /// <summary>Checks whether an output directory is permitted by the preview policy.</summary>
     /// <param name="outputDirectory">The requested output directory.</param>
     /// <param name="homeDirectory">The user's home directory.</param>
-    /// <param name="repositoryRoot">The repository root identified by its solution or Git metadata.</param>
     /// <param name="wasExplicitlyProvided">Whether the caller supplied the output path.</param>
     /// <param name="normalizedPath">The normalized absolute path when allowed.</param>
     /// <param name="reason">A short rejection reason when denied.</param>
@@ -14,14 +13,12 @@ public static class PreviewOutputGuard
     public static bool TryAuthorize(
         string outputDirectory,
         string homeDirectory,
-        string repositoryRoot,
         bool wasExplicitlyProvided,
         out string? normalizedPath,
         out string? reason)
     {
         ArgumentNullException.ThrowIfNull(outputDirectory);
         ArgumentNullException.ThrowIfNull(homeDirectory);
-        ArgumentNullException.ThrowIfNull(repositoryRoot);
 
         normalizedPath = null;
         reason = null;
@@ -32,20 +29,18 @@ public static class PreviewOutputGuard
             return false;
         }
 
-        if (!Path.IsPathFullyQualified(homeDirectory) || !Path.IsPathFullyQualified(repositoryRoot))
+        if (!Path.IsPathFullyQualified(homeDirectory))
         {
-            reason = "The home directory and repository root must be absolute paths.";
+            reason = "The home directory must be an absolute path.";
             return false;
         }
 
         string fullPath;
         string fullHome;
-        string fullRepository;
         try
         {
             fullPath = Normalize(outputDirectory);
             fullHome = Normalize(homeDirectory);
-            fullRepository = Normalize(repositoryRoot);
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -53,7 +48,7 @@ public static class PreviewOutputGuard
             return false;
         }
 
-        if (IsWithin(fullPath, fullRepository))
+        if (IsWithinD3BRepository(fullPath))
         {
             reason = "The output directory cannot be inside the repository.";
             return false;
@@ -90,6 +85,22 @@ public static class PreviewOutputGuard
 
         var prefix = Path.EndsInDirectorySeparator(directory) ? directory : directory + Path.DirectorySeparatorChar;
         return path.StartsWith(prefix, comparison);
+    }
+
+    private static bool IsWithinD3BRepository(string path)
+    {
+        var current = new DirectoryInfo(path);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "D3B.slnx")))
+            {
+                return true;
+            }
+
+            current = current.Parent;
+        }
+
+        return false;
     }
 
     private static bool IsFilesystemRoot(string path)

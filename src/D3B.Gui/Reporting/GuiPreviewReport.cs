@@ -70,6 +70,9 @@ public sealed record GuiPreviewReport
     /// <summary>Gets the number of independent validation anchors.</summary>
     public int? ValidationAnchorCount { get; }
 
+    /// <summary>Gets per-anchor residuals, rejected indexes, and affine coefficients for calibration.</summary>
+    public CalibrationSection Calibration { get; }
+
     /// <summary>Gets the calibration problems found during validation.</summary>
     public ImmutableArray<CalibrationProblem> Problems { get; }
 
@@ -125,6 +128,7 @@ public sealed record GuiPreviewReport
         InlierRatio = calibration.Metrics?.InlierRatio;
         FitAnchorCount = calibration.Metrics?.FitAnchorCount;
         ValidationAnchorCount = calibration.Metrics?.ValidationAnchorCount;
+        Calibration = new CalibrationSection(calibration.Metrics, calibration.Profile?.Mapper);
         Problems = calibration.Problems.IsDefault ? ImmutableArray<CalibrationProblem>.Empty : calibration.Problems;
         TargetStatus = target?.Status;
         TargetConfidence = target?.Confidence;
@@ -201,6 +205,18 @@ public sealed record GuiPreviewReport
             verdict);
     }
 
+    /// <summary>Formats a stable input-load failure with only the input file name.</summary>
+    /// <param name="filePath">The input path that failed to load.</param>
+    /// <param name="errorCode">The stable error code.</param>
+    /// <returns>A path-redacted input error message.</returns>
+    public static string FormatInputFailure(string filePath, string errorCode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(errorCode);
+
+        return $"Could not load '{Path.GetFileName(filePath)}' ({errorCode}).";
+    }
+
     private static string? FileNameOnly(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -231,5 +247,49 @@ public sealed record GuiPreviewReport
     public string ToJson()
     {
         return JsonSerializer.Serialize(this, _jsonContext.GuiPreviewReport);
+    }
+
+    /// <summary>Detailed calibration evidence serialized under the report's calibration section.</summary>
+    public sealed record CalibrationSection
+    {
+        /// <summary>Gets the fit residuals in fitting-anchor order.</summary>
+        public ImmutableArray<double> FitResidualsPixels { get; }
+
+        /// <summary>Gets the independent validation errors in validation-anchor order.</summary>
+        public ImmutableArray<double> ValidationErrorsPixels { get; }
+
+        /// <summary>Gets fitting-anchor indexes in the complete document rejected by RANSAC.</summary>
+        public ImmutableArray<int> RejectedAnchorIndexes { get; }
+
+        /// <summary>Gets affine coefficient a, or null when no accepted profile is available.</summary>
+        public double? AffineA { get; }
+
+        /// <summary>Gets affine coefficient b, or null when no accepted profile is available.</summary>
+        public double? AffineB { get; }
+
+        /// <summary>Gets affine coefficient tx, or null when no accepted profile is available.</summary>
+        public double? AffineTx { get; }
+
+        /// <summary>Gets affine coefficient c, or null when no accepted profile is available.</summary>
+        public double? AffineC { get; }
+
+        /// <summary>Gets affine coefficient d, or null when no accepted profile is available.</summary>
+        public double? AffineD { get; }
+
+        /// <summary>Gets affine coefficient ty, or null when no accepted profile is available.</summary>
+        public double? AffineTy { get; }
+
+        internal CalibrationSection(CalibrationMetrics? metrics, AffineScreenMapper? mapper)
+        {
+            FitResidualsPixels = metrics?.FitResidualsPixels ?? ImmutableArray<double>.Empty;
+            ValidationErrorsPixels = metrics?.ValidationErrorsPixels ?? ImmutableArray<double>.Empty;
+            RejectedAnchorIndexes = metrics?.RejectedAnchorIndexes ?? ImmutableArray<int>.Empty;
+            AffineA = mapper?.A;
+            AffineB = mapper?.B;
+            AffineTx = mapper?.Tx;
+            AffineC = mapper?.C;
+            AffineD = mapper?.D;
+            AffineTy = mapper?.Ty;
+        }
     }
 }
