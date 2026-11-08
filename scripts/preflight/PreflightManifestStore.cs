@@ -1,3 +1,4 @@
+using Microsoft.Win32.SafeHandles;
 using System.Security;
 using System.Runtime.Versioning;
 
@@ -6,19 +7,59 @@ namespace D3B.Scripts.Preflight;
 [SupportedOSPlatform("linux")]
 internal static class PreflightManifestStore
 {
-    public static PreflightManifest Read(string path)
+    private const int MaximumManifestBytes = 67_108_864;
+    private const int PrivateFileMode = 0x180;
+
+    public static PreflightManifest Read(string path, SafeFileHandle? sourceRoot = null)
     {
         try
         {
-            var status = PreflightUnix.Stat(path);
+            string fullPath = PreflightPath.FullPath(path);
+            string parentPath = Path.GetDirectoryName(fullPath) ?? "/";
+            string fileName = Path.GetFileName(fullPath);
+            using SafeFileHandle parent = PreflightUnix.OpenDirectoryPath(parentPath);
 
-            if (status.Type != PreflightUnix.RegularFileType || status.Size > 67_108_864)
+            if (sourceRoot is not null)
+            {
+                PreflightUnix.EnsureOutsideTree(parent, sourceRoot);
+            }
+
+            PreflightFileStatus before = PreflightUnix.StatAt(parent, PreflightUnix.EncodeName(fileName));
+
+            if (before.Type != PreflightUnix.RegularFileType || before.Size > MaximumManifestBytes)
             {
                 throw new PreflightBlockedException("manifest_file_invalid");
             }
 
-            byte[] bytes = File.ReadAllBytes(path);
-            return PreflightManifestCodec.Parse(bytes);
+            using SafeFileHandle file = PreflightUnix.OpenFileAt(parent, PreflightUnix.EncodeName(fileName));
+            PreflightFileStatus opened = PreflightUnix.StatHandle(file);
+
+            if (!PreflightUnix.IsSameObject(before, opened)
+                || before.Size != opened.Size
+                || opened.Type != PreflightUnix.RegularFileType)
+            {
+                throw new PreflightBlockedException("manifest_changed_during_read");
+            }
+
+            using var stream = new FileStream(file, FileAccess.Read, 131072, false);
+            using var content = new MemoryStream((int)opened.Size);
+            stream.CopyTo(content);
+
+            if (content.Length != opened.Size || content.Length > MaximumManifestBytes)
+            {
+                throw new PreflightBlockedException("manifest_changed_during_read");
+            }
+
+            PreflightFileStatus after = PreflightUnix.StatHandle(file);
+
+            if (after.Size != opened.Size
+                || after.ChangeSeconds != opened.ChangeSeconds
+                || after.ChangeNanoseconds != opened.ChangeNanoseconds)
+            {
+                throw new PreflightBlockedException("manifest_changed_during_read");
+            }
+
+            return PreflightManifestCodec.Parse(content.ToArray());
         }
         catch (PreflightBlockedException)
         {
@@ -30,70 +71,54 @@ internal static class PreflightManifestStore
         }
     }
 
-    public static void WriteAtomically(string path, PreflightManifest manifest)
+    public static void WriteAtomically(string path, PreflightManifest manifest, SafeFileHandle? sourceRoot = null)
     {
         PreflightUnix.EnsureLinux();
-        string fullPath = PreflightPath.FullPath(path);
-        PreflightPath.EnsureNoRepositoryMarker(fullPath);
         PreflightManifestCodec.Validate(manifest);
         byte[] bytes = PreflightManifestCodec.Serialize(manifest);
-        string parent = Path.GetDirectoryName(fullPath) ?? throw new IOException("The manifest parent is unavailable.");
-        EnsurePrivateParent(parent);
-        string temporaryPath = Path.Combine(parent, ".preflight-" + Guid.NewGuid().ToString("N") + ".tmp");
+        string fullPath = PreflightPath.FullPath(path);
+        string parentPath = Path.GetDirectoryName(fullPath) ?? "/";
+        string fileName = Path.GetFileName(fullPath);
+
+        if (string.IsNullOrEmpty(fileName))
+        {
+            throw new PreflightBlockedException("manifest_path_invalid");
+        }
+
+        using SafeFileHandle parent = PreflightUnix.OpenDirectoryPath(
+            parentPath,
+            true,
+            directory =>
+            {
+                PreflightUnix.EnsureNoRepositoryMarker(directory);
+
+                if (sourceRoot is not null)
+                {
+                    PreflightUnix.EnsureOutsideTree(directory, sourceRoot);
+                }
+            });
+        PreflightUnix.EnsurePrivateDirectory(parent);
+        byte[] temporaryName = PreflightUnix.EncodeName(".preflight-" + Guid.NewGuid().ToString("N") + ".tmp");
+        byte[] destinationName = PreflightUnix.EncodeName(fileName);
 
         try
         {
-            var options = new FileStreamOptions
-            {
-                Mode = FileMode.CreateNew,
-                Access = FileAccess.Write,
-                Share = FileShare.None,
-                Options = FileOptions.WriteThrough,
-                UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite,
-            };
-
-            using (var stream = new FileStream(temporaryPath, options))
+            using SafeFileHandle file = PreflightUnix.CreateFileAt(parent, temporaryName);
+            using (var stream = new FileStream(file, FileAccess.Write, 131072, false))
             {
                 stream.Write(bytes);
                 stream.Flush(true);
+                PreflightUnix.SetMode(file, PrivateFileMode);
+                stream.Flush(true);
             }
 
-            PreflightUnix.SetPrivateFileMode(temporaryPath);
-            File.Move(temporaryPath, fullPath, true);
-            PreflightUnix.SetPrivateFileMode(fullPath);
+            PreflightUnix.RenameAt(parent, temporaryName, parent, destinationName, true);
+            PreflightUnix.SyncDirectory(parent);
         }
-        finally
+        catch
         {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
-        }
-    }
-
-    private static void EnsurePrivateParent(string parent)
-    {
-        bool existed = Directory.Exists(parent);
-
-        if (!existed)
-        {
-            Directory.CreateDirectory(parent);
-            PreflightUnix.SetPrivateDirectoryMode(parent);
-        }
-
-        var status = PreflightUnix.Stat(parent);
-
-        if (status.Type != PreflightUnix.DirectoryType)
-        {
-            throw new PreflightBlockedException("manifest_parent_invalid");
-        }
-
-        UnixFileMode mode = File.GetUnixFileMode(parent);
-        UnixFileMode expected = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
-
-        if (mode != expected)
-        {
-            throw new PreflightBlockedException("manifest_parent_not_private");
+            PreflightUnix.UnlinkAt(parent, temporaryName);
+            throw;
         }
     }
 }

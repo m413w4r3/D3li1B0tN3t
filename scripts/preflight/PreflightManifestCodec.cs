@@ -1,7 +1,9 @@
 using System.Text.Json;
+using System.Runtime.Versioning;
 
 namespace D3B.Scripts.Preflight;
 
+[SupportedOSPlatform("linux")]
 internal static class PreflightManifestCodec
 {
     private const int SchemaVersion = 1;
@@ -68,9 +70,7 @@ internal static class PreflightManifestCodec
             }
 
             byte[] path = PreflightPath.DecodePath(entry.PathBase64);
-            string relativePath = PreflightPath.DecodeUtf8(path);
-
-            if (!paths.Add(relativePath))
+            if (!paths.Add(entry.PathBase64))
             {
                 throw new PreflightBlockedException("manifest_duplicate_path");
             }
@@ -113,23 +113,20 @@ internal static class PreflightManifestCodec
                 throw new PreflightBlockedException("manifest_kind_invalid");
             }
 
-            nonDirectoryPaths.Add(relativePath);
+            nonDirectoryPaths.Add(entry.PathBase64);
         }
 
-        foreach (string path in nonDirectoryPaths)
+        foreach (string encodedPath in nonDirectoryPaths)
         {
-            string? parent = Path.GetDirectoryName(path.Replace('/', Path.DirectorySeparatorChar));
+            byte[] path = PreflightPath.DecodePath(encodedPath);
 
-            while (parent is not null)
+            for (int index = 0; index < path.Length; index++)
             {
-                string normalizedParent = parent.Replace(Path.DirectorySeparatorChar, '/');
-
-                if (nonDirectoryPaths.Contains(normalizedParent))
+                if (path[index] == (byte)'/'
+                    && nonDirectoryPaths.Contains(Convert.ToBase64String(path.AsSpan(0, index))))
                 {
                     throw new PreflightBlockedException("manifest_path_conflict");
                 }
-
-                parent = Path.GetDirectoryName(parent);
             }
         }
     }
@@ -138,7 +135,14 @@ internal static class PreflightManifestCodec
     {
         try
         {
-            return Convert.FromBase64String(value);
+            byte[] bytes = Convert.FromBase64String(value);
+
+            if (Convert.ToBase64String(bytes) != value)
+            {
+                throw new PreflightBlockedException("manifest_link_target_invalid");
+            }
+
+            return bytes;
         }
         catch (FormatException)
         {

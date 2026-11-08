@@ -41,9 +41,17 @@ The Avalonia tests use Avalonia Headless. They do not require a display server.
 
 `scripts/preflight.cs` is an offline file-based tool. Its manifests use canonical JSON with base64 relative path bytes,
 SHA-256 for regular files, Unix modes, and raw symbolic-link target bytes. It never prints file contents or absolute
-private paths. Snapshot and compare outputs are atomically replaced in a private directory (`0700`) with a private
-manifest file (`0600`). Existing output parents must already be private. Backup output contains a `tree/` directory and
-`manifest.json`; restore checks the backup before changing the destination and verifies the restored tree afterward.
+private paths. Linux directory descriptors and no-follow entry operations keep traversal rooted, reject symlinked path
+components, and reject entries on a different device or mount. Snapshot and compare outputs are atomically replaced in
+a private directory (`0700`) with a private manifest file (`0600`); a missing output parent is created privately.
+Backups contain regular files and symlinks in a private `tree/` directory plus `manifest.json`. Directory entries and
+directory modes, including empty directories, are intentionally not represented; restore recreates only parent
+directories needed by manifest entries.
+
+Restore verifies the backup, copies it to a private sibling staging directory, and verifies the staged tree before
+renaming it into place. An existing destination is renamed to a sibling named `.preflight-superseded-NNNN` and retained
+for manual cleanup; restore never recursively deletes that tree. If staging fails, the original destination remains in
+place. After the swap, the installed tree is verified again.
 The known historical private manifest contains a `MISSING` line followed by concatenated paths and no verifiable
 SHA-256 lines. This is consistent with a newline-joined file list being passed as one argument, but the original
 command is unrecoverable and is not reconstructed here.

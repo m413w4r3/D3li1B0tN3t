@@ -7,6 +7,7 @@
 #:include preflight/PreflightManifestEntry.cs
 #:include preflight/PreflightManifestJsonContext.cs
 #:include preflight/PreflightManifestStore.cs
+#:include preflight/PreflightFileStatus.cs
 #:include preflight/PreflightOperations.cs
 #:include preflight/PreflightPath.cs
 #:include preflight/PreflightSnapshot.cs

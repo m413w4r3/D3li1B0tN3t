@@ -40,6 +40,7 @@
     <Compile Include="../../scripts/preflight/PreflightPath.cs" Link="Scripts/Preflight/PreflightPath.cs" />
     <Compile Include="../../scripts/preflight/PreflightSnapshot.cs" Link="Scripts/Preflight/PreflightSnapshot.cs" />
     <Compile Include="../../scripts/preflight/PreflightUnix.cs" Link="Scripts/Preflight/PreflightUnix.cs" />
+    <Compile Include="../../scripts/preflight/PreflightFileStatus.cs" Link="Scripts/Preflight/PreflightFileStatus.cs" />
     <Compile Include="../../scripts/preflight/PreflightManifestStore.cs" Link="Scripts/Preflight/PreflightManifestStore.cs" />
   </ItemGroup>
 

@@ -54,6 +54,20 @@ public sealed class PreflightOperationsTests
     }
 
     [Fact]
+    public void ParserRejectsWhitespaceInBase64Fields()
+    {
+        using var directory = new PreflightTestDirectory();
+        string root = directory.Root;
+        directory.WriteFile(root, "file", [1, 2, 3]);
+        JsonObject json = JsonNode.Parse(PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(root)))!.AsObject();
+        JsonObject entry = json["entries"]!.AsArray()[0]!.AsObject();
+        string pathBase64 = entry["pathBase64"]!.GetValue<string>();
+        entry["pathBase64"] = pathBase64.Insert(1, " ");
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.ParseManifest(JsonSerializer.SerializeToUtf8Bytes(json)));
+    }
+
+    [Fact]
     public void TamperedManifestHashSizeAndKindAreRejected()
     {
         using var directory = new PreflightTestDirectory();
@@ -137,7 +151,7 @@ public sealed class PreflightOperationsTests
     {
         using var directory = new PreflightTestDirectory();
         var root = directory.Root;
-        string target = directory.WriteFile(root, "target", [8, 9, 10]);
+        directory.WriteFile(root, "target", [8, 9, 10]);
         string config = directory.WriteFile(root, "config file", [1, 2, 3, 4]);
         File.SetUnixFileMode(config, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
         File.CreateSymbolicLink(System.IO.Path.Combine(root, "link"), "config file");
@@ -156,13 +170,18 @@ public sealed class PreflightOperationsTests
         directory.WriteFile(root, "extra", [5]);
         Assert.Throws<PreflightBlockedException>(() => PreflightOperations.Verify(root, manifestPath));
 
-        PreflightOperations.Restore(backup, manifestPath, root);
+        PreflightManifest supersededManifest = PreflightOperations.Snapshot(root);
+        string? supersededName = PreflightOperations.RestoreWithResult(backup, manifestPath, root);
+        Assert.NotNull(supersededName);
+        string supersededPath = directory.Combine(supersededName);
+        Assert.True(Directory.Exists(supersededPath));
+        PreflightOperations.Verify(supersededPath, supersededManifest);
         PreflightOperations.Verify(root, manifestPath);
         Assert.Equal(PreflightOperations.SerializeManifest(before), PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(root)));
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead, File.GetUnixFileMode(config));
         Assert.Equal("config file", new FileInfo(System.IO.Path.Combine(root, "link")).LinkTarget);
         Assert.False(File.Exists(System.IO.Path.Combine(root, "extra")));
-        Assert.Equal([8, 9, 10], File.ReadAllBytes(target));
+        Assert.Equal([8, 9, 10], File.ReadAllBytes(System.IO.Path.Combine(supersededPath, "target")));
     }
 
     [Fact]
@@ -197,6 +216,129 @@ public sealed class PreflightOperationsTests
         PreflightOperations.SnapshotToFile(root, privatePath);
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(privatePath));
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(System.IO.Path.GetDirectoryName(privatePath)!));
+    }
+
+    [Fact]
+    public void SymlinkedAncestorAliasesIntoSourceAndRepositoryAreRejected()
+    {
+        using var directory = new PreflightTestDirectory();
+        string root = directory.Root;
+        directory.WriteFile(root, "file", [1]);
+        string beforePath = directory.Combine("before.json");
+        PreflightOperations.WriteManifest(beforePath, PreflightOperations.Snapshot(root));
+        string sourceAlias = directory.Combine("source-alias");
+        Directory.CreateSymbolicLink(sourceAlias, root);
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.SnapshotToFile(root, System.IO.Path.Combine(sourceAlias, "manifest.json")));
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.Compare(root, beforePath, System.IO.Path.Combine(sourceAlias, "after.json")));
+
+        string repository = directory.Combine("repository");
+        Directory.CreateDirectory(repository);
+        File.WriteAllText(System.IO.Path.Combine(repository, "D3B.slnx"), "synthetic marker");
+        string repositoryAlias = directory.Combine("repository-alias");
+        Directory.CreateSymbolicLink(repositoryAlias, repository);
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.SnapshotToFile(root, System.IO.Path.Combine(repositoryAlias, "manifest.json")));
+    }
+
+    [Fact]
+    public void SnapshotRecordsDirectorySymlinksWithoutFollowingThem()
+    {
+        using var directory = new PreflightTestDirectory();
+        string root = directory.Root;
+        string outside = directory.Combine("outside");
+        Directory.CreateDirectory(outside);
+        directory.WriteFile(outside, "secret-shaped-synthetic-file", [9, 8, 7]);
+        File.CreateSymbolicLink(System.IO.Path.Combine(root, "linked-directory"), outside);
+
+        PreflightManifest manifest = PreflightOperations.Snapshot(root);
+
+        Assert.Single(manifest.Entries);
+        Assert.Equal("symlink", manifest.Entries[0].Kind);
+        Assert.Equal(Convert.ToBase64String(Encoding.UTF8.GetBytes("linked-directory")), manifest.Entries[0].PathBase64);
+    }
+
+    [Fact]
+    public void FailedRestoreStagingLeavesOriginalDestinationByteIdentical()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        Directory.CreateDirectory(source);
+        directory.WriteFile(source, "replacement", [1, 2, 3, 4]);
+        string backup = directory.Combine("backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+        string destination = directory.Root;
+        string oldFile = directory.WriteFile(destination, "old config", [7, 6, 5]);
+        File.SetUnixFileMode(oldFile, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
+        File.CreateSymbolicLink(System.IO.Path.Combine(destination, "old-link"), "old config");
+        byte[] before = PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(destination));
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.RestoreWithResult(
+            backup,
+            manifestPath,
+            destination,
+            () => throw new IOException("Synthetic staging failure.")));
+
+        byte[] after = PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(destination));
+        Assert.Equal(before, after);
+        Assert.Equal([7, 6, 5], File.ReadAllBytes(oldFile));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead, File.GetUnixFileMode(oldFile));
+        Assert.Equal("old config", new FileInfo(System.IO.Path.Combine(destination, "old-link")).LinkTarget);
+    }
+
+    [Fact]
+    public void RestoreDoesNotTouchContentReachedThroughDestinationSymlink()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        Directory.CreateDirectory(source);
+        directory.WriteFile(source, "replacement", [1, 2, 3]);
+        string backup = directory.Combine("backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+        string destination = directory.Root;
+        string outside = directory.Combine("outside");
+        Directory.CreateDirectory(outside);
+        string externalFile = directory.WriteFile(outside, "synthetic external file", [9, 8, 7, 6]);
+        File.CreateSymbolicLink(System.IO.Path.Combine(destination, "external-link"), outside);
+        var original = PreflightOperations.Snapshot(destination);
+
+        string? superseded = PreflightOperations.RestoreWithResult(backup, manifestPath, destination);
+
+        Assert.NotNull(superseded);
+        Assert.Equal([9, 8, 7, 6], File.ReadAllBytes(externalFile));
+        PreflightOperations.Verify(directory.Combine(superseded), original);
+    }
+
+    [Fact]
+    public void EmptyDirectoriesAreNotRepresentedOrRestored()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("empty-source");
+        Directory.CreateDirectory(source);
+        PreflightManifest empty = PreflightOperations.Snapshot(source);
+        Assert.Empty(empty.Entries);
+        Directory.CreateDirectory(System.IO.Path.Combine(source, "nested-empty"));
+        Assert.Equal(PreflightOperations.SerializeManifest(empty), PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(source)));
+
+        string backup = directory.Combine("empty-backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+        string destination = directory.Combine("empty-destination");
+        Directory.CreateDirectory(destination);
+        Directory.CreateDirectory(System.IO.Path.Combine(destination, "old-empty"));
+        PreflightOperations.Restore(backup, manifestPath, destination);
+
+        Assert.Empty(PreflightOperations.Snapshot(destination).Entries);
+        Assert.False(Directory.Exists(System.IO.Path.Combine(destination, "old-empty")));
+        Assert.False(Directory.Exists(System.IO.Path.Combine(destination, "nested-empty")));
+    }
+
+    [Fact]
+    public void MountBoundaryCheckRejectsDifferentMountIdentity()
+    {
+        var root = new PreflightFileStatus(PreflightUnix.DirectoryType, 0, 0x1c0, 1, 8, 1, 10, 0, 0, 0, 0);
+        var entry = new PreflightFileStatus(PreflightUnix.RegularFileType, 1, 0x180, 2, 8, 1, 11, 0, 0, 0, 0);
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightUnix.EnsureSameMount(entry, root));
     }
 
     [Fact]

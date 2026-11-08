@@ -62,6 +62,7 @@
     <File Path="scripts/preflight/PreflightPath.cs" />
     <File Path="scripts/preflight/PreflightSnapshot.cs" />
     <File Path="scripts/preflight/PreflightUnix.cs" />
+    <File Path="scripts/preflight/PreflightFileStatus.cs" />
   </Folder>
   <Folder Name="/scripts/embed/">
     <File Path="scripts/embed/EmbedCommand.cs" />

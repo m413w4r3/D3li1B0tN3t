@@ -7381,3 +7381,16 @@ Settled questions leave this table, and the decision that settles one says so.
   after restore.
 - **Why**: the manifest must preserve names and configuration bytes without logging them, and every compare or restore
   result must be reproducible from local files without launching the client or contacting a service.
+
+## D333: P2N-V restore stages and retains the replaced tree
+
+*2026-11-09, P2N-V preflight audit correction.*
+
+- **Decision**: traverse Linux trees through pinned directory descriptors with no-follow entry access and reject
+  symlinked path components and device or mount crossings. Restore verifies a complete sibling stage before swapping
+  it into place. An existing destination is renamed to a sibling `.preflight-superseded-NNNN` and retained for manual
+  cleanup; restore does not recursively delete destination contents. Empty directories and directory modes are outside
+  the manifest contract.
+- **Why**: path-based recursive deletion could cross mounts or follow a replaced symlink, and clearing the destination
+  before a successful copy could destroy the previous tree on I/O failure. A verified stage and retained rename avoid
+  destructive traversal and keep the prior tree available for recovery.
