@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using D3B.Bot.Runtime;
+using D3B.Gui.Safety;
 using D3B.Network.Relay;
 using D3B.Protocol.Game;
 using D3B.Protocol.Translation;
@@ -28,6 +29,7 @@ namespace D3B.Bot.Network;
 public sealed class GameSession : IConnectionInterceptor
 {
     private readonly IRelayConnection _connection;
+    private readonly IRelayAdmissionModeController? _admissionModeController;
     private readonly ProtocolTranslation _translation;
     private readonly GameAccounts _accounts;
     private readonly IReadOnlyList<IGameObserver> _observers;
@@ -36,6 +38,11 @@ public sealed class GameSession : IConnectionInterceptor
     // Movement stays blocked for this session because unread wire content makes its position unsafe to trust.
     private RelayInjectionException? _translationFailure;
     private readonly CancellationTokenSource _translationFailureSignal = new();
+    private readonly object _inputAdmissionLock = new();
+    private InputAdmissionSnapshot _inputAdmission = new(
+        GameInputMode.ProtocolInjection,
+        new DescriptorGameInputRequestClassifier([]),
+        0);
     private Func<IMessage, bool>? _sendGate;
     private Func<Task>? _sendBarrier;
 
@@ -58,6 +65,31 @@ public sealed class GameSession : IConnectionInterceptor
 
     /// <summary>Gets whether a frame this session could not read latched movement closed until the session ends.</summary>
     internal bool IsMovementTranslationBlocked => Volatile.Read(ref _translationFailure) is not null;
+
+    internal GameInputMode InputMode
+    {
+        get
+        {
+            return Volatile.Read(ref _inputAdmission).Mode;
+        }
+        set
+        {
+            UpdateInputAdmission(value, null);
+        }
+    }
+
+    internal IGameInputRequestClassifier<IMessage> GuiClassifier
+    {
+        get
+        {
+            return Volatile.Read(ref _inputAdmission).Classifier;
+        }
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            UpdateInputAdmission(null, value);
+        }
+    }
 
     internal Func<IMessage, bool>? SendGate
     {
@@ -93,10 +125,12 @@ public sealed class GameSession : IConnectionInterceptor
     private GameSession(IRelayConnection connection, ProtocolTranslation translation, GameAccounts accounts, IReadOnlyList<IGameObserver> observers, ILogger log)
     {
         _connection = connection;
+        _admissionModeController = connection as IRelayAdmissionModeController;
         _translation = translation;
         _accounts = accounts;
         _observers = observers;
         _log = log;
+        _admissionModeController?.SetAdmissionMode(0, requiresTypedAdmission: false);
         SendGate = request => !MovementRequests.IsMovementCapable(request);
     }
 
@@ -143,6 +177,7 @@ public sealed class GameSession : IConnectionInterceptor
     public async Task SendAsync(IMessage request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        EnsureAdmitted(request);
 
         if (MovementRequests.IsMovementCapable(request))
         {
@@ -164,6 +199,7 @@ public sealed class GameSession : IConnectionInterceptor
     internal async Task SendUnguardedAsync(IMessage request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var admission = EnsureAdmitted(request);
 
         var movement = MovementRequests.IsMovementCapable(request);
 
@@ -172,10 +208,11 @@ public sealed class GameSession : IConnectionInterceptor
             ThrowIfTranslationFailed();
 
         var frame = _translation.EncodeGameRequest(request);
+        Func<bool> stillAdmitted = () => IsStillAdmitted(admission, request);
 
         if (!movement)
         {
-            await _connection.SendToServerAsync(frame, cancellationToken);
+            await _connection.SendToServerAsync(frame, stillAdmitted, cancellationToken);
         }
         else
         {
@@ -185,7 +222,7 @@ public sealed class GameSession : IConnectionInterceptor
 
             try
             {
-                await _connection.SendToServerAsync(frame, linked.Token);
+                await _connection.SendToServerAsync(frame, stillAdmitted, linked.Token);
             }
             catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested && IsMovementTranslationBlocked)
             {
@@ -271,6 +308,62 @@ public sealed class GameSession : IConnectionInterceptor
             && decoded.IsSchemaValid;
     }
 
+    private void UpdateInputAdmission(GameInputMode? mode, IGameInputRequestClassifier<IMessage>? classifier)
+    {
+        lock (_inputAdmissionLock)
+        {
+            var current = _inputAdmission;
+            var nextMode = mode ?? current.Mode;
+            var nextClassifier = classifier ?? current.Classifier;
+
+            if (current.Mode == nextMode && ReferenceEquals(current.Classifier, nextClassifier))
+                return;
+
+            var next = new InputAdmissionSnapshot(nextMode, nextClassifier, current.Version + 1);
+
+            _admissionModeController?.SetAdmissionMode(next.Version, next.Mode is not GameInputMode.ProtocolInjection);
+            Volatile.Write(ref _inputAdmission, next);
+        }
+    }
+
+    private InputAdmissionSnapshot EnsureAdmitted(IMessage request)
+    {
+        var admission = Volatile.Read(ref _inputAdmission);
+
+        if (!IsAllowed(admission, request))
+            throw new InvalidOperationException("The request is not allowed by the current game input mode.");
+
+        return admission;
+    }
+
+    private bool IsStillAdmitted(InputAdmissionSnapshot admission, IMessage request)
+    {
+        lock (_inputAdmissionLock)
+        {
+            var current = Volatile.Read(ref _inputAdmission);
+
+            if (current.Version != admission.Version || current.Mode != admission.Mode)
+                return false;
+
+            var allowed = IsAllowed(admission, request);
+            var afterClassification = Volatile.Read(ref _inputAdmission);
+
+            return allowed && afterClassification.Version == admission.Version;
+        }
+    }
+
+    private static bool IsAllowed(InputAdmissionSnapshot admission, IMessage request)
+    {
+        try
+        {
+            return GuiInputModePolicy.IsAllowed(admission.Mode, request, admission.Classifier);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     private void LogTranslationProblem(string side, string message, DecodedGameFrame decoded, bool nonPosition)
     {
         var category = GameLog.ProblemCategory(decoded);
@@ -309,4 +402,20 @@ public sealed class GameSession : IConnectionInterceptor
     }
 
     private readonly record struct TranslationProblemKey(string Side, string Message, string Category);
+
+    private sealed class InputAdmissionSnapshot
+    {
+        public GameInputMode Mode { get; }
+
+        public IGameInputRequestClassifier<IMessage> Classifier { get; }
+
+        public long Version { get; }
+
+        public InputAdmissionSnapshot(GameInputMode mode, IGameInputRequestClassifier<IMessage> classifier, long version)
+        {
+            Mode = mode;
+            Classifier = classifier;
+            Version = version;
+        }
+    }
 }

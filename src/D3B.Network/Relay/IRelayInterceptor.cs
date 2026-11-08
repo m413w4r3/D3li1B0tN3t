@@ -15,7 +15,7 @@ namespace D3B.Network.Relay;
 /// </para>
 /// <para>
 /// A frame of D3B's own goes to the server between two of the client's frames, through
-/// <see cref="IRelayConnection.SendToServerAsync"/>; only a watched connection knows where they are.
+/// <see cref="IRelayConnection.SendToServerAsync(System.ReadOnlyMemory{System.Byte}, System.Threading.CancellationToken)"/>; only a watched connection knows where they are.
 /// </para>
 /// </remarks>
 public interface IRelayInterceptor

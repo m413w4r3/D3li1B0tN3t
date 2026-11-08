@@ -36,4 +36,12 @@ public interface IRelayConnection
     /// <returns>A task that completes once the frame went to the server's side.</returns>
     /// <exception cref="RelayInjectionException">The connection closed before the frame went, or the client's bytes are no frames.</exception>
     Task SendToServerAsync(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken = default);
+
+    /// <summary>Sends a typed D3B frame, rechecking its admission at the final relay write barrier.</summary>
+    /// <param name="frame">The frame's bytes, without their length.</param>
+    /// <param name="stillAdmitted">Returns whether the originating session still admits this request.</param>
+    /// <param name="cancellationToken">Stops waiting; a frame not gone yet then never goes.</param>
+    /// <returns>A task that completes once the frame went to the server's side.</returns>
+    /// <exception cref="RelayInjectionException">The frame was no longer admitted or the connection closed before it went.</exception>
+    Task SendToServerAsync(ReadOnlyMemory<byte> frame, Func<bool> stillAdmitted, CancellationToken cancellationToken = default);
 }
