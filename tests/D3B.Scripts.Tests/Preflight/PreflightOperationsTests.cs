@@ -428,6 +428,77 @@ public sealed class PreflightOperationsTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void RestoreRejectsStagePathReplacedBeforeExchange(bool replaceWithSymlink)
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        Directory.CreateDirectory(source);
+        directory.WriteFile(source, "replacement", [1, 3, 5]);
+        string backup = directory.Combine("backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+        string destination = directory.Root;
+        directory.WriteFile(destination, "original", [2, 4, 6]);
+        PreflightManifest originalManifest = PreflightOperations.Snapshot(destination);
+        using SafeFileHandle parent = PreflightUnix.OpenDirectoryPath(directory.Path);
+        byte[] destinationName = PreflightUnix.EncodeName("tree");
+        PreflightFileStatus originalStatus = PreflightUnix.StatAt(parent, destinationName);
+        string movedStagePath = directory.Combine("writer-moved-stage");
+        string stagePath = string.Empty;
+        byte[] stageName = [];
+        PreflightFileStatus? concurrentStageStatus = null;
+        int exchangeCalls = 0;
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.RestoreWithResult(
+            backup,
+            manifestPath,
+            destination,
+            exchange: (firstParent, firstName, secondParent, secondName) =>
+            {
+                exchangeCalls++;
+                PreflightUnix.ExchangeAt(firstParent, firstName, secondParent, secondName);
+            },
+            beforeExchange: () =>
+            {
+                stagePath = Assert.Single(Directory.GetDirectories(directory.Path, ".preflight-stage-*"));
+                stageName = PreflightUnix.EncodeName(System.IO.Path.GetFileName(stagePath));
+                Directory.Move(stagePath, movedStagePath);
+                if (replaceWithSymlink)
+                {
+                    File.CreateSymbolicLink(stagePath, "concurrent-stage-target");
+                }
+                else
+                {
+                    Directory.CreateDirectory(stagePath);
+                    File.WriteAllBytes(System.IO.Path.Combine(stagePath, "concurrent"), [9, 8, 7]);
+                }
+
+                concurrentStageStatus = PreflightUnix.StatAt(parent, stageName);
+            }));
+
+        Assert.NotEmpty(stagePath);
+        Assert.Equal(0, exchangeCalls);
+        Assert.NotNull(concurrentStageStatus);
+        PreflightFileStatus currentDestinationStatus = PreflightUnix.StatAt(parent, destinationName);
+        PreflightFileStatus currentStageStatus = PreflightUnix.StatAt(parent, stageName);
+        Assert.True(PreflightUnix.IsSameEntry(originalStatus, currentDestinationStatus));
+        Assert.True(PreflightUnix.IsSameEntry(concurrentStageStatus!, currentStageStatus));
+        Assert.Equal(replaceWithSymlink ? PreflightUnix.SymbolicLinkType : PreflightUnix.DirectoryType, currentStageStatus.Type);
+        PreflightOperations.Verify(destination, originalManifest);
+        PreflightOperations.Verify(movedStagePath, manifestPath);
+
+        if (replaceWithSymlink)
+        {
+            Assert.Equal("concurrent-stage-target", new FileInfo(stagePath).LinkTarget);
+        }
+        else
+        {
+            Assert.Equal([9, 8, 7], File.ReadAllBytes(System.IO.Path.Combine(stagePath, "concurrent")));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void RestorePreservesDestinationReplacedAfterIdentityCheck(bool replaceWithSymlink)
     {
         using var directory = new PreflightTestDirectory();
