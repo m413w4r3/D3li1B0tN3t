@@ -1375,6 +1375,13 @@ public sealed class BotActor : IAsyncDisposable
 
         bool playerActionStarted = side is RelayDirection.FromClient && PlayerActions.Starts(state, message);
         bool expectedGuiWalkRequest = ObserveGuiWalkFrame(session, side, message, translationBlocked, before, state, playerActionStarted);
+
+        if (side is RelayDirection.FromServer && IsGuiDialogExchangeOrUseEvent(message))
+        {
+            // The read-loop lease revocation can run before this inbox event; terminate correlation here as defense in depth.
+            CancelActiveGuiIntent("A server dialog, exchange, or interactive-use state changed during the intention.");
+        }
+
         CancelGuiClickLeaseIfTerminal();
 
         LogPositionTransition(before, state, side, message);
@@ -1435,6 +1442,20 @@ public sealed class BotActor : IAsyncDisposable
             expectation.TryMatch(side, message, state);
 
         _expectations.RemoveAll(expectation => expectation.IsDone);
+    }
+
+    private static bool IsGuiDialogExchangeOrUseEvent(IMessage message)
+    {
+        return message is NpcDialogCreationEvent
+            or NpcDialogQuestionEvent
+            or DialogLeaveEvent
+            or TeleportDestinationsEvent
+            or ExchangeStartedWithStorageEvent
+            or ExchangeStartedWithTabbedStorageEvent
+            or ExchangeLeaveEvent
+            or InteractiveUsedEvent
+            or InteractiveUseEndedEvent
+            or InteractiveUseErrorEvent;
     }
 
     private bool ObserveGuiWalkFrame(
