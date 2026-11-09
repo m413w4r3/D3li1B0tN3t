@@ -63,7 +63,7 @@ internal static class PreflightOperations
         return AreEqual(before, after);
     }
 
-    public static string Backup(string root, string outputDirectory)
+    public static string Backup(string root, string outputDirectory, Action? afterBackupTreeCreated = null)
     {
         using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(root);
         PreflightManifest manifest = PreflightSnapshot.Capture(source);
@@ -95,7 +95,10 @@ internal static class PreflightOperations
         using SafeFileHandle backup = PreflightUnix.OpenDirectoryAt(parent, outputNameBytes);
         PreflightUnix.CreateDirectoryAt(backup, PreflightUnix.EncodeName(BackupTreeName));
         using SafeFileHandle tree = PreflightUnix.OpenDirectoryAt(backup, PreflightUnix.EncodeName(BackupTreeName));
+        afterBackupTreeCreated?.Invoke();
         CopyEntries(source, tree, manifest, false);
+        PreflightUnix.SyncTree(tree);
+        PreflightUnix.SyncDirectory(backup);
         VerifyBackupTree(tree, manifest);
         string manifestPath = Path.Combine(fullOutput, BackupManifestName);
         PreflightManifestStore.WriteAtomically(manifestPath, manifest, source);
@@ -111,11 +114,23 @@ internal static class PreflightOperations
         string backupDirectory,
         string manifestPath,
         string root,
-        Action? afterStageCreated = null)
+        Action? afterStageCreated = null,
+        Action? beforeSwap = null,
+        Action? afterSwap = null,
+        Action? afterStageDirectorySynced = null,
+        Action<SafeFileHandle, byte[], SafeFileHandle, byte[]>? exchange = null)
     {
         try
         {
-            return RestoreCore(backupDirectory, manifestPath, root, afterStageCreated);
+            return RestoreCore(
+                backupDirectory,
+                manifestPath,
+                root,
+                afterStageCreated,
+                beforeSwap,
+                afterSwap,
+                afterStageDirectorySynced,
+                exchange);
         }
         catch (PreflightBlockedException)
         {
@@ -131,7 +146,11 @@ internal static class PreflightOperations
         string backupDirectory,
         string manifestPath,
         string root,
-        Action? afterStageCreated)
+        Action? afterStageCreated,
+        Action? beforeSwap,
+        Action? afterSwap,
+        Action? afterStageDirectorySynced,
+        Action<SafeFileHandle, byte[], SafeFileHandle, byte[]>? exchange)
     {
         using SafeFileHandle backup = PreflightUnix.OpenDirectoryPath(backupDirectory);
         PreflightFileStatus backupStatus = PreflightUnix.StatHandle(backup);
@@ -157,6 +176,7 @@ internal static class PreflightOperations
         PreflightFileStatus parentStatus = PreflightUnix.StatHandle(rootParent);
         SafeFileHandle? originalRoot = null;
         PreflightFileStatus? originalRootStatus = null;
+        PreflightManifest? originalManifest = null;
 
         if (PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? destinationStatus))
         {
@@ -177,6 +197,7 @@ internal static class PreflightOperations
 
             PreflightUnix.EnsureNoRepositoryMarker(originalRoot);
             RejectOverlappingRestorePaths(backup, originalRoot);
+            originalManifest = PreflightSnapshot.Capture(originalRoot);
         }
         else
         {
@@ -196,49 +217,130 @@ internal static class PreflightOperations
 
             PreflightManifest manifest = PreflightManifestStore.Read(manifestPath, originalRoot);
             VerifyBackupTree(backupTree, manifest);
-            byte[] stageName = PreflightUnix.EncodeName(".preflight-stage-" + Guid.NewGuid().ToString("N"));
-            PreflightUnix.CreateDirectoryAt(rootParent, stageName);
+            byte[] stageName = CreateStageDirectory(rootParent);
             using SafeFileHandle stage = PreflightUnix.OpenDirectoryAt(rootParent, stageName);
             afterStageCreated?.Invoke();
             CopyEntries(backupTree, stage, manifest, true);
             Verify(stage, manifest, "restore_staging_mismatch");
-            byte[]? supersededName = null;
+            PreflightFileStatus stageStatus = PreflightUnix.StatHandle(stage);
+            PreflightUnix.SyncTree(stage, afterStageDirectorySynced);
+            PreflightUnix.SyncDirectory(rootParent);
+            beforeSwap?.Invoke();
 
             if (originalRoot is not null)
             {
-                supersededName = FindAvailableName(rootParent, ".preflight-superseded-");
-                PreflightUnix.RenameAt(rootParent, rootNameBytes, rootParent, supersededName);
-            }
-
-            try
-            {
-                PreflightUnix.RenameAt(rootParent, stageName, rootParent, rootNameBytes);
-            }
-            catch
-            {
-                if (supersededName is not null)
+                if (!PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? currentRootStatus)
+                    || !PreflightUnix.IsSameObject(originalRootStatus!, currentRootStatus!))
                 {
-                    PreflightUnix.RenameAt(rootParent, supersededName, rootParent, rootNameBytes);
+                    throw new PreflightBlockedException("restore_root_changed");
                 }
 
-                throw;
+                Verify(originalRoot, originalManifest!, "restore_root_changed");
+
+                (exchange ?? PreflightUnix.ExchangeAt)(rootParent, stageName, rootParent, rootNameBytes);
+
+                try
+                {
+                    PreflightUnix.SyncDirectory(rootParent);
+                    afterSwap?.Invoke();
+
+                    using SafeFileHandle installed = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
+                    PreflightFileStatus installedStatus = PreflightUnix.StatHandle(installed);
+
+                    if (!PreflightUnix.IsSameObject(stageStatus, installedStatus))
+                    {
+                        throw new PreflightBlockedException("restore_installed_tree_changed");
+                    }
+
+                    Verify(installed, manifest, "restore_verification_failed");
+                    using SafeFileHandle retained = PreflightUnix.OpenDirectoryAt(rootParent, stageName);
+                    PreflightFileStatus retainedStatus = PreflightUnix.StatHandle(retained);
+
+                    if (!PreflightUnix.IsSameObject(originalRootStatus!, retainedStatus))
+                    {
+                        throw new PreflightBlockedException("restore_superseded_tree_changed");
+                    }
+
+                    Verify(retained, originalManifest!, "restore_superseded_verification_failed");
+
+                    if (!PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? installedPathStatus)
+                        || !PreflightUnix.IsSameObject(stageStatus, installedPathStatus!)
+                        || !PreflightUnix.TryStatAt(rootParent, stageName, out PreflightFileStatus? retainedPathStatus)
+                        || !PreflightUnix.IsSameObject(originalRootStatus!, retainedPathStatus!))
+                    {
+                        throw new PreflightBlockedException("restore_installation_changed");
+                    }
+
+                    return System.Text.Encoding.UTF8.GetString(stageName);
+                }
+                catch
+                {
+                    try
+                    {
+                        if (!PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? installedStatus)
+                            || !PreflightUnix.IsSameObject(stageStatus, installedStatus!)
+                            || !PreflightUnix.TryStatAt(rootParent, stageName, out PreflightFileStatus? retainedStatus)
+                            || !PreflightUnix.IsSameObject(originalRootStatus!, retainedStatus!))
+                        {
+                            throw new PreflightBlockedException("restore_rollback_state_changed");
+                        }
+
+                        (exchange ?? PreflightUnix.ExchangeAt)(rootParent, stageName, rootParent, rootNameBytes);
+                        PreflightUnix.SyncDirectory(rootParent);
+
+                        using SafeFileHandle restored = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
+                        PreflightFileStatus restoredStatus = PreflightUnix.StatHandle(restored);
+
+                        if (!PreflightUnix.IsSameObject(originalRootStatus!, restoredStatus))
+                        {
+                            throw new PreflightBlockedException("restore_rollback_state_changed");
+                        }
+
+                        Verify(restored, originalManifest!, "restore_rollback_verification_failed");
+                    }
+                    catch
+                    {
+                        throw new PreflightBlockedException("restore_rollback_failed");
+                    }
+
+                    throw new PreflightBlockedException("restore_verification_failed");
+                }
             }
+
+            PreflightUnix.RenameAt(rootParent, stageName, rootParent, rootNameBytes);
 
             try
             {
+                PreflightUnix.SyncDirectory(rootParent);
+                afterSwap?.Invoke();
+
                 using SafeFileHandle installed = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
                 Verify(installed, manifest, "restore_verification_failed");
-                PreflightUnix.SyncDirectory(rootParent);
-                return supersededName is null ? null : System.Text.Encoding.UTF8.GetString(supersededName);
+                return null;
             }
             catch
             {
-                byte[] failedName = FindAvailableName(rootParent, ".preflight-failed-");
-                PreflightUnix.RenameAt(rootParent, rootNameBytes, rootParent, failedName);
-
-                if (supersededName is not null)
+                try
                 {
-                    PreflightUnix.RenameAt(rootParent, supersededName, rootParent, rootNameBytes);
+                    if (PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? installedStatus)
+                        && PreflightUnix.IsSameObject(stageStatus, installedStatus!)
+                        && !PreflightUnix.TryStatAt(rootParent, stageName, out _))
+                    {
+                        PreflightUnix.RenameAt(rootParent, rootNameBytes, rootParent, stageName);
+                        PreflightUnix.SyncDirectory(rootParent);
+
+                        using SafeFileHandle retained = PreflightUnix.OpenDirectoryAt(rootParent, stageName);
+                        Verify(retained, manifest, "restore_rollback_verification_failed");
+
+                        if (PreflightUnix.TryStatAt(rootParent, rootNameBytes, out _))
+                        {
+                            throw new PreflightBlockedException("restore_rollback_state_changed");
+                        }
+                    }
+                }
+                catch
+                {
+                    throw new PreflightBlockedException("restore_rollback_failed");
                 }
 
                 throw new PreflightBlockedException("restore_verification_failed");
@@ -472,16 +574,26 @@ internal static class PreflightOperations
         return leftBytes.AsSpan().SequenceEqual(rightBytes);
     }
 
-    private static byte[] FindAvailableName(SafeFileHandle parent, string prefix)
+    private static byte[] CreateStageDirectory(SafeFileHandle parent)
     {
         for (int index = 1; ; index++)
         {
-            byte[] name = PreflightUnix.EncodeName(prefix + index.ToString("D4", CultureInfo.InvariantCulture));
+            byte[] name = PreflightUnix.EncodeName(".preflight-stage-" + index.ToString("D4", CultureInfo.InvariantCulture));
 
-            if (!PreflightUnix.TryStatAt(parent, name, out _))
+            if (PreflightUnix.TryStatAt(parent, name, out _))
             {
+                continue;
+            }
+
+            try
+            {
+                PreflightUnix.CreateDirectoryAt(parent, name);
                 return name;
+            }
+            catch (IOException) when (Marshal.GetLastPInvokeError() == 17)
+            {
             }
         }
     }
+
 }

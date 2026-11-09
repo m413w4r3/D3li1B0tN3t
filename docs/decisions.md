@@ -7394,3 +7394,18 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Why**: path-based recursive deletion could cross mounts or follow a replaced symlink, and clearing the destination
   before a successful copy could destroy the previous tree on I/O failure. A verified stage and retained rename avoid
   destructive traversal and keep the prior tree available for recovery.
+
+## D334: P2N-V restore exchanges verified trees atomically
+
+*2026-11-09, P2N-V A3 audit correction.*
+
+- **Decision**: when a destination exists, install with Linux `renameat2(RENAME_EXCHANGE)`, verify the installed tree
+  and retained prior tree, and exchange them back if verification fails. Keep the prior tree under the stage name.
+  When the destination is absent, use `RENAME_NOREPLACE` so a concurrent creator is never overwritten. Synchronize
+  staged files and directories bottom-up, then synchronize the parent around installation. Fail ancestry checks when
+  they cross a mount ID; cross-mount output paths are blocked.
+- **Recovery**: never recursively delete a stage, superseded tree, or incomplete backup. A staging or backup failure
+  may leave a private artifact for manual inspection and cleanup.
+- **Why**: a pair of separate renames can leave the requested path absent after interruption or a competing creator.
+  An exchange keeps a tree at the destination name throughout the namespace update, and synchronization makes the
+  verified stage and its installation durable on filesystems that honor `fsync`.
