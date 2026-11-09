@@ -167,7 +167,12 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
         if (binding.Bot is { } bot)
         {
             if (frame.IsRead)
+            {
+                if (GetReadableFrameRevocationReason(bot, direction, frame.Content) is { } reason)
+                    bot.RevokeGuiClickLease(reason, session);
+
                 bot.See(session, direction, frame.Content, session.IsMovementTranslationBlocked);
+            }
             else if (session.IsMovementTranslationBlocked)
             {
                 bot.RevokeGuiClickLeaseForTranslationBlocked(session);
@@ -207,9 +212,6 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
             }
         }
 
-        if (bot.Session is { } previous && !ReferenceEquals(previous, session))
-            previous.Supersede();
-
         session.SendGate = request => bot.CanSendRawRequest(session, request);
         session.SendBarrier = bot.ProcessedAsync;
         bot.Attach(session, state);
@@ -225,10 +227,32 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
 
     private void Close(GameSession session)
     {
-        session.Supersede();
-
         if (_sessions.TryRemove(session, out var binding))
             binding.Bot?.Detach(session);
+
+        session.Supersede();
+    }
+
+    private static string? GetReadableFrameRevocationReason(BotActor bot, RelayDirection direction, IMessage message)
+    {
+        if (direction is RelayDirection.FromClient && PlayerActions.Starts(bot.State, message))
+            return "A client gameplay action started.";
+
+        if (direction is not RelayDirection.FromServer)
+            return null;
+
+        return message switch
+        {
+            ContextCreationEvent { Context: ContextCreationEvent.Types.GameContext.Fight } => "A server fight started.",
+            MapCurrentEvent current when current.MapId != bot.State.MapId => "The server changed the current map.",
+            MapCurrentEvent => "The server refreshed the current map state.",
+            MapInformationEvent information when information.MapId != bot.State.MapId => "Map information arrived for another map.",
+            MapInformationEvent => "The server refreshed map information.",
+            MapMovementEvent movement when movement.ActorId == bot.Key.CharacterId => "The server reported self movement.",
+            MapMovementRefusedEvent => "The server refused movement.",
+            MapMovementConfirmResponse => "The server confirmed movement.",
+            _ => null,
+        };
     }
 
     private sealed class Binding

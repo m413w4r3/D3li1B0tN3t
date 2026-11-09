@@ -257,12 +257,13 @@ same time. PotentiallyConcurrentHumanInput causes an interruption; the correlati
 cryptographic attribution. Missing or conflicting confirmation yields Unconfirmed and no automatic retry. Visual
 animation alone is not a server confirmation.
 
-BotActor owns a shared `GuiClickLease` for each registered intent. Actor revocation cancels it on cancellation, expiry,
-consumption, pause, session attach/detach/stop, fight or map change, client gameplay before the click gate, translation
-latch closure, or unexpected terminal evidence. An unread frame that closes the session translation latch cancels the
-lease synchronously in `Bots.OnFrame`, before the actor inbox notification is posted. `AcknowledgedGuiInput` passes the
-shared lease and caller token to the backend, and `XdotoolGuiInput` calls `TryBeginClick` after pointer movement and focus
-revalidation, immediately before `Process.Start`.
+BotActor owns a shared `GuiClickLease` for each registered intent. Every revocation source cancels it synchronously:
+cancellation, expiry, consumption, pause, attach/detach/stop, fight start, map state changes, self movement or movement
+failure/confirmation, client gameplay before the click gate, translation latch closure, and unexpected terminal
+evidence. `Bots.OnFrame` cancels it before posting readable revocations or an unread translation-latch notification;
+`BotActor` also cancels it before posting pause, attach, detach, and stop messages. The actor inbox handles the same
+revocations as defense in depth. `AcknowledgedGuiInput` passes the shared lease and caller token to the backend, and
+`XdotoolGuiInput` calls `TryBeginClick` after pointer movement and focus revalidation, immediately before `Process.Start`.
 
 `TryBeginClick` is the linearization point. If revocation acquires the lease lock first, the click is canceled without
 possible emission. If `TryBeginClick` wins first, the click may have been emitted and a later revocation cannot retract
@@ -277,6 +278,9 @@ client MapMovementRequest by map and endpoint, requires the self MapMovementEven
 MapMovementConfirmResponse with server-confirmed position provenance, and rejects refusal or incomplete evidence. The
 actor exposes a one-outcome waiter and one-time consumption; terminal uncertainty and expiry cannot produce success.
 MapMovementConfirmRequest is the client's arrival acknowledgement, not the initial request used for correlation.
+
+`GuiProtocolTrustPolicy` alone does not authorize a click. The coordinator also validates the same-map plan path and
+checks that the plan's target agrees with the verified visual target before registering or delegating input.
 
 This bounded observer does not emit input, register a capture loop or gameplay trigger, or connect GuiActionExecutor to
 BotActor. UseElement remains a contract-only correlation action. Packet correlation cannot identify whether an

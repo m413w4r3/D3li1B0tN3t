@@ -245,6 +245,55 @@ public sealed class XdotoolGuiInputTests
     }
 
     [Fact]
+    public async Task LeaseRevocationDuringPointerMovementPreventsClickCommandStart()
+    {
+        GameWindowSnapshot snapshot = CreateTestSnapshot();
+        string directory = Path.Combine(Path.GetTempPath(), $"d3b-gui-input-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string moveMarker = Path.Combine(directory, "move");
+        string releaseMarker = Path.Combine(directory, "release-move");
+        string clickMarker = Path.Combine(directory, "click");
+        string fakeXdotool = Path.Combine(directory, "fake-xdotool");
+        Task<GuiInputResult>? execution = null;
+        XvfbTestCommands.WriteExecutable(
+            fakeXdotool,
+            $"#!/bin/sh\nif [ \"$1\" = \"mousemove\" ]; then printf started > '{moveMarker}'; while [ ! -f '{releaseMarker}' ]; do sleep 0.01; done; exit 0; fi\nif [ \"$1\" = \"click\" ]; then printf clicked > '{clickMarker}'; exit 0; fi\nexit 1\n");
+        XdotoolGuiInput input = new(new SequenceGameWindowLocator(snapshot, snapshot), fakeXdotool, GetTestEnvironmentValue);
+        GuiClickLease lease = new();
+
+        try
+        {
+            execution = input.ClickAsync(
+                GetClientCenter(snapshot),
+                snapshot,
+                lease,
+                CancellationToken.None);
+            DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+
+            while (!File.Exists(moveMarker) && DateTimeOffset.UtcNow < deadline)
+                await Task.Delay(5, TestContext.Current.CancellationToken);
+
+            Assert.True(File.Exists(moveMarker), "The fake pointer movement command did not start.");
+            lease.Cancel();
+            File.WriteAllText(releaseMarker, "release");
+            GuiInputResult result = await execution.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            Assert.Equal(GuiInputStatus.Canceled, result.Status);
+            Assert.False(result.ClickMayHaveBeenEmitted);
+            Assert.False(lease.LaunchStarted);
+            Assert.False(File.Exists(clickMarker));
+        }
+        finally
+        {
+            File.WriteAllText(releaseMarker, "release");
+            if (execution is not null)
+                await execution.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task FailureAfterLeaseLaunchPointMayHaveEmittedClick()
     {
         GameWindowSnapshot snapshot = CreateTestSnapshot();
