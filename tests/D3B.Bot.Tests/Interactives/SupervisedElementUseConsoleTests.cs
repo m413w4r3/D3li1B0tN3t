@@ -8,12 +8,32 @@ namespace D3B.Bot.Tests.Interactives;
 
 public sealed class SupervisedElementUseConsoleTests
 {
+    private static async Task FrontierOpenAsync(TestPlay play)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (!play.Log.GetSnapshot().Any(record => record.Message.Contains("acceptance frontier open", StringComparison.Ordinal)))
+        {
+            Assert.True(DateTime.UtcNow < deadline, "The element-use acceptance frontier did not open.");
+            await Task.Delay(5, TestContext.Current.CancellationToken);
+        }
+    }
+
+    private static SupervisedElementUseConsole Console(TestPlay play, bool actionEnabled)
+    {
+        return new SupervisedElementUseConsole(
+            new SupervisedElementUseSession(play.Bots, play.Tables),
+            NullLoggerFactory.Instance)
+        {
+            ActionEnabled = actionEnabled,
+        };
+    }
+
     [Fact]
     public async Task TheConsoleDoesNothingWithoutACommand()
     {
         await using var play = new TestPlay();
         var (connection, _) = await play.EnterAsync(190);
-        var console = new SupervisedElementUseConsole(new SupervisedElementUseSession(play.Bots, play.Tables), NullLoggerFactory.Instance);
+        var console = Console(play, actionEnabled: false);
         var output = new StringWriter();
 
         await console.RunAsync(new StringReader(string.Empty), output, TestContext.Current.CancellationToken);
@@ -27,7 +47,7 @@ public sealed class SupervisedElementUseConsoleTests
     {
         await using var play = new TestPlay();
         var (connection, _) = await play.EnterAsync(190);
-        var console = new SupervisedElementUseConsole(new SupervisedElementUseSession(play.Bots, play.Tables), NullLoggerFactory.Instance);
+        var console = Console(play, actionEnabled: false);
         var input = $"p2j element readiness {TestPlay.MapId} 190 {TestPlay.TreeElementId} {TestPlay.TreeSkillId}\n";
         var output = new StringWriter();
 
@@ -35,6 +55,7 @@ public sealed class SupervisedElementUseConsoleTests
 
         Assert.Empty(connection.Sent);
         var text = output.ToString();
+        Assert.Contains("action=false", text);
         Assert.Contains("P2J ELEMENT PREP state=Ready reason=READY", text);
         Assert.Contains("consumed=", text);
         Assert.Contains("session_epoch=", text);
@@ -66,11 +87,13 @@ public sealed class SupervisedElementUseConsoleTests
         await using var play = new TestPlay();
         var (connection, bot) = await play.EnterAsync(190);
         var command = $"p2j element use {TestPlay.MapId} 190 {TestPlay.TreeElementId} {TestPlay.TreeSkillId}\n";
-        var console = new SupervisedElementUseConsole(new SupervisedElementUseSession(play.Bots, play.Tables), NullLoggerFactory.Instance);
+        var console = Console(play, actionEnabled: true);
         var output = new StringWriter();
-        var running = console.RunAsync(new StringReader(command + command), output, TestContext.Current.CancellationToken);
+        var ct = TestContext.Current.CancellationToken;
+        var running = console.RunAsync(new StringReader(command + command), output, ct);
 
         Assert.IsType<InteractiveUseRequest>(await connection.SentAsync(1));
+        await FrontierOpenAsync(play);
         connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 30 });
         connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
         connection.Server(new ObjectAddedEvent
@@ -78,10 +101,16 @@ public sealed class SupervisedElementUseConsoleTests
             Object = new InventoryObject { Item = new ObjectItem { Uid = 12, ItemId = TestPlay.Ash, Quantity = 3 }, Position = 63 },
         });
         await bot.ProcessedAsync();
+        while (!running.IsCompleted)
+        {
+            play.Time.Advance(TimeSpan.FromMilliseconds(250));
+            await Task.Delay(5, ct);
+        }
         await running;
 
         var text = output.ToString();
         Assert.Contains("P2J ELEMENT USE outcome=PASS_HARVEST reason=PASS", text);
+        Assert.Contains("gain=3", text);
         Assert.Contains("request_sent=", text);
         Assert.Contains("request_may_have_been_sent=", text);
         Assert.Contains("used=", text);
@@ -103,11 +132,27 @@ public sealed class SupervisedElementUseConsoleTests
     }
 
     [Fact]
+    public async Task AUseCommandIsRefusedWhenTheActionGateIsClosed()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(190);
+        var console = Console(play, actionEnabled: false);
+        var input = $"p2j element use {TestPlay.MapId} 190 {TestPlay.TreeElementId} {TestPlay.TreeSkillId}\n";
+        var output = new StringWriter();
+
+        await console.RunAsync(new StringReader(input), output, TestContext.Current.CancellationToken);
+
+        Assert.Empty(connection.Sent);
+        Assert.Contains("P2J ELEMENT COMMAND refused", output.ToString());
+        Assert.Contains("action=false", output.ToString());
+    }
+
+    [Fact]
     public async Task AnInvalidElementCommandSendsNothing()
     {
         await using var play = new TestPlay();
         var (connection, _) = await play.EnterAsync(190);
-        var console = new SupervisedElementUseConsole(new SupervisedElementUseSession(play.Bots, play.Tables), NullLoggerFactory.Instance);
+        var console = Console(play, actionEnabled: false);
         var input = "p2j element use\np2j element move 1 2 3 4\np2j element readiness nope 1 2 3\n";
         var output = new StringWriter();
 
@@ -115,5 +160,40 @@ public sealed class SupervisedElementUseConsoleTests
 
         Assert.Empty(connection.Sent);
         Assert.Contains("P2J ELEMENT COMMAND invalid:", output.ToString());
+    }
+
+    [Fact]
+    public async Task TheConsoleDoesNotReportSuccessWhenTheGainIsRemoved()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        var ct = TestContext.Current.CancellationToken;
+        var command = $"p2j element use {TestPlay.MapId} 190 {TestPlay.TreeElementId} {TestPlay.TreeSkillId}\n";
+        var console = Console(play, actionEnabled: true);
+        var output = new StringWriter();
+        var running = console.RunAsync(new StringReader(command), output, ct);
+
+        await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
+        connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 30 });
+        connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
+        connection.Server(new ObjectAddedEvent
+        {
+            Object = new InventoryObject { Item = new ObjectItem { Uid = 12, ItemId = TestPlay.Ash, Quantity = 3 }, Position = 63 },
+        });
+        await bot.ProcessedAsync();
+        connection.Server(new ObjectsDeletedEvent { Uids = { 12 } });
+        await bot.ProcessedAsync();
+        while (!running.IsCompleted)
+        {
+            play.Time.Advance(TimeSpan.FromMilliseconds(250));
+            await Task.Delay(5, ct);
+        }
+        await running;
+
+        var text = output.ToString();
+        Assert.Contains("outcome=UNCONFIRMED", text);
+        Assert.DoesNotContain("outcome=PASS_HARVEST", text);
+        Assert.Single(connection.Sent);
     }
 }

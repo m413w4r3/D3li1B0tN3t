@@ -32,5 +32,24 @@ public sealed class SupervisedElementUseModuleTests : IDisposable
         using var host = _install.Bot("--Supervised:ElementUse:Enabled", "true").AddModule<SupervisedElementUseModule>().Build();
 
         Assert.Single(host.Services.GetServices<SupervisedElementUseConsole>());
+        var console = host.Services.GetRequiredService<SupervisedElementUseConsole>();
+        Assert.False(console.ActionEnabled);
+    }
+
+    [Fact]
+    public void TheElementUseActionIsEnabledOnlyWhenConfigured()
+    {
+        _install.WritePack();
+        _install.WriteProtocol();
+
+        using var host = _install.Bot(
+            "--Supervised:ElementUse:Enabled", "true",
+            "--Supervised:ElementUse:ActionEnabled", "true")
+            .AddModule<SupervisedElementUseModule>()
+            .Build();
+
+        var console = host.Services.GetRequiredService<SupervisedElementUseConsole>();
+
+        Assert.True(console.ActionEnabled);
     }
 }

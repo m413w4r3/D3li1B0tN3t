@@ -1,8 +1,9 @@
 # P2O architecture and implementation boundaries
 
-**Status — 2026-11-09, implementation base `3ebf635aecdc9ce632bbc898254a6d391035a255`:** offline integration is
-complete and audited for the offline boundary. A supervised live action is **BLOCKED**. This document describes the
-checked-in integration; it does not authorize a client launch or input.
+**Status — 2026-11-09, S1.1 worktree on base `98ec15a12d66dda01103a32df6c725a3257af1e2`:** the GUI offline integration
+is complete and audited for the offline boundary. A separate protocol `UseElement` path is implemented offline, opt-in
+and disabled by default; it is not the GUI `WalkToCell` one-shot. A supervised live action remains **BLOCKED** under
+D340. This document describes the checked-in integration; it does not authorize a client launch or input.
 
 ## Responsibilities and dependencies
 
@@ -10,6 +11,7 @@ checked-in integration; it does not authorize a client launch or input.
 | --- | --- |
 | `D3B.Gui` | Owns Linux X11 window observation, `maim` capture, OpenCV calibration and target projection, the GUI action gate, XTest input and the executor contracts. It depends on `D3B.Engine` and `D3B.Data`; it has no dependency on Bot, Host, App, Network, or Protocol. |
 | `D3B.Bot` | Owns `CharacterState`, one serialized `BotActor` inbox per character, protocol observations, GUI intent correlation, acknowledgement, revocation, waiters and the caller-invoked `WalkToCell` coordinator. It composes the existing planner with the GUI evidence contracts. |
+| `D3B.Bot` protocol element use | `SupervisedElementUseSession`/`SupervisedElementUseConsole` are an opt-in, disabled-by-default protocol path added by `D3B.Host` only. They are distinct from the GUI `WalkToCell` one-shot and the GUI action contract; they send at most one `InteractiveUseRequest`, never move, and have no live GO. |
 | `D3B.Network` | Owns the transparent socket relay, frame boundaries, observation hooks and final typed admission for D3B-originated frames. Ordinary client/server traffic continues through the relay. |
 | `D3B.Protocol` | Owns readable message definitions and build-specific translation between game frames and readable events or requests. It does not decide whether visual input is authorized. |
 | `D3B.Diagnostic` and `rust/d3b-diagnostic` | Own the diagnostic sidecar contract and offline schema/replay analysis. They are diagnostic tools, not a gameplay controller or a second runtime. |
@@ -66,14 +68,20 @@ selected.
 - `GuiHostCapability` reports `AutomaticActivity`, `SupervisedOneShotAvailable`, and `RealInputAvailable` as false.
   `GuiHostModule` passes the validated admission mode only; it does not register the executor, XTest input, or a capture
   loop.
+- `SupervisedElementUseConsole` and `SupervisedElementUseSession` are wired into `D3B.Host` only, with
+  `Supervised:ElementUse:Enabled` (console/readiness) and `Supervised:ElementUse:ActionEnabled` (the use action), both
+  false by default. The console is not registered by `DefaultModules`; readiness is passive, and the use command is
+  refused while the action gate is closed. This is a protocol path, not the GUI `SupervisedOneShot`.
 
-**OPEN — not wired or activated:** real input through the host, automatic activity, `SupervisedOneShot`, host executor
-registration, and a live action. `XdotoolGuiInput` and `GuiActionExecutor` exist as library types; the host does not
-register or activate them. No Dofus input was performed for this integration.
+**OPEN — not wired or activated:** real GUI input through the host, automatic activity, the GUI `SupervisedOneShot`,
+host executor registration, and a live action. The protocol `UseElement` console is wired but inactive by default and
+has no live GO. `XdotoolGuiInput` and `GuiActionExecutor` remain unregistered library types. No Dofus input was
+performed for this integration.
 
 ## Source anchors
 
-These line references are from the implementation base `3ebf635`:
+These line references are from the implementation base `3ebf635`, except the protocol element-use path added on base
+`98ec15a`:
 
 | Claim | Source |
 | --- | --- |
@@ -86,3 +94,4 @@ These line references are from the implementation base `3ebf635`:
 | Harvesting and inactive GUI capability | `src/D3B.Bot/DefaultModules.cs:23-29`; `src/D3B.Bot/Harvesting/HarvestActivity.cs:37`; `src/D3B.Bot/Hosting/GuiHostCapability.cs:20-44` |
 | Diagnostic sidecar and Rust entry point | `src/D3B.Diagnostic/Ipc/DiagnosticSidecarFactory.cs:7`; `src/D3B.Diagnostic/Replay/ReplayEngineClient.cs:8`; `rust/d3b-diagnostic/src/main.rs:8` |
 | Offline preflight CLI and atomic manifest writes | `scripts/preflight/PreflightCommand.cs:33-93`; `scripts/preflight/PreflightManifestStore.cs:74-117`; `scripts/preflight/PreflightOperations.cs:20-105` |
+| Protocol element-use path | `src/D3B.Bot/Interactives/SupervisedElementUse.cs`; `SupervisedElementUseSession.cs`; `src/D3B.Bot/Hosting/SupervisedElementUseConsole.cs`; `SupervisedElementUseModule.cs`; `SupervisedElementUseSettings.cs`; `src/D3B.Host/Program.cs`; `docs/P2O_ELEMENT_USE_RUNBOOK.md` |

@@ -11,6 +11,8 @@ namespace D3B.Bot.Tests.Interactives;
 
 public sealed class SupervisedElementUseTests
 {
+    private static readonly string[] _temporaryGainReasons = ["ITEM_GAIN_NOT_PRESENT_AT_VERDICT", "ITEM_NOT_GAINED"];
+
     private static ElementUseTarget TreeTarget(int cell = 190)
     {
         return new ElementUseTarget(TestPlay.MapId, cell, TestPlay.TreeElementId, TestPlay.TreeSkillId);
@@ -19,6 +21,16 @@ public sealed class SupervisedElementUseTests
     private static SupervisedElementUseSession Session(TestPlay play)
     {
         return new SupervisedElementUseSession(play.Bots, play.Tables);
+    }
+
+    private static async Task FrontierOpenAsync(TestPlay play)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (!play.Log.GetSnapshot().Any(record => record.Message.Contains("acceptance frontier open", StringComparison.Ordinal)))
+        {
+            Assert.True(DateTime.UtcNow < deadline, "The element-use acceptance frontier did not open.");
+            await Task.Delay(5, TestContext.Current.CancellationToken);
+        }
     }
 
     [Fact]
@@ -322,6 +334,7 @@ public sealed class SupervisedElementUseTests
         var session = Session(play);
         var use = session.UseAsync(TreeTarget(), cancellationToken);
         var request = Assert.IsType<InteractiveUseRequest>(await connection.SentAsync(1));
+        await FrontierOpenAsync(play);
 
         Assert.Equal(TestPlay.TreeElementId, request.ElementId);
         Assert.Equal(TestPlay.TreeInstanceId, request.SkillInstanceId);
@@ -333,7 +346,7 @@ public sealed class SupervisedElementUseTests
         });
         await bot.ProcessedAsync();
 
-        var result = await use;
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
 
         Assert.Equal(SupervisedElementUseOutcome.PassHarvest, result.Outcome);
         Assert.Equal("PASS", result.Reason);
@@ -364,6 +377,7 @@ public sealed class SupervisedElementUseTests
         var session = Session(play);
         var use = session.UseAsync(TreeTarget(), cancellationToken);
         await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
         connection.Server(new InteractiveUseErrorEvent { ElementId = TestPlay.TreeElementId, SkillInstanceId = TestPlay.TreeInstanceId });
         await bot.ProcessedAsync();
 
@@ -387,6 +401,7 @@ public sealed class SupervisedElementUseTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var use = Session(play).UseAsync(TreeTarget(), cancellationToken);
         await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
         connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 30 });
         connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
         await bot.ProcessedAsync();
@@ -408,6 +423,7 @@ public sealed class SupervisedElementUseTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var use = Session(play).UseAsync(TreeTarget(), cancellationToken);
         await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
         connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 30 });
         connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.ChestnutSkillId });
         connection.Server(new ObjectAddedEvent
@@ -526,6 +542,7 @@ public sealed class SupervisedElementUseTests
         var request = Assert.IsType<InteractiveUseRequest>(await connection.SentAsync(1));
         Assert.Equal(TestPlay.TreeElementId, request.ElementId);
         Assert.Equal(TestPlay.TreeInstanceId, request.SkillInstanceId);
+        await FrontierOpenAsync(play);
         connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 30 });
         connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
         connection.Server(new ObjectAddedEvent
@@ -534,7 +551,7 @@ public sealed class SupervisedElementUseTests
         });
         await bot.ProcessedAsync();
 
-        var result = await use;
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
 
         Assert.Equal(SupervisedElementUseOutcome.PassHarvest, result.Outcome);
         Assert.Equal("PASS", result.Reason);
@@ -551,6 +568,7 @@ public sealed class SupervisedElementUseTests
         var session = Session(play);
         var use = session.UseAsync(TreeTarget(), cancellationToken);
         await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
         connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
         connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 30 });
         connection.Server(new ObjectAddedEvent
@@ -576,6 +594,7 @@ public sealed class SupervisedElementUseTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var use = Session(play).UseAsync(TreeTarget(), cancellationToken);
         await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
         connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 30 });
         connection.Server(new ObjectAddedEvent
         {
@@ -584,7 +603,7 @@ public sealed class SupervisedElementUseTests
         connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
         await bot.ProcessedAsync();
 
-        var result = await use;
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
 
         Assert.Equal(SupervisedElementUseOutcome.PassHarvest, result.Outcome);
         Assert.Equal("PASS", result.Reason);
@@ -601,6 +620,7 @@ public sealed class SupervisedElementUseTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var use = Session(play).UseAsync(TreeTarget(), cancellationToken);
         await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
         connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 0 });
         await bot.ProcessedAsync();
 
@@ -628,5 +648,311 @@ public sealed class SupervisedElementUseTests
         Assert.Empty(connection.Sent);
         Assert.Equal(SupervisedElementUseOutcome.Blocked, result.Outcome);
         Assert.Equal("ATTEMPT_ALREADY_CONSUMED", result.Reason);
+    }
+
+    [Fact]
+    public async Task AStaleStartAndEndDuringThePreSendBarrierDoNotSatisfyTheAttempt()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Relay.ObservationWait = async token =>
+        {
+            entered.TrySetResult();
+            await release.Task.WaitAsync(token);
+        };
+
+        var use = Session(play).UseAsync(TreeTarget(), cancellationToken);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+        connection.Server(new InteractiveUsedEvent
+        {
+            ActorId = TestPlay.CharacterId,
+            ElementId = TestPlay.TreeElementId,
+            SkillId = TestPlay.TreeSkillId,
+            Duration = 30,
+        });
+        connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
+        await bot.ProcessedAsync();
+        release.TrySetResult();
+        await connection.SentAsync(1);
+        connection.Server(new ObjectAddedEvent
+        {
+            Object = new InventoryObject { Item = new ObjectItem { Uid = 12, ItemId = TestPlay.Ash, Quantity = 3 }, Position = 63 },
+        });
+
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
+
+        Assert.Equal(SupervisedElementUseOutcome.Unconfirmed, result.Outcome);
+        Assert.Equal("NO_ANSWER", result.Reason);
+        Assert.False(result.Evidence.InteractiveUsedObserved);
+        Assert.False(result.Evidence.InteractiveUseEndedObserved);
+        Assert.Single(connection.Sent);
+        Assert.DoesNotContain(connection.Sent, sent => sent is MapMovementRequest);
+        Assert.DoesNotContain(connection.Sent, sent => sent is MapChangeRequest);
+    }
+
+    [Fact]
+    public async Task APostAttemptStartAndEndStillProduceAPass()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Relay.ObservationWait = async token =>
+        {
+            entered.TrySetResult();
+            await release.Task.WaitAsync(token);
+        };
+
+        var use = Session(play).UseAsync(TreeTarget(), cancellationToken);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+        connection.Server(new InteractiveUsedEvent
+        {
+            ActorId = TestPlay.CharacterId,
+            ElementId = TestPlay.TreeElementId,
+            SkillId = TestPlay.TreeSkillId,
+            Duration = 30,
+        });
+        connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
+        await bot.ProcessedAsync();
+        release.TrySetResult();
+        await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
+        connection.Server(new InteractiveUsedEvent
+        {
+            ActorId = TestPlay.CharacterId,
+            ElementId = TestPlay.TreeElementId,
+            SkillId = TestPlay.TreeSkillId,
+            Duration = 30,
+        });
+        connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
+        connection.Server(new ObjectAddedEvent
+        {
+            Object = new InventoryObject { Item = new ObjectItem { Uid = 12, ItemId = TestPlay.Ash, Quantity = 3 }, Position = 63 },
+        });
+        await bot.ProcessedAsync();
+
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
+
+        Assert.Equal(SupervisedElementUseOutcome.PassHarvest, result.Outcome);
+        Assert.Equal("PASS", result.Reason);
+        Assert.Single(connection.Sent);
+        Assert.DoesNotContain(connection.Sent, sent => sent is MapMovementRequest);
+    }
+
+    [Fact]
+    public async Task AStaleMatchingErrorDuringThePreSendBarrierIsNotARefusal()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Relay.ObservationWait = async token =>
+        {
+            entered.TrySetResult();
+            await release.Task.WaitAsync(token);
+        };
+
+        var use = Session(play).UseAsync(TreeTarget(), cancellationToken);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+        connection.Server(new InteractiveUseErrorEvent { ElementId = TestPlay.TreeElementId, SkillInstanceId = TestPlay.TreeInstanceId });
+        await bot.ProcessedAsync();
+        release.TrySetResult();
+        await connection.SentAsync(1);
+
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
+
+        Assert.Equal(SupervisedElementUseOutcome.Unconfirmed, result.Outcome);
+        Assert.Equal("NO_ANSWER", result.Reason);
+        Assert.Null(result.Evidence.ErrorSkillInstanceId);
+        Assert.Single(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AnErrorForAnotherSkillInstanceIsNotARefusal()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var use = Session(play).UseAsync(TreeTarget(), cancellationToken);
+        await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
+        connection.Server(new InteractiveUseErrorEvent
+        {
+            ElementId = TestPlay.TreeElementId,
+            SkillInstanceId = TestPlay.TreeInstanceId + 1,
+        });
+
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
+
+        Assert.Equal(SupervisedElementUseOutcome.Unconfirmed, result.Outcome);
+        Assert.Equal("NO_ANSWER", result.Reason);
+        Assert.Single(connection.Sent);
+    }
+
+    [Fact]
+    public async Task ATemporaryGainRemovedAfterTheEndIsNotAPass()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        var ct = TestContext.Current.CancellationToken;
+        var use = Session(play).UseAsync(TreeTarget(), ct);
+        await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
+        connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 30 });
+        connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
+        connection.Server(new ObjectAddedEvent
+        {
+            Object = new InventoryObject { Item = new ObjectItem { Uid = 12, ItemId = TestPlay.Ash, Quantity = 3 }, Position = 63 },
+        });
+        await bot.ProcessedAsync();
+        connection.Server(new ObjectsDeletedEvent { Uids = { 12 } });
+        await bot.ProcessedAsync();
+
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
+
+        Assert.Equal(SupervisedElementUseOutcome.Unconfirmed, result.Outcome);
+        Assert.Contains(result.Reason, _temporaryGainReasons);
+        Assert.Equal(0, result.Evidence.InventoryBefore);
+        Assert.Equal(0, result.Evidence.InventoryAfter);
+        Assert.Single(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AGainReducedToTheInitialQuantityIsNotAPass()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        var ct = TestContext.Current.CancellationToken;
+        var use = Session(play).UseAsync(TreeTarget(), ct);
+        await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
+        connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 30 });
+        connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
+        connection.Server(new ObjectAddedEvent
+        {
+            Object = new InventoryObject { Item = new ObjectItem { Uid = 12, ItemId = TestPlay.Ash, Quantity = 3 }, Position = 63 },
+        });
+        await bot.ProcessedAsync();
+        connection.Server(new ObjectQuantityEvent { Object = new ObjectQuantity { Uid = 12, Quantity = 0 } });
+        await bot.ProcessedAsync();
+
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
+
+        Assert.Equal(SupervisedElementUseOutcome.Unconfirmed, result.Outcome);
+        Assert.Contains(result.Reason, _temporaryGainReasons);
+        Assert.Equal(0, result.Evidence.InventoryBefore);
+        Assert.Equal(0, result.Evidence.InventoryAfter);
+        Assert.Single(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AGainRemovedBeforeTheEndIsNotAPass()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        var ct = TestContext.Current.CancellationToken;
+        var use = Session(play).UseAsync(TreeTarget(), ct);
+        await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
+        connection.Server(new InteractiveUsedEvent { ActorId = TestPlay.CharacterId, ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId, Duration = 30 });
+        connection.Server(new ObjectAddedEvent
+        {
+            Object = new InventoryObject { Item = new ObjectItem { Uid = 12, ItemId = TestPlay.Ash, Quantity = 3 }, Position = 63 },
+        });
+        connection.Server(new ObjectsDeletedEvent { Uids = { 12 } });
+        connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
+
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
+
+        Assert.Equal(SupervisedElementUseOutcome.Unconfirmed, result.Outcome);
+        Assert.Equal(0, result.Evidence.InventoryAfter);
+        Assert.Single(connection.Sent);
+    }
+
+    [Fact]
+    public async Task AStartAndEndObservedDuringTheWriteDoNotSatisfyTheAttempt()
+    {
+        await using var play = new TestPlay();
+        var (connection, bot) = await play.EnterAsync(190);
+        var ct = TestContext.Current.CancellationToken;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Relay.SendWait = async token =>
+        {
+            entered.TrySetResult();
+            await release.Task.WaitAsync(token);
+        };
+
+        var use = Session(play).UseAsync(TreeTarget(), ct);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+        connection.Server(new InteractiveUsedEvent
+        {
+            ActorId = TestPlay.CharacterId,
+            ElementId = TestPlay.TreeElementId,
+            SkillId = TestPlay.TreeSkillId,
+            Duration = 30,
+        });
+        connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
+        await bot.ProcessedAsync();
+        release.TrySetResult();
+        await connection.SentAsync(1);
+        connection.Server(new ObjectAddedEvent
+        {
+            Object = new InventoryObject { Item = new ObjectItem { Uid = 12, ItemId = TestPlay.Ash, Quantity = 3 }, Position = 63 },
+        });
+
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
+
+        Assert.Equal(SupervisedElementUseOutcome.Unconfirmed, result.Outcome);
+        Assert.Equal("NO_ANSWER", result.Reason);
+        Assert.False(result.Evidence.InteractiveUsedObserved);
+        Assert.False(result.Evidence.InteractiveUseEndedObserved);
+        Assert.Single(connection.Sent);
+        Assert.DoesNotContain(connection.Sent, sent => sent is MapMovementRequest);
+        Assert.DoesNotContain(connection.Sent, sent => sent is MapChangeRequest);
+    }
+
+    [Fact]
+    public async Task ATooFarRefusalNamingOnlyTheSkillIdIsUnconfirmed()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(190);
+        var ct = TestContext.Current.CancellationToken;
+        var use = Session(play).UseAsync(TreeTarget(), ct);
+        await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
+        connection.Server(new InteractiveUseErrorEvent { ElementId = TestPlay.TreeElementId, SkillInstanceId = TestPlay.TreeSkillId });
+
+        var result = await TestWalks.AdvanceUntilDoneAsync(play.Time, use);
+
+        Assert.Equal(SupervisedElementUseOutcome.Unconfirmed, result.Outcome);
+        Assert.Equal("NO_ANSWER", result.Reason);
+        Assert.Null(result.Evidence.ErrorSkillInstanceId);
+        Assert.Single(connection.Sent);
+    }
+
+    [Fact]
+    public async Task ATooFarRefusalNamingTheSkillIdThenTheInstanceIsRefused()
+    {
+        await using var play = new TestPlay();
+        var (connection, _) = await play.EnterAsync(190);
+        var ct = TestContext.Current.CancellationToken;
+        var use = Session(play).UseAsync(TreeTarget(), ct);
+        await connection.SentAsync(1);
+        await FrontierOpenAsync(play);
+        connection.Server(new InteractiveUseErrorEvent { ElementId = TestPlay.TreeElementId, SkillInstanceId = TestPlay.TreeSkillId });
+        connection.Server(new InteractiveUseErrorEvent { ElementId = TestPlay.TreeElementId, SkillInstanceId = TestPlay.TreeInstanceId });
+
+        var result = await use;
+
+        Assert.Equal(SupervisedElementUseOutcome.Refused, result.Outcome);
+        Assert.Equal("SERVER_REFUSED", result.Reason);
+        Assert.Equal(TestPlay.TreeInstanceId, result.Evidence.ErrorSkillInstanceId);
+        Assert.Single(connection.Sent);
     }
 }

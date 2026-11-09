@@ -32,7 +32,10 @@ public sealed class SupervisedElementUseModule : IModule
 
         bot.Services.AddSingleton(services => new SupervisedElementUseConsole(
             services.GetRequiredService<SupervisedElementUseSession>(),
-            services.GetRequiredService<ILoggerFactory>()));
+            services.GetRequiredService<ILoggerFactory>())
+        {
+            ActionEnabled = settings.ActionEnabled,
+        });
         bot.Services.AddHostedService(services => services.GetRequiredService<SupervisedElementUseConsole>());
     }
 }

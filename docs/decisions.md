@@ -7674,3 +7674,42 @@ Settled questions leave this table, and the decision that settles one says so.
   `ElementUsePreparation.cs`; `src/D3B.Bot/Hosting/SupervisedElementUseConsole.cs`, `SupervisedElementUseModule.cs`;
   `src/D3B.Host/Program.cs`; `tests/D3B.Bot.Tests/Interactives/SupervisedElementUseTests.cs`,
   `SupervisedElementUseConsoleTests.cs`, `tests/D3B.Bot.Tests/Hosting/SupervisedElementUseModuleTests.cs`.
+
+## D346: S1.1 separates protocol UseElement from GUI WalkToCell and observation from action
+
+*2026-11-09, D3B-S1.1.*
+
+- **Decision**: clarify D345 without rewriting it. D345's supervised element use is a protocol `UseElement` path,
+  distinct from the GUI `WalkToCell` one-shot and its GUI intent contract. It remains offline-validated, opt-in and
+  without any live GO. Two independent settings gate it, both false by default: `Supervised:ElementUse:Enabled`
+  registers the console and passive readiness, and `Supervised:ElementUse:ActionEnabled` permits the `p2j element use`
+  command. An observation-only phase may enable the console and use `p2j element readiness` while the action gate stays
+  closed; the action requires a separate explicit GO and the action gate open. S1.1 adds an explicit attempt frontier
+  opened after the guarded write completes and serialized with the bot inbox, after the observation barrier and final
+  rechecks: start and refusal events observed during the observation barrier or the write are ignored; a genuine server
+  response cannot precede the write; the end must follow this attempt's start; a refusal must name the exact skill
+  instance requested. The inventory proof is re-read after a bounded 100 ms settlement and must still exceed the
+  pre-request quantity at the verdict; otherwise the outcome is `UNCONFIRMED` with
+  `ITEM_GAIN_NOT_PRESENT_AT_VERDICT`.
+  `P2O_ELEMENT_USE_RUNBOOK.md` records the two authorizations, the quiet-session requirement and the attribution limits.
+  D340 is unchanged.
+- **Why**: an independent audit found that stale events during the pre-send barrier and a temporary inventory gain could
+  produce a false `PASS_HARVEST`. The GUI `WalkToCell` and protocol `UseElement` paths have different evidence and
+  authorization models, so their runbooks and contracts must not claim one covers the other. Enforcing the action gate
+  in the console makes observation-only an actual mode, not only a written instruction. Two booleans are the smallest
+  separation that provides that guarantee; no general permission framework is added.
+- **Checked**: independent audit of S1.1: initial **REJECT** on the post-frontier/pre-write event window and three MINOR
+  findings; the post-write frontier, the two too-far refusal regressions and the deterministic test synchronization were
+  re-audited; delta **APPROVE** with no remaining BLOCKER/MAJOR; see the S1.1 final report. Focused `SupervisedElementUse` tests: 44/44.
+  `D3B.Bot.Tests`: 943/943. Full suite, executed per project: 2,373 tests, 2,369 passed, 4 skipped
+  (`D3B.Diagnostic`), 0 failed. `dotnet build`: 0 warnings/0 errors.
+  `dotnet format --verify-no-changes`: exit 0. The parallel `dotnet test` wrapper hung on `D3B.Diagnostic.Tests` due to
+  a transient test-host IPC issue; that project passed alone (255 tests, 251 passed, 4 skipped, 0 failed). Worktree
+  `d3b-s1-1-remediation` on base `98ec15a12d66dda01103a32df6c725a3257af1e2`; no commit or push. Live action remains
+  **BLOCKED** under D340; this entry grants no live GO. The P2O translation-latch closure remains a live-session
+  dependency: this increment does not decode the 58 unread carried types and does not widen `NonPositionMessages`.
+- **Source**: `src/D3B.Bot/Interactives/SupervisedElementUse.cs`, `SupervisedElementUseSession.cs`;
+  `src/D3B.Bot/Hosting/SupervisedElementUseConsole.cs`, `SupervisedElementUseModule.cs`,
+  `SupervisedElementUseSettings.cs`; `src/D3B.Host/Program.cs`; `docs/P2O_ELEMENT_USE_RUNBOOK.md`;
+  `tests/D3B.Bot.Tests/Interactives/SupervisedElementUseTests.cs`, `SupervisedElementUseConsoleTests.cs`,
+  `tests/D3B.Bot.Tests/Hosting/SupervisedElementUseModuleTests.cs`.

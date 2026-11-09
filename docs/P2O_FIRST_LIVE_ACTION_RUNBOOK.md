@@ -5,9 +5,10 @@ observation and, after review, a separate explicit GO for exactly one action. Ke
 automatic loop, route, retry, harvesting, or second action is in scope.
 
 The current host reports `SupervisedOneShotAvailable=false` and has no registered GUI executor or real-input service.
-An owner GO alone cannot activate those missing host capabilities. A future supervised caller must be independently
-reviewed and must preserve the contracts in [P2O_ARCHITECTURE.md](P2O_ARCHITECTURE.md),
-[P2O_ACTION_CONTRACT.md](P2O_ACTION_CONTRACT.md), and [P2O_PROTOCOL_TRUST.md](P2O_PROTOCOL_TRUST.md).
+This remains true for the GUI `WalkToCell` path. Separately, the protocol `UseElement` path is implemented offline and
+opt-in through `SupervisedElementUseConsole`; it is not a GUI one-shot, is disabled by default, and has no live GO. Its
+observations and its separate one-action authorization are governed by
+[P2O_ELEMENT_USE_RUNBOOK.md](P2O_ELEMENT_USE_RUNBOOK.md). An owner GO alone cannot activate the missing GUI capabilities.
 
 ## 1. Observation-only authorization and preflight
 
@@ -60,6 +61,10 @@ Record provenance, timestamps, build identity, window identity and calibration i
 with **BLOCKED** if any item is stale, unknown, partial, contradictory or unverified. An atlas or fingerprint cell is
 not a live server observation. A closed latch is an unconditional stop; GUI mode cannot override it.
 
+If a separate protocol `UseElement` observation phase is authorized, its console may be enabled with
+`Supervised:ElementUse:Enabled=true` and `Supervised:ElementUse:ActionEnabled=false`; only `p2j element readiness` may be
+issued. `p2j element use` is refused by the action gate and must never be called during observation-only.
+
 Review the observation report before considering an action. This phase does not authorize a click.
 
 ## 3. Separate GO for exactly one `WalkToCell`
@@ -69,6 +74,9 @@ destination cell and the single `WalkToCell` action. The authorization permits a
 operator able to stop the process and a reviewed caller that can register and acknowledge one intent. The current host
 cannot supply this supervised one-shot, so this section remains unavailable until that implementation boundary is
 closed and independently reviewed.
+
+This GUI one-shot is distinct from the protocol `UseElement` path. The protocol path is not a substitute for this GUI
+click contract and is governed by [P2O_ELEMENT_USE_RUNBOOK.md](P2O_ELEMENT_USE_RUNBOOK.md).
 
 For the single authorized attempt:
 
@@ -115,3 +123,5 @@ restrictive permissions. Never commit captures, templates, secrets, client data 
   [P2O_OFFLINE_REPORT.md](P2O_OFFLINE_REPORT.md).
 - **OPEN:** every live observation listed in section 2 and the operator's separate one-action authorization.
 - **BLOCKED:** the current readiness result. No live GO or real-client action is recorded.
+- The protocol `UseElement` path is separately offline-validated and opt-in; its live action remains BLOCKED and is
+  governed by [P2O_ELEMENT_USE_RUNBOOK.md](P2O_ELEMENT_USE_RUNBOOK.md). The GUI `WalkToCell` labels above are unchanged.

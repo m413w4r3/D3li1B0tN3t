@@ -15,10 +15,13 @@ namespace D3B.Bot.Hosting;
 internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
 {
     private const string Usage = "p2j element readiness <mapId> <cell> <elementId> <skillId> | p2j element use <mapId> <cell> <elementId> <skillId>";
+    private const string ActionDisabledMessage = "the use action is disabled; set Supervised:ElementUse:ActionEnabled=true only under an explicit one-action GO";
 
     private readonly SupervisedElementUseSession _session;
     private readonly ILogger _log;
     private CancellationTokenSource? _stopping;
+
+    internal bool ActionEnabled { get; set; }
 
     /// <summary>Initializes a new instance of the <see cref="SupervisedElementUseConsole"/> class.</summary>
     /// <param name="session">The session holding the single use authorization.</param>
@@ -75,7 +78,7 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(output);
 
-        await output.WriteLineAsync("P2J supervised element use enabled. Commands: p2j element readiness <mapId> <cell> <elementId> <skillId> | p2j element use <mapId> <cell> <elementId> <skillId>").ConfigureAwait(false);
+        await output.WriteLineAsync($"P2J supervised element use enabled. Commands: {Usage} action={Lower(ActionEnabled)}").ConfigureAwait(false);
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -110,6 +113,14 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
         if (command.Kind is CommandKind.Readiness)
         {
             await PrintPreparationAsync(output, _session.Prepare(command.Target)).ConfigureAwait(false);
+
+            return;
+        }
+
+        if (!ActionEnabled)
+        {
+            SupervisedElementUseLog.CommandRefused(_log, ActionDisabledMessage);
+            await output.WriteLineAsync($"P2J ELEMENT COMMAND refused: {ActionDisabledMessage}").ConfigureAwait(false);
 
             return;
         }

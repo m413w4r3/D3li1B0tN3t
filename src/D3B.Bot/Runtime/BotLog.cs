@@ -131,6 +131,9 @@ internal static partial class BotLog
     [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: use of element {Element} with skill {Skill} over, {Outcome}")]
     public static partial void Used(ILogger logger, long character, int element, int skill, UseOutcome outcome);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: use of element {Element} request written; acceptance frontier open")]
+    public static partial void ElementUseFrontierOpen(ILogger logger, long character, int element);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Bot {Character}: travels from map {From}, {Changes} map changes away")]
     public static partial void Travelling(ILogger logger, long character, long from, int changes);
 

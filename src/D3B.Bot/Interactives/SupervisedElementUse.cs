@@ -14,6 +14,9 @@ namespace D3B.Bot.Interactives;
 /// <summary>Prepares and executes one fail-closed, supervised use of a map element.</summary>
 internal static class SupervisedElementUse
 {
+    // Bounded settlement for a correction or removal that follows a gain; this is not a second harvest window.
+    private static readonly TimeSpan _inventorySettle = TimeSpan.FromMilliseconds(100);
+
     /// <summary>Passively checks one target against a single bot snapshot and its current session state.</summary>
     /// <param name="bot">The bot.</param>
     /// <param name="tables">The installed build's game tables.</param>
@@ -148,9 +151,13 @@ internal static class SupervisedElementUse
                 var expectedItemId = preparation.ExpectedItemId!.Value;
                 var lastRecheckReason = "SEND_BLOCKED";
                 var startObserved = false;
+                // Events observed while the frontier is closed (the observation barrier or write) are ignored.
                 var answer = context.Expect((side, message, _) =>
                 {
                     if (side is not RelayDirection.FromServer)
+                        return false;
+
+                    if (!attempt.SendCompleted)
                         return false;
 
                     if (message is InteractiveUsedEvent used
@@ -162,10 +169,15 @@ internal static class SupervisedElementUse
                         return true;
                     }
 
-                    return message is InteractiveUseErrorEvent error && error.ElementId == elementId;
+                    // Exact skill-instance correlation keeps unrelated refusals from consuming the attempt.
+                    return message is InteractiveUseErrorEvent error
+                        && error.ElementId == elementId
+                        && error.SkillInstanceId == skillInstanceId;
                 });
-                // End events carry no actor or attempt id, so accept one only after this attempt's start.
+                // The end still requires this attempt's start. Without a protocol attempt id, stale post-write matches
+                // remain possible, so the quiet-session/UNCONFIRMED rule stays in force.
                 var end = context.Expect((side, message, _) => side is RelayDirection.FromServer
+                    && attempt.SendCompleted
                     && startObserved
                     && message is InteractiveUseEndedEvent ended
                     && ended.ElementId == elementId
@@ -194,7 +206,11 @@ internal static class SupervisedElementUse
                         request,
                         CanSend,
                         token,
-                        () => attempt.RequestMayHaveBeenSent = true).ConfigureAwait(false);
+                        () =>
+                        {
+                            // The acceptance frontier opens after the guarded write, not in this pre-write callback.
+                            attempt.RequestMayHaveBeenSent = true;
+                        }).ConfigureAwait(false);
                 }
                 catch
                 {
@@ -211,6 +227,18 @@ internal static class SupervisedElementUse
                 }
 
                 attempt.RequestSent = true;
+                // Events queued during the observation barrier or the write stay before this inbox barrier and cannot satisfy
+                // the attempt. A genuine server response cannot precede the write; events after this point are post-write.
+                await context.WaitUntilAsync(
+                    _ =>
+                    {
+                        attempt.SendCompleted = true;
+                        return true;
+                    },
+                    Timeout.InfiniteTimeSpan,
+                    token).ConfigureAwait(false);
+                BotLog.ElementUseFrontierOpen(context.Log, state.Key.CharacterId, elementId);
+
                 var answered = await answer.WaitAsync(context.Delays.Answer, token).ConfigureAwait(false);
 
                 if (answered is null)
@@ -245,6 +273,16 @@ internal static class SupervisedElementUse
 
                 if (!itemGained)
                     return new BehaviorVerdict(SupervisedElementUseOutcome.Unconfirmed, "ITEM_NOT_GAINED");
+
+                _ = await context.WaitUntilAsync(_ => false, _inventorySettle, token).ConfigureAwait(false);
+                attempt.InventoryAfter = Carried(context.State, expectedItemId);
+
+                if (attempt.InventoryBefore is not { } inventoryBeforeAtVerdict
+                    || attempt.InventoryAfter is not { } inventoryAfterAtVerdict
+                    || inventoryAfterAtVerdict <= inventoryBeforeAtVerdict)
+                {
+                    return new BehaviorVerdict(SupervisedElementUseOutcome.Unconfirmed, "ITEM_GAIN_NOT_PRESENT_AT_VERDICT");
+                }
 
                 var finalState = context.State;
 
@@ -535,6 +573,8 @@ internal static class SupervisedElementUse
 
     private sealed class AttemptState
     {
+        public volatile bool SendCompleted;
+
         public bool RequestSent { get; set; }
 
         public bool RequestMayHaveBeenSent { get; set; }

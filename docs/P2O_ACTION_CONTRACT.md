@@ -1,7 +1,9 @@
-# P2O WalkToCell action contract
+# P2O WalkToCell GUI action contract
 
-**Status — offline contract only.** `WalkToCell` is the only action eligible for this contract. The actor inbox rejects
-other GUI intent kinds. `UseElement` remains deferred; its current intent shape is not a live authorization.
+**Status — offline contract only, GUI path.** `WalkToCell` is the only action eligible for this GUI contract. The actor
+inbox rejects other GUI intent kinds. `UseElement` is not a GUI intent and is not covered by this contract. A separate
+protocol `UseElement` path exists offline, opt-in and disabled by default; it is not a live authorization and does not
+change this GUI contract. See [P2O_ELEMENT_USE_RUNBOOK.md](P2O_ELEMENT_USE_RUNBOOK.md).
 
 **VERIFIED:** the contracts and deterministic offline checks are present at implementation base `3ebf635`. **OPEN:**
 no real-client input or action-time evidence establishes that this offline contract has passed in a live session.
