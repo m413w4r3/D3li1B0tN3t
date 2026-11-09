@@ -724,6 +724,17 @@ public sealed class PreflightOperationsTests
     }
 
     [Fact]
+    public void OutputContainmentAndRepositoryWalkAllowUnrelatedMountTransitions()
+    {
+        using var directory = new PreflightTestDirectory();
+        using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(directory.Root);
+        using SafeFileHandle output = PreflightUnix.OpenDirectoryPath("/proc");
+
+        PreflightUnix.EnsureOutsideTree(output, source);
+        PreflightUnix.EnsureNoRepositoryMarker(output);
+    }
+
+    [Fact]
     public void AncestryGuardRejectsBindMountAliasOfTheAncestor()
     {
         var sourceRoot = new PreflightFileStatus(PreflightUnix.DirectoryType, 0, 0x1c0, 42, 8, 1, 10, 0, 0, 0, 0);
