@@ -55,6 +55,21 @@ trigger, so the switch only refuses D3B gameplay requests while client traffic c
   `src/D3B.Bot/Runtime/BotContext.cs` is passed to serialized behaviors. Activities are registered by modules under
   `src/D3B.Bot/Activities/`.
 
+## Offline WalkToCell coordinator
+
+`src/D3B.Bot/Gui/GuiWalkToCellCoordinator.cs` runs one explicit walk request from protocol evidence through a selected
+X11 window, a prepared calibration, terrain-cell projection, and actor intent acknowledgement. It takes matching S1
+and S2 snapshots around capture, checks the supplied same-map path against `GameMaps`, excludes observed interactive
+cells and configured UI regions, and allows the existing executor to make one input attempt. PASS requires the actor
+to observe the compatible client `MapMovementRequest`, the server's self `MapMovementEvent`, and the final
+`MapMovementConfirmResponse`; a click or animation alone leaves the result unconfirmed. Intent cancellation,
+confirmation timeout, and window rechecks remain bounded.
+
+The coordinator is an explicit caller API and is not registered as a host gameplay trigger. Its Xvfb coverage locates
+an explicit fake `xterm` XID and uses a snapshot-bound synthetic frame and calibration. This exercises window identity,
+capture binding, and affine projection without sending mouse or keyboard input. Live Dofus calibration, visual terrain
+recognition, click hitboxes, zoom behavior, and server acceptance remain unverified; `UseElement` stays deferred.
+
 ## Client platform and ABI seams
 
 The seam is intentionally small and sits in `scripts/unity/ClientInstall.cs` and `ClientPlatform.cs`, with consumers in
