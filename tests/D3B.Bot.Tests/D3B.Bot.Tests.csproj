@@ -16,6 +16,8 @@
     <Compile Include="..\D3B.Network.Tests\Relay\FixedUpstreamLocator.cs" Link="Network\FixedUpstreamLocator.cs" />
     <Compile Include="..\D3B.Network.Tests\Relay\TestRelay.cs" Link="Network\TestRelay.cs" />
     <Compile Include="..\D3B.Protocol.Tests\Mapping\Obfuscation.cs" Link="Protocol\Obfuscation.cs" />
+    <Compile Include="..\D3B.Gui.Tests\Calibration\SyntheticCalibrationFixtures.cs" Link="Gui\Calibration\SyntheticCalibrationFixtures.cs" />
+    <Compile Include="..\D3B.Gui.Tests\Calibration\FixedTimeProvider.cs" Link="Gui\Calibration\FixedTimeProvider.cs" />
   </ItemGroup>
 
 </Project>

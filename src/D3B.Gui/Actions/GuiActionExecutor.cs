@@ -53,6 +53,30 @@ public sealed class GuiActionExecutor
         IGuiInput input,
         CancellationToken cancellationToken)
     {
+        return await ExecuteAsync(
+            intent,
+            world,
+            window,
+            frame,
+            calibration,
+            target,
+            input,
+            _confirmation,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Executes one intention with a per-attempt confirmation seam.</summary>
+    public async Task<GuiActionOutcome> ExecuteAsync(
+        GuiActionIntent intent,
+        GuiWorldSnapshot world,
+        GameWindowSnapshot window,
+        CapturedFrame frame,
+        CalibrationResult calibration,
+        TargetRegion target,
+        IGuiInput input,
+        IGuiOutcomeConfirmation confirmation,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(intent);
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(window);
@@ -60,6 +84,7 @@ public sealed class GuiActionExecutor
         ArgumentNullException.ThrowIfNull(calibration);
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(confirmation);
 
         if (!TryReserve(intent.IntentId))
             return Blocked(GuiSafetyReason.Busy, false, "An intention is already active or this identifier was consumed.");
@@ -111,11 +136,11 @@ public sealed class GuiActionExecutor
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                return Interrupted(false, "The input operation was canceled.");
+                return Interrupted(true, "The input operation was canceled after its one permitted attempt began.");
             }
             catch (Exception)
             {
-                return Failed(false, "The input operation failed.");
+                return Unconfirmed(true, "The input operation threw after the one permitted click attempt began.");
             }
 
             if (inputResult.Status != GuiInputStatus.Sent && inputResult.ClickMayHaveBeenEmitted)
@@ -131,7 +156,7 @@ public sealed class GuiActionExecutor
 
             try
             {
-                confirmedOutcome = await _confirmation.WaitForConfirmationAsync(intent, cancellationToken).ConfigureAwait(false);
+                confirmedOutcome = await confirmation.WaitForConfirmationAsync(intent, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
