@@ -235,6 +235,12 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
 
     private static string? GetReadableFrameRevocationReason(BotActor bot, RelayDirection direction, IMessage message)
     {
+        if (direction is RelayDirection.FromClient && message is DialogLeaveRequest)
+        {
+            // A leave request can follow a dialog frame still queued behind a blocked actor, so stale state must fail closed.
+            return "A client dialog-leave request may close a dialog opened by an unread server frame.";
+        }
+
         if (direction is RelayDirection.FromClient && PlayerActions.Starts(bot.State, message))
             return "A client gameplay action started.";
 
@@ -251,6 +257,16 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
             MapMovementEvent movement when movement.ActorId == bot.Key.CharacterId => "The server reported self movement.",
             MapMovementRefusedEvent => "The server refused movement.",
             MapMovementConfirmResponse => "The server confirmed movement.",
+            NpcDialogCreationEvent => "The server opened an NPC dialog.",
+            NpcDialogQuestionEvent => "The server changed the NPC dialog question.",
+            DialogLeaveEvent => "The server closed a dialog.",
+            TeleportDestinationsEvent => "The server opened teleport destinations.",
+            ExchangeStartedWithStorageEvent => "The server started a storage exchange.",
+            ExchangeStartedWithTabbedStorageEvent => "The server started a tabbed storage exchange.",
+            ExchangeLeaveEvent => "The server ended a storage exchange.",
+            InteractiveUsedEvent => "The server reported interactive use.",
+            InteractiveUseEndedEvent => "The server ended interactive use.",
+            InteractiveUseErrorEvent => "The server reported an interactive-use error.",
             _ => null,
         };
     }

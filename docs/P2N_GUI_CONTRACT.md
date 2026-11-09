@@ -257,13 +257,18 @@ same time. PotentiallyConcurrentHumanInput causes an interruption; the correlati
 cryptographic attribution. Missing or conflicting confirmation yields Unconfirmed and no automatic retry. Visual
 animation alone is not a server confirmation.
 
-BotActor owns a shared `GuiClickLease` for each registered intent. Every revocation source cancels it synchronously:
-cancellation, expiry, consumption, pause, attach/detach/stop, fight start, map state changes, self movement or movement
-failure/confirmation, client gameplay before the click gate, translation latch closure, and unexpected terminal
-evidence. `Bots.OnFrame` cancels it before posting readable revocations or an unread translation-latch notification;
-`BotActor` also cancels it before posting pause, attach, detach, and stop messages. The actor inbox handles the same
-revocations as defense in depth. `AcknowledgedGuiInput` passes the shared lease and caller token to the backend, and
-`XdotoolGuiInput` calls `TryBeginClick` after pointer movement and focus revalidation, immediately before `Process.Start`.
+BotActor owns a shared `GuiClickLease` for each registered intent. `Bots.OnFrame` cancels it before posting these
+readable revocations: client actions recognized by `PlayerActions.Starts` plus every `DialogLeaveRequest` (which fails
+closed even when actor dialog state is stale); server fight starts; current-map or map-information frames; self
+movement, movement refusal, or movement confirmation; and dialog, teleport-destination, exchange, and interactive-use
+frames. Cancellation of the lease does not terminate a correctly correlated post-click movement outcome: the actor
+still checks the self path and final confirmation, so a valid cycle can reach `ServerConfirmed`. Unread frames have no
+readable type for this list; `Bots.OnFrame` revokes synchronously for them only when the movement-translation latch has
+closed. Actor-owned cancellation, expiry, consumption, pause, attach/detach/stop, and terminal correlation handling
+also revoke through `BotActor`. Its inbox repeats the dialog/exchange/use termination as defense in depth, selecting
+cancelled or unconfirmed from the current click state. `AcknowledgedGuiInput` passes the shared lease and caller token
+to the backend, and `XdotoolGuiInput` calls `TryBeginClick` after pointer movement and focus revalidation, immediately
+before `Process.Start`.
 
 `TryBeginClick` is the linearization point. If revocation acquires the lease lock first, the click is canceled without
 possible emission. If `TryBeginClick` wins first, the click may have been emitted and a later revocation cannot retract

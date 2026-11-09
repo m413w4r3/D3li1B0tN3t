@@ -222,6 +222,19 @@ public sealed class GuiWalkToCellCoordinatorTests
     [Theory]
     [InlineData("fight")]
     [InlineData("map")]
+    [InlineData("map-information")]
+    [InlineData("self-movement")]
+    [InlineData("movement-refused")]
+    [InlineData("movement-confirmed")]
+    [InlineData("dialog-created")]
+    [InlineData("dialog-question")]
+    [InlineData("dialog-left")]
+    [InlineData("exchange-started")]
+    [InlineData("tabbed-exchange-started")]
+    [InlineData("exchange-left")]
+    [InlineData("interactive-used")]
+    [InlineData("interactive-use-ended")]
+    [InlineData("interactive-use-error")]
     [InlineData("client-gameplay")]
     public async Task ReadableRevocationSynchronouslyCancelsLeaseBeforeActorInboxHandlesFrame(string revocation)
     {
@@ -235,10 +248,87 @@ public sealed class GuiWalkToCellCoordinatorTests
                 case "map":
                     context.Connection.Server(new MapCurrentEvent { MapId = TestPlay.NorthMapId });
                     break;
+                case "map-information":
+                    context.Connection.Server(TestPlay.Information(301));
+                    break;
+                case "self-movement":
+                    context.Connection.Server(new MapMovementEvent { ActorId = TestPlay.CharacterId, Cells = { 300, 301 } });
+                    break;
+                case "movement-refused":
+                    context.Connection.Server(new MapMovementRefusedEvent());
+                    break;
+                case "movement-confirmed":
+                    context.Connection.Response(new MapMovementConfirmResponse());
+                    break;
+                case "dialog-created":
+                    context.Connection.Server(new NpcDialogCreationEvent { MapId = TestPlay.EastMapId, NpcActorId = TestPlay.BankerActorId });
+                    break;
+                case "dialog-question":
+                    context.Connection.Server(new NpcDialogQuestionEvent { MessageId = 48_366 });
+                    break;
+                case "dialog-left":
+                    context.Connection.Server(new DialogLeaveEvent());
+                    break;
+                case "exchange-started":
+                    context.Connection.Server(new ExchangeStartedWithStorageEvent { Type = ExchangeType.Storage });
+                    break;
+                case "tabbed-exchange-started":
+                    context.Connection.Server(new ExchangeStartedWithTabbedStorageEvent { Type = ExchangeType.GuildChest });
+                    break;
+                case "exchange-left":
+                    context.Connection.Server(new ExchangeLeaveEvent { Type = DialogType.Storage });
+                    break;
+                case "interactive-used":
+                    context.Connection.Server(new InteractiveUsedEvent
+                    {
+                        ActorId = TestPlay.CharacterId,
+                        ElementId = TestPlay.TreeElementId,
+                        SkillId = TestPlay.TreeSkillId,
+                        Duration = 30,
+                    });
+                    break;
+                case "interactive-use-ended":
+                    context.Connection.Server(new InteractiveUseEndedEvent { ElementId = TestPlay.TreeElementId, SkillId = TestPlay.TreeSkillId });
+                    break;
+                case "interactive-use-error":
+                    context.Connection.Server(new InteractiveUseErrorEvent());
+                    break;
                 case "client-gameplay":
                     context.Connection.Client(new MapChangeRequest { MapId = (int)TestPlay.NorthMapId });
                     break;
             }
+        }, revocation switch
+        {
+            "dialog-created" => context => Assert.True(context.Bot.State.IsInDialog),
+            "interactive-used" => context => Assert.True(context.Bot.State.IsUsing),
+            _ => null,
+        });
+    }
+
+    [Fact]
+    public async Task ClientDialogLeaveSynchronouslyCancelsLeaseWhenActorStateIsStale()
+    {
+        await AssertLeaseRevokedBeforeInboxHandlesAsync(context =>
+        {
+            Assert.False(context.Bot.State.IsInDialog);
+            context.Connection.Client(new DialogLeaveRequest());
+        }, context => Assert.False(context.Bot.State.IsInDialog));
+    }
+
+    [Fact]
+    public async Task ServerDialogCreationThenClientLeaveWhileInboxIsBlockedCannotLaunchClick()
+    {
+        await AssertLeaseRevokedBeforeInboxHandlesAsync(context =>
+        {
+            Assert.False(context.Bot.State.IsInDialog);
+            context.Connection.Server(new NpcDialogCreationEvent { MapId = TestPlay.EastMapId, NpcActorId = TestPlay.BankerActorId });
+            context.Connection.Client(new DialogLeaveRequest());
+        },
+        context => Assert.True(context.Bot.State.IsInDialog),
+        context =>
+        {
+            Assert.Equal(GuiIntentCorrelationState.Clicked, context.Bot.GuiIntentState);
+            Assert.False(context.Bot.State.IsInDialog);
         });
     }
 
@@ -969,7 +1059,10 @@ public sealed class GuiWalkToCellCoordinatorTests
         await context.Bot.ProcessedAsync();
     }
 
-    private static async Task AssertLeaseRevokedBeforeInboxHandlesAsync(Action<GuiWalkToCellTestContext> revoke)
+    private static async Task AssertLeaseRevokedBeforeInboxHandlesAsync(
+        Action<GuiWalkToCellTestContext> revoke,
+        Action<GuiWalkToCellTestContext>? assertProcessedState = null,
+        Action<GuiWalkToCellTestContext>? assertBeforeRevocation = null)
     {
         await using GuiWalkToCellTestContext context = await GuiWalkToCellTestContext.CreateAsync();
         TaskCompletionSource<GuiClickLease> pointerMovementStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1015,6 +1108,7 @@ public sealed class GuiWalkToCellCoordinatorTests
             }, TestContext.Current.CancellationToken);
             await actorLoopBlocked.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
+            assertBeforeRevocation?.Invoke(context);
             revoke(context);
 
             Assert.True(lease.IsCancelled, "The revocation did not synchronously cancel the active click lease.");
@@ -1026,6 +1120,7 @@ public sealed class GuiWalkToCellCoordinatorTests
             await actorWait!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
             GuiWalkToCellResult result = await execution.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
+            assertProcessedState?.Invoke(context);
             Assert.Equal(GuiActionOutcomeStatus.Interrupted, result.Outcome.Status);
             Assert.False(result.Outcome.ClickEmitted);
             Assert.False(await clickGateOpened.Task);
