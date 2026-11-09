@@ -1,7 +1,7 @@
 using D3B.Bot.Hosting;
 using D3B.Storage;
 
-var builder = BotHost.CreateBuilder(args).AddModule<StorageModule>().AddModule<SupervisedMoveModule>();
+var builder = BotHost.CreateBuilder(args).AddModule<StorageModule>().AddModule<SupervisedMoveModule>().AddModule<SupervisedElementUseModule>();
 
 try
 {

@@ -7630,3 +7630,47 @@ Settled questions leave this table, and the decision that settles one says so.
   transitions were observed; 58 unread tokens and 12 `SHAPE_VARIATION` contradictions remain for offline review.
   No mapping change or resolver promotion is authorized by this evidence. A future observation requires a new
   explicit owner GO. Live action remains **BLOCKED** under D340.
+
+## D345: Supervised element use is offline-only, one-shot, and disabled by default
+
+*2026-11-09, D3B-S1.*
+
+- **Decision**: add an explicit, caller-invoked supervised element-use vertical. `SupervisedElementUse.Prepare` is
+  passive: it resolves the exact map, current cell, element, enabled skill and server skill instance against
+  `CharacterState`, `MapData`, `JobCatalog` and `ItemCatalog`, derives the expected item from `Skill.GatheredItemId`,
+  verifies the current cell is in `ElementCells.UsedFrom`, and returns `READY`, `BLOCKED` or `UNAVAILABLE` with a stable
+  reason, the session epoch/revision, cell provenance, translation-latch state and input mode; it sends nothing.
+  `SupervisedElementUseSession` owns one authorization per host session: a blocked preflight does not consume it, and a
+  ready preflight is consumed by one compare-and-swap before the single execution. `SupervisedElementUse.ExecuteAsync`
+  rechecks the session epoch, connection, `ProtocolInjection` admission, open translation latch, movement guard, map and
+  cell, element state, enabled skill and instance, and the current cell's use range inside the serialized `BotActor`
+  behavior, then again in the `SendGuardedAsync` gate immediately before the write. It sends at most one
+  `InteractiveUseRequest` through the existing `GameSession`/`BotActor`/`ElementUse.Request` path; it never walks, never
+  releases a held walk, never changes map, and never retries. An end event is accepted only after this attempt's start,
+  because `InteractiveUseEndedEvent` carries no actor or attempt id. `PASS_HARVEST` requires the matching self
+  `InteractiveUsedEvent`, the matching `InteractiveUseEndedEvent` when a duration is announced, and a verified increase of
+  the expected item in the same session, map and cell within a bounded window; inventory and end notifications may arrive
+  in either order. A server refusal is `REFUSED`; missing, stale or contradictory evidence is `UNCONFIRMED`;
+  player/disconnect/fight/host-stop/cancellation is `INTERRUPTED`; a local precondition failure is `BLOCKED`. The host
+  console is added only by `D3B.Host` and registered only when `Supervised:ElementUse:Enabled=true`; it is absent by
+  default and never triggered by a connection, a resource sighting or an activity. No `NonPositionMessages` entry was
+  added or widened.
+- **Why**: the first real harvest must be one supervised attempt with server proof and no movement side effect. Keeping
+  the translation latch and `ProtocolInjection` admission as hard preconditions preserves the existing safety boundary:
+  a closed latch or another input mode blocks the attempt instead of bypassing either. The passive preparation makes the
+  target identity explicit (map, cell, element, skill instance, expected item) and rejects historical identifiers that
+  are not in the current state. Requiring the end event to follow this attempt's start closes the stale-end false pass
+  found by the independent audit.
+- **Checked**: independent audit: initial **REJECT** on a stale matching end satisfying the attempt; the
+  start-before-end ordering fix and four regressions were re-audited; delta **APPROVE** with no remaining
+  BLOCKER/MAJOR/MINOR. Focused `SupervisedElementUse` tests: 31/31 (25 core, including the stale-end,
+  inventory-before-end, zero-duration and consumed-preparation regressions; 4 console; 2 module). `D3B.Bot.Tests`:
+  930/930. Full `dotnet test`: 2,360 tests, 2,356 passed, 4 skipped (`D3B.Diagnostic`), 0 failed. `dotnet build`:
+  0 warnings/0 errors. `dotnet format --verify-no-changes`: exit 0. Worktree `d3b-s1-element-use` on base
+  `a145fc7a9a35d3e19d45b587ffa6e2bc178dd24e`; no commit or push. Live action remains **BLOCKED** under D340; this
+  entry grants no live GO and does not modify D340. The P2O translation-latch closure remains a live-session
+  dependency: this increment does not decode the 58 unread carried types and makes no new non-position classification.
+- **Source**: `src/D3B.Bot/Interactives/SupervisedElementUse.cs`, `SupervisedElementUseSession.cs`,
+  `ElementUsePreparation.cs`; `src/D3B.Bot/Hosting/SupervisedElementUseConsole.cs`, `SupervisedElementUseModule.cs`;
+  `src/D3B.Host/Program.cs`; `tests/D3B.Bot.Tests/Interactives/SupervisedElementUseTests.cs`,
+  `SupervisedElementUseConsoleTests.cs`, `tests/D3B.Bot.Tests/Hosting/SupervisedElementUseModuleTests.cs`.
