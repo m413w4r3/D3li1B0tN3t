@@ -131,12 +131,16 @@ public sealed class AcknowledgedGuiInputTests
         Func<Guid, D3B.Gui.Safety.GuiWorldSnapshot, GameWindowSnapshot, CancellationToken, Task<bool>> gate,
         CancellationToken actorRevocationToken)
     {
+        GuiClickLease lease = new();
+        if (actorRevocationToken.IsCancellationRequested)
+            lease.Cancel();
+
         return new AcknowledgedGuiInput(
             fixture.Intent.IntentId,
             fixture.World,
             fixture.Window,
             gate,
             inner,
-            actorRevocationToken);
+            lease);
     }
 }

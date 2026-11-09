@@ -257,12 +257,16 @@ same time. PotentiallyConcurrentHumanInput causes an interruption; the correlati
 cryptographic attribution. Missing or conflicting confirmation yields Unconfirmed and no automatic retry. Visual
 animation alone is not a server confirmation.
 
-BotActor owns a cancellation token for each registered intent. Actor revocation cancels it on cancellation, expiry,
+BotActor owns a shared `GuiClickLease` for each registered intent. Actor revocation cancels it on cancellation, expiry,
 consumption, pause, session attach/detach/stop, fight or map change, client gameplay before the click gate, translation
-latch closure, or unexpected terminal evidence. AcknowledgedGuiInput links that token with the caller token, and
-XdotoolGuiInput checks it after pointer movement and focus revalidation immediately before launching the click command.
-Revocation before launch returns Canceled without reporting possible click emission. Once the command launches, a later
-cancellation or failure remains uncertain and is Unconfirmed; it cannot retract input already sent.
+latch closure, or unexpected terminal evidence. An unread frame that closes the session translation latch cancels the
+lease synchronously in `Bots.OnFrame`, before the actor inbox notification is posted. `AcknowledgedGuiInput` passes the
+shared lease and caller token to the backend, and `XdotoolGuiInput` calls `TryBeginClick` after pointer movement and focus
+revalidation, immediately before `Process.Start`.
+
+`TryBeginClick` is the linearization point. If revocation acquires the lease lock first, the click is canceled without
+possible emission. If `TryBeginClick` wins first, the click may have been emitted and a later revocation cannot retract
+it; any later failure or cancellation remains uncertain and is Unconfirmed, with no retry.
 
 BotActor permits one successful MarkClicked gate per SessionEpoch. An intent blocked or canceled before that gate does
 not use the session's attempt. Once the gate succeeds, no new intent is accepted in that epoch, even when cancellation

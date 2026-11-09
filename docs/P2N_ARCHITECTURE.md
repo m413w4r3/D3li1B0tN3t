@@ -74,10 +74,11 @@ BotActor, a client connection, or mutable character state.
   outcome, and final consumption. BotActor feeds WalkToCell observations on its existing inbox and exposes one
   outcome waiter. PlayerActions still pauses a running behavior on client gameplay requests; the observer does not send
   requests or modify GameSession's transport.
-- BotActor owns the active intent's click cancellation token and cancels it when actor state revokes the intent. The
-  coordinator links it to the caller token; XdotoolGuiInput checks cancellation after pointer movement and focus
-  revalidation immediately before starting the click command. A cancellation after command launch is uncertain and
-  remains terminal.
+- BotActor owns a shared GuiClickLease for the active intent. Bots.OnFrame cancels it synchronously when an unread frame
+  closes the session translation latch, before posting the actor inbox notification. XdotoolGuiInput calls
+  TryBeginClick after pointer movement and focus revalidation, immediately before Process.Start; this is the atomic
+  linearization point against revocation. A later cancellation cannot retract a click whose launch point already won,
+  so that result is uncertain and remains terminal.
 - A successful MarkClicked gate consumes the session epoch's one permitted GUI click attempt. Pre-click intents that
   never open that gate may be replaced; an opened gate cannot be retried in the same epoch, including after timeout.
   Attach or reconnect advances the epoch and resets the allowance.

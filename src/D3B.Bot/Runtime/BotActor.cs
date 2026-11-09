@@ -12,6 +12,7 @@ using D3B.Data.Maps;
 using D3B.Engine.World;
 using D3B.Gui.Actions;
 using D3B.Gui.Calibration;
+using D3B.Gui.Input;
 using D3B.Gui.Safety;
 using D3B.Gui.Windowing;
 using D3B.Network.Relay;
@@ -60,7 +61,7 @@ public sealed class BotActor : IAsyncDisposable
     private readonly List<Starting> _parked = [];
     private readonly Lock _activityLock = new();
     private readonly object _sessionLock = new();
-    private readonly object _guiClickCancellationSync = new();
+    private readonly object _guiClickLeaseSync = new();
     private readonly AsyncLocal<RunningBehavior?> _movementSendBehavior = new();
     private readonly GuiIntentCorrelation _guiIntents;
     private readonly GuiWorldSnapshotAdapter _guiWorldSnapshots;
@@ -103,8 +104,10 @@ public sealed class BotActor : IAsyncDisposable
     private GuiOutcomeWaiter? _guiOutcomeWaiter;
     private Guid? _guiMovementIntentId;
     private bool _guiExpectedMovementSeen;
-    // Revocation must reach input already moving the pointer before its click command can launch.
-    private CancellationTokenSource? _guiClickCancellationSource;
+    // The same lease synchronizes actor revocation with the backend's final click-launch gate.
+    private GuiClickLease? _guiClickLease;
+    private Guid? _guiClickLeaseIntentId;
+    private GameSession? _guiClickLeaseSession;
     private ITimer? _guiIntentExpiryTimer;
     private Guid? _guiIntentExpiryId;
 
@@ -188,21 +191,41 @@ public sealed class BotActor : IAsyncDisposable
 
     internal string? GuiIntentDetail => _guiIntents.LastDetail;
 
-    internal CancellationToken GetGuiClickCancellationToken(Guid intentId)
+    internal GuiClickLease GetGuiClickLease(Guid intentId)
     {
-        lock (_guiClickCancellationSync)
+        lock (_guiClickLeaseSync)
         {
-            if (_guiClickCancellationSource is not null
+            if (_guiClickLease is not null
+                && _guiClickLeaseIntentId == intentId
                 && _guiIntents.Intent?.IntentId == intentId
                 && _guiIntents.State is GuiIntentCorrelationState.Acknowledged
                     or GuiIntentCorrelationState.Clicked
                     or GuiIntentCorrelationState.ClientRequestSeen)
             {
-                return _guiClickCancellationSource.Token;
+                return _guiClickLease;
             }
         }
 
-        return new CancellationToken(canceled: true);
+        GuiClickLease canceledLease = new();
+        canceledLease.Cancel();
+        return canceledLease;
+    }
+
+    /// <summary>Revokes the current session's click synchronously when its translation latch closes.</summary>
+    internal void RevokeGuiClickLeaseForTranslationBlocked(GameSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        GuiClickLease? lease;
+
+        lock (_guiClickLeaseSync)
+        {
+            lease = ReferenceEquals(_session, session)
+                && ReferenceEquals(_guiClickLeaseSession, session)
+                ? _guiClickLease
+                : null;
+        }
+
+        lease?.Cancel();
     }
 
     internal ILogger Log => _log;
@@ -537,7 +560,7 @@ public sealed class BotActor : IAsyncDisposable
     internal void BeginStopping()
     {
         _stopping = true;
-        CancelGuiClickCancellation();
+        CancelGuiClickLease();
     }
 
     /// <summary>Stops the bot: its behavior is interrupted, and its inbox read to the end.</summary>
@@ -860,8 +883,12 @@ public sealed class BotActor : IAsyncDisposable
 
         if (registration.Status is GuiIntentRegistrationStatus.Registered)
         {
-            lock (_guiClickCancellationSync)
-                _guiClickCancellationSource = new CancellationTokenSource();
+            lock (_guiClickLeaseSync)
+            {
+                _guiClickLease = new GuiClickLease();
+                _guiClickLeaseIntentId = intent.IntentId;
+                _guiClickLeaseSession = _session;
+            }
 
             ScheduleGuiIntentExpiry(intent);
             _guiMovementIntentId = intent.IntentId;
@@ -881,12 +908,12 @@ public sealed class BotActor : IAsyncDisposable
         if (!GuiWorldSnapshotsMatch(world, current))
         {
             _guiIntents.Cancel("The actor snapshot did not match the acknowledgement snapshot.");
-            CancelGuiClickCancellationIfTerminal();
+            CancelGuiClickLeaseIfTerminal();
             return false;
         }
 
         bool acknowledged = _guiIntents.Acknowledge(current, window);
-        CancelGuiClickCancellationIfTerminal();
+        CancelGuiClickLeaseIfTerminal();
         return acknowledged;
     }
 
@@ -900,7 +927,7 @@ public sealed class BotActor : IAsyncDisposable
         if (!GuiWorldSnapshotsMatch(world, current))
         {
             _guiIntents.Cancel("The actor snapshot did not match the click snapshot.");
-            CancelGuiClickCancellationIfTerminal();
+            CancelGuiClickLeaseIfTerminal();
             return false;
         }
 
@@ -909,7 +936,7 @@ public sealed class BotActor : IAsyncDisposable
         if (clicked && _guiIntents.Intent is { } intent)
             _guiClickAttemptSessionEpoch = intent.SessionEpoch;
 
-        CancelGuiClickCancellationIfTerminal();
+        CancelGuiClickLeaseIfTerminal();
         return clicked;
     }
 
@@ -935,7 +962,7 @@ public sealed class BotActor : IAsyncDisposable
             return false;
         }
 
-        CancelGuiClickCancellationIfTerminal();
+        CancelGuiClickLeaseIfTerminal();
         return terminated;
     }
 
@@ -1003,7 +1030,7 @@ public sealed class BotActor : IAsyncDisposable
         if (_guiIntents.Intent?.IntentId == waiter.IntentId)
             _guiIntents.Cancel("The intention expired while awaiting its server outcome.");
 
-        CancelGuiClickCancellationIfTerminal();
+        CancelGuiClickLeaseIfTerminal();
 
         CompleteGuiOutcomeWaiterIfTerminal();
     }
@@ -1066,7 +1093,7 @@ public sealed class BotActor : IAsyncDisposable
                 return;
         }
 
-        CancelGuiClickCancellationIfTerminal();
+        CancelGuiClickLeaseIfTerminal();
         CompleteGuiOutcomeWaiterIfTerminal();
     }
 
@@ -1128,7 +1155,7 @@ public sealed class BotActor : IAsyncDisposable
             return false;
 
         bool consumed = _guiIntents.Consume();
-        CancelGuiClickCancellationIfTerminal();
+        CancelGuiClickLeaseIfTerminal();
 
         if (consumed)
         {
@@ -1180,12 +1207,12 @@ public sealed class BotActor : IAsyncDisposable
         if (_guiIntents.Intent is { } intent && IsActiveGuiIntent(intent.IntentId))
         {
             TerminateGuiIntentByClickState(detail);
-            CancelGuiClickCancellation();
+            CancelGuiClickLease();
             CancelGuiIntentExpiryTimer(intent.IntentId);
         }
     }
 
-    private void CancelGuiClickCancellationIfTerminal()
+    private void CancelGuiClickLeaseIfTerminal()
     {
         GuiIntentCorrelationState state = _guiIntents.State;
 
@@ -1200,32 +1227,24 @@ public sealed class BotActor : IAsyncDisposable
             or GuiIntentCorrelationState.Interrupted
             or GuiIntentCorrelationState.Unconfirmed)
         {
-            CancelGuiClickCancellation();
+            CancelGuiClickLease();
             CancelGuiIntentExpiryTimer();
         }
     }
 
-    private void CancelGuiClickCancellation()
+    private void CancelGuiClickLease()
     {
-        CancellationTokenSource? source;
+        GuiClickLease? lease;
 
-        lock (_guiClickCancellationSync)
+        lock (_guiClickLeaseSync)
         {
-            source = _guiClickCancellationSource;
-            _guiClickCancellationSource = null;
+            lease = _guiClickLease;
+            _guiClickLease = null;
+            _guiClickLeaseIntentId = null;
+            _guiClickLeaseSession = null;
         }
 
-        if (source is null)
-            return;
-
-        try
-        {
-            source.Cancel();
-        }
-        finally
-        {
-            source.Dispose();
-        }
+        lease?.Cancel();
     }
 
     private static bool IsSafeGuiIntentWorld(GuiWorldSnapshot world)
@@ -1329,7 +1348,7 @@ public sealed class BotActor : IAsyncDisposable
 
         bool playerActionStarted = side is RelayDirection.FromClient && PlayerActions.Starts(state, message);
         bool expectedGuiWalkRequest = ObserveGuiWalkFrame(session, side, message, translationBlocked, before, state, playerActionStarted);
-        CancelGuiClickCancellationIfTerminal();
+        CancelGuiClickLeaseIfTerminal();
 
         LogPositionTransition(before, state, side, message);
 
@@ -1601,7 +1620,7 @@ public sealed class BotActor : IAsyncDisposable
                 break;
         }
 
-        CancelGuiClickCancellationIfTerminal();
+        CancelGuiClickLeaseIfTerminal();
     }
 
     private static bool TryGetMapMovementRequestEndpoint(MapMovementRequest request, out int endpoint)
