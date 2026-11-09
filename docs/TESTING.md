@@ -111,9 +111,10 @@ skip with an explicit reason when `unshare` or mount capability is unavailable.
 
 ### P2O-PREFLIGHT-2 verification record
 
-The pinned SDK build completed with 0 warnings and 0 errors. `D3B.Scripts.Tests` passed 92/92, including 7 real
-namespace scenarios with 0 skipped. The serialized full suite recorded 2,329 tests, 4 skipped in `D3B.Diagnostic`,
-and 0 failed: 10 non-GUI assemblies ran in a privileged Debian 12 container with the pinned SDK/runtime (2,104 tests,
+Final-code validation on `64d65b9` followed the independent A3 re-audit APPROVE. The pinned SDK build completed with
+0 warnings and 0 errors. `D3B.Scripts.Tests` passed 92/92, including 7 real namespace scenarios with 0 skipped.
+The serialized full suite was rerun on `64d65b9` and recorded 2,329 tests, 4 skipped in `D3B.Diagnostic`, and
+0 failed: 10 non-GUI assemblies ran in a privileged Debian 12 container with the pinned SDK/runtime (2,104 tests,
 4 skipped), and `D3B.Gui.Tests` ran on the host because its X11 tools are host-only (225/225). `dotnet format
 --verify-no-changes` and `git diff --check` exited 0.
 

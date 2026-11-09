@@ -7541,3 +7541,33 @@ Settled questions leave this table, and the decision that settles one says so.
   discovery are outside the pre-check. Transient changes during index capture fail closed as
   `repository_index_unavailable`. A hostile local administrator is out of scope. The existing `renameat2`
   check-to-syscall window remains. These checks concern observation preflight only.
+
+## D342: P2O observation preflight is READY after A3 re-audit
+
+*2026-11-09, P2O-PREFLIGHT-2 final A3 re-audit.*
+
+- **Decision**: record the independent A3 **APPROVE** on `ecba0d0` and delta **APPROVE** on
+  `64d65b984dcedf2bbed96af09e70390959b36e5f`; close P2O-PREFLIGHT-2 and mark **READY FOR P2O OBSERVATION
+  PREFLIGHT** for observation preflight only. Live action remains **BLOCKED** under D340. This does not imply merge,
+  push, or live authorization.
+- **Why**: the original source-descendant bind-alias finding is fixed and the independent audit found no remaining
+  BLOCKER or MAJOR. The two MINOR findings have explicit dispositions. The approval covers the offline observation
+  preflight boundary; D340's live-action evidence and authorization requirements remain separate.
+- **Checked**: the A3 audit APPROVED `ecba0d0` with no BLOCKER/MAJOR and two MINORs. The dormant
+  `PreflightUnix.IsDescendantOrSelf` retained the old `..` walk despite having no callers; fix `64d65b9` deletes that
+  method (one file, six deletions), and no references remain. The reread at `scripts/preflight/PreflightCommand.cs:151`
+  occurs after `Backup` only to print the entry count; it performs no write or mutation bypass and is outside the
+  documented mount-change boundary, so it is accepted as a documented MINOR. The audit delta confirms APPROVE on
+  `64d65b9`. Final-code checks on that commit: build 0 warnings/0 errors; `D3B.Scripts.Tests` 92/92 with 7 real
+  namespace scenarios executed and 0 skipped; serialized suite 2,329 tests, 4 `D3B.Diagnostic` skips, 0 failures
+  (10 non-GUI assemblies in a privileged Debian 12 container with pinned SDK/runtime: 2,104 tests/4 skips;
+  `D3B.Gui.Tests` on the host: 225/225); format and diff checks exited 0. The initial host uid-1000 run's 28
+  Network/Bot/App/Storage failures from the 128-instance inotify limit remain an environment caveat; the same built
+  assemblies passed with a fresh UID inotify budget. Read-only live verifies against Phase F manifests returned OK
+  for the D3B client (3 entries) and Ankama tree (27,826 entries); private snapshot modes were 0700/0600.
+- **Residual limits**: repository protection is anchored on `Directory.GetCurrentDirectory()` and
+  `AppContext.BaseDirectory`, so a detached alias of another repository cannot be identified without mount metadata.
+  The repository index is a per-process snapshot; concurrent privileged namespace/mount or repository changes after
+  discovery are outside the pre-check. Transient repository changes during index capture fail closed as
+  `repository_index_unavailable`. A hostile local administrator is out of scope. The `renameat2` check-to-syscall
+  window remains. Live action remains BLOCKED under D340.

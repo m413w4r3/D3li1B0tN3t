@@ -1,6 +1,6 @@
 # P2O preflight mount boundary diagnostic
 
-**Status:** Phase A diagnosis retained; P2O-PREFLIGHT-2 alias diagnosis fixed in code, with independent A3 re-audit pending. **Original base:** `d5a3d8a` (`master`). **Original branch:** `p2o/preflight-1`. **Original HEAD:** `a0bb4e2`. **Current base:** `c51a56e7d59c323645e013bce9b3e1d253e29246`. **Current branch:** `p2o/preflight-2`. **Code HEAD:** `c8e7f8b`.
+**Status:** Phase A diagnosis retained; P2O-PREFLIGHT-2 alias diagnosis fixed and independently A3-approved. **Original base:** `d5a3d8a` (`master`). **Original branch:** `p2o/preflight-1`. **Original HEAD:** `a0bb4e2`. **Current base:** `c51a56e7d59c323645e013bce9b3e1d253e29246`. **Current branch:** `p2o/preflight-2`. **Code HEAD:** `64d65b9`.
 
 ## Symptom
 
@@ -56,3 +56,9 @@ returns `BLOCKED: restore_paths_overlap` without a destination or `.preflight-st
 and restore still succeed and verify `OK`. The 7 namespace scenarios ran with 0 skips on this host; they skip with an
 explicit reason when `unshare` or mount capability is unavailable. The implementation and residual limits are recorded
 in [the report](P2O_PREFLIGHT_REPORT.md).
+
+The independent A3 re-audit APPROVED `ecba0d0` with no BLOCKER or MAJOR and two MINOR findings. The dormant
+`PreflightUnix.IsDescendantOrSelf` helper's `..` walk was fixed by deleting the unused method in `64d65b9`; no
+references remain. The display-only backup-manifest reread at `PreflightCommand.cs:151` was accepted as a documented
+MINOR because it performs no write or mutation bypass and is outside the documented mount-change boundary. The audit
+delta confirmed APPROVE on `64d65b9`.
