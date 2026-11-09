@@ -42,16 +42,57 @@ The Avalonia tests use Avalonia Headless. They do not require a display server.
 `scripts/preflight.cs` is an offline file-based tool. Its manifests use canonical JSON with base64 relative path bytes,
 SHA-256 for regular files, Unix modes, and raw symbolic-link target bytes. It never prints file contents or absolute
 private paths. Linux directory descriptors and no-follow entry operations keep traversal rooted, reject symlinked path
-components, and reject entries on a different device or mount. Snapshot and compare outputs are atomically replaced in
-a private directory (`0700`) with a private manifest file (`0600`); a missing output parent is created privately.
+components, and reject entries on a different device or mount. Source/output ancestry checks also reject a mount-ID
+change while walking toward a source tree or repository marker; paths whose ancestry crosses a mount boundary are
+blocked. Snapshot and compare outputs are atomically replaced in a private directory (`0700`) with a private manifest
+file (`0600`); a missing output parent is created privately.
 Backups contain regular files and symlinks in a private `tree/` directory plus `manifest.json`. Directory entries and
 directory modes, including empty directories, are intentionally not represented; restore recreates only parent
 directories needed by manifest entries.
 
-Restore verifies the backup, copies it to a private sibling staging directory, and verifies the staged tree before
-renaming it into place. An existing destination is renamed to a sibling named `.preflight-superseded-NNNN` and retained
-for manual cleanup; restore never recursively deletes that tree. If staging fails, the original destination remains in
-place. After the swap, the installed tree is verified again.
+Restore verifies the backup, copies it to a private sibling `.preflight-stage-*` directory, verifies and synchronizes
+the staged files and directories, then installs it. An existing destination is exchanged atomically with the staged
+tree using `renameat2(RENAME_EXCHANGE)`. Restore verifies both trees after the exchange and exchanges them back if
+verification fails. The old destination stays under the stage name for manual cleanup; restore never recursively
+deletes it. If the destination did not exist, `RENAME_NOREPLACE` installs the stage, so a concurrent creator is
+blocked without being overwritten.
+
+Restore synchronizes regular files and directories bottom-up before installation, synchronizes the parent before
+installation, and synchronizes it again after the exchange or no-replace rename. This makes the staged tree and
+namespace update crash-durable on filesystems and storage that honor `fsync`. A process failure before installation
+can leave a private `.preflight-stage-*` directory. A failed backup can leave its requested private output directory
+with an incomplete `tree/` and no manifest. These artifacts are retained for inspection or manual cleanup; preflight
+does not recursively remove them or any superseded tree. Recovery states are:
+
+| Failure point | Destination name | Retained artifact |
+| --- | --- | --- |
+| Backup copy fails | Source is unchanged | Private backup directory with a possibly partial `tree/`; no `manifest.json`. |
+| Restore staging fails | Existing destination is unchanged (or remains absent) | Private stage directory may be incomplete. |
+| Existing-destination exchange fails | Original destination is unchanged | Complete, verified replacement remains under `.preflight-stage-*`. |
+| Post-exchange verification fails and exchange-back succeeds | Original destination is restored | The attempted replacement remains under `.preflight-stage-*`; inspect it before any manual cleanup. |
+| No-replace install meets a concurrent creator | Concurrent destination is untouched | Verified stage remains under `.preflight-stage-*`. |
+| Process stops during an existing-destination exchange | Destination names one of the two trees | The other tree remains under `.preflight-stage-*`; verify both against their manifests before recovery. |
+
+If exchange-back itself fails, the result is `BLOCKED` and the destination and stage may no longer match the expected
+pair; inspect both without deleting either. A crash around installation of a previously absent destination can leave
+the verified tree at the destination or under its stage name, depending on whether the namespace change reached
+storage. Never infer which tree to keep from the name alone. Manual cleanup must be deliberate and must not use
+recursive deletion.
+
+Automated mount-boundary coverage uses synthetic `statx` mount-ID values, including the same directory inode observed
+through a different mount ID. A real bind-mount namespace test could not run here:
+`unshare --user --map-root-user --mount` returns `Operation not permitted`. The bind-mount namespace case remains a
+privilege-limited integration check.
+
+## L7c verification
+
+On 2026-11-09, the pinned SDK solution build passed with 0 warnings and 0 errors. The serialized
+`D3B.Scripts.Tests` run passed 60/60 tests using only synthetic trees, with `TMPDIR=/var/tmp` because `/tmp` is a
+separate mount and the ancestry policy blocks paths that cross mount IDs. `scripts/preflight.cs --help` exited 0 with
+NuGet audit disabled for that offline smoke because `api.nuget.org` was unreachable. `dotnet format --verify-no-changes`
+and `git diff --check` both passed. The user-namespace bind-mount probe returned `Operation not permitted` as recorded
+above.
+
 The known historical private manifest contains a `MISSING` line followed by concatenated paths and no verifiable
 SHA-256 lines. This is consistent with a newline-joined file list being passed as one argument, but the original
 command is unrecoverable and is not reconstructed here.

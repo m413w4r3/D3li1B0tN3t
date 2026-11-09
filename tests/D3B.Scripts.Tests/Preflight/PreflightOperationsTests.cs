@@ -68,6 +68,34 @@ public sealed class PreflightOperationsTests
     }
 
     [Fact]
+    public void ParserRejectsWhitespaceInLinkTargetBase64()
+    {
+        using var directory = new PreflightTestDirectory();
+        string root = directory.Root;
+        File.CreateSymbolicLink(System.IO.Path.Combine(root, "link"), "relative target");
+        JsonObject json = JsonNode.Parse(PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(root)))!.AsObject();
+        JsonObject entry = json["entries"]!.AsArray()[0]!.AsObject();
+        string linkTargetBase64 = entry["linkTargetBase64"]!.GetValue<string>();
+        entry["linkTargetBase64"] = linkTargetBase64.Insert(1, " ");
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.ParseManifest(JsonSerializer.SerializeToUtf8Bytes(json)));
+    }
+
+    [Fact]
+    public void ParserRejectsNoncanonicalLinkTargetBase64()
+    {
+        using var directory = new PreflightTestDirectory();
+        string root = directory.Root;
+        File.CreateSymbolicLink(System.IO.Path.Combine(root, "link"), "x");
+        JsonObject json = JsonNode.Parse(PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(root)))!.AsObject();
+        JsonObject entry = json["entries"]!.AsArray()[0]!.AsObject();
+        Assert.Equal("eA==", entry["linkTargetBase64"]!.GetValue<string>());
+        entry["linkTargetBase64"] = "eB==";
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.ParseManifest(JsonSerializer.SerializeToUtf8Bytes(json)));
+    }
+
+    [Fact]
     public void TamperedManifestHashSizeAndKindAreRejected()
     {
         using var directory = new PreflightTestDirectory();
@@ -151,6 +179,9 @@ public sealed class PreflightOperationsTests
     {
         using var directory = new PreflightTestDirectory();
         var root = directory.Root;
+        string nested = System.IO.Path.Combine(root, "nested");
+        Directory.CreateDirectory(nested);
+        directory.WriteFile(nested, "nested-config", [11, 12]);
         directory.WriteFile(root, "target", [8, 9, 10]);
         string config = directory.WriteFile(root, "config file", [1, 2, 3, 4]);
         File.SetUnixFileMode(config, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
@@ -171,8 +202,33 @@ public sealed class PreflightOperationsTests
         Assert.Throws<PreflightBlockedException>(() => PreflightOperations.Verify(root, manifestPath));
 
         PreflightManifest supersededManifest = PreflightOperations.Snapshot(root);
-        string? supersededName = PreflightOperations.RestoreWithResult(backup, manifestPath, root);
+        int syncedStageDirectories = 0;
+        bool parentSyncedAfterSwap = false;
+        var durabilityEvents = new List<string>();
+        string? supersededName = PreflightOperations.RestoreWithResult(
+            backup,
+            manifestPath,
+            root,
+            beforeSwap: () =>
+            {
+                Assert.Equal(2, syncedStageDirectories);
+                durabilityEvents.Add("before-exchange");
+            },
+            afterSwap: () =>
+            {
+                parentSyncedAfterSwap = true;
+                durabilityEvents.Add("after-exchange");
+            },
+            afterStageDirectorySynced: () =>
+            {
+                syncedStageDirectories++;
+                durabilityEvents.Add("stage-directory");
+            });
         Assert.NotNull(supersededName);
+        Assert.StartsWith(".preflight-stage-", supersededName, StringComparison.Ordinal);
+        Assert.Equal(2, syncedStageDirectories);
+        Assert.True(parentSyncedAfterSwap);
+        Assert.Equal(["stage-directory", "stage-directory", "before-exchange", "after-exchange"], durabilityEvents);
         string supersededPath = directory.Combine(supersededName);
         Assert.True(Directory.Exists(supersededPath));
         PreflightOperations.Verify(supersededPath, supersededManifest);
@@ -284,6 +340,121 @@ public sealed class PreflightOperationsTests
         Assert.Equal([7, 6, 5], File.ReadAllBytes(oldFile));
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead, File.GetUnixFileMode(oldFile));
         Assert.Equal("old config", new FileInfo(System.IO.Path.Combine(destination, "old-link")).LinkTarget);
+        string stagePath = Assert.Single(Directory.GetDirectories(directory.Path, ".preflight-stage-*"));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(stagePath));
+    }
+
+    [Fact]
+    public void BackupFailureLeavesAnIncompletePrivateBackupWithoutChangingSource()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        Directory.CreateDirectory(source);
+        string original = directory.WriteFile(source, "config", [5, 4, 3, 2]);
+        string backup = directory.Combine("incomplete-backup");
+
+        Assert.Throws<IOException>(() => PreflightOperations.Backup(
+            source,
+            backup,
+            () => throw new IOException("Synthetic backup failure.")));
+
+        Assert.Equal(["tree"], Directory.GetFileSystemEntries(backup).Select(System.IO.Path.GetFileName));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(System.IO.Path.Combine(backup, "tree")));
+        Assert.Equal([5, 4, 3, 2], File.ReadAllBytes(original));
+    }
+
+    [Fact]
+    public void AtomicSwapFailureLeavesOriginalTreeAndVerifiedStageInPlace()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        Directory.CreateDirectory(source);
+        directory.WriteFile(source, "replacement", [1, 3, 5]);
+        string backup = directory.Combine("backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+        string destination = directory.Root;
+        string original = directory.WriteFile(destination, "original", [2, 4, 6]);
+        byte[] before = PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(destination));
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.RestoreWithResult(
+            backup,
+            manifestPath,
+            destination,
+            exchange: (_, _, _, _) => throw new IOException("Synthetic exchange failure.")));
+
+        Assert.Equal(before, PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(destination)));
+        Assert.Equal([2, 4, 6], File.ReadAllBytes(original));
+        string stagePath = Assert.Single(Directory.GetDirectories(directory.Path, ".preflight-stage-*"));
+        PreflightOperations.Verify(stagePath, manifestPath);
+    }
+
+    [Fact]
+    public void ConcurrentDestinationCreationIsBlockedWithoutOverwritingIt()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        Directory.CreateDirectory(source);
+        directory.WriteFile(source, "replacement", [1, 2, 3]);
+        string backup = directory.Combine("backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+        string destination = directory.Combine("new-destination");
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.RestoreWithResult(
+            backup,
+            manifestPath,
+            destination,
+            () =>
+            {
+                Directory.CreateDirectory(destination);
+                File.WriteAllBytes(System.IO.Path.Combine(destination, "concurrent"), [9, 8, 7]);
+            }));
+
+        Assert.Equal([9, 8, 7], File.ReadAllBytes(System.IO.Path.Combine(destination, "concurrent")));
+        string stagePath = Assert.Single(Directory.GetDirectories(directory.Path, ".preflight-stage-*"));
+        PreflightOperations.Verify(stagePath, manifestPath);
+    }
+
+    [Fact]
+    public void RestoreInstallsIntoMissingDestinationWithoutReplacingAnotherEntry()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        Directory.CreateDirectory(source);
+        directory.WriteFile(source, "replacement", [3, 1, 4, 1]);
+        string backup = directory.Combine("backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+        string destination = directory.Combine("new-destination");
+
+        Assert.Null(PreflightOperations.RestoreWithResult(backup, manifestPath, destination));
+
+        PreflightOperations.Verify(destination, manifestPath);
+        Assert.Empty(Directory.GetDirectories(directory.Path, ".preflight-stage-*"));
+    }
+
+    [Fact]
+    public void PostExchangeVerificationFailureExchangesOriginalTreeBackAndRetainsStage()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        Directory.CreateDirectory(source);
+        directory.WriteFile(source, "replacement", [1, 2, 3]);
+        string backup = directory.Combine("backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+        string destination = directory.Root;
+        string original = directory.WriteFile(destination, "original", [7, 8, 9]);
+        byte[] before = PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(destination));
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.RestoreWithResult(
+            backup,
+            manifestPath,
+            destination,
+            afterSwap: () => File.WriteAllBytes(System.IO.Path.Combine(destination, "post-swap-invalid"), [6, 6])));
+
+        Assert.Equal(before, PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(destination)));
+        Assert.Equal([7, 8, 9], File.ReadAllBytes(original));
+        string stagePath = Assert.Single(Directory.GetDirectories(directory.Path, ".preflight-stage-*"));
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(System.IO.Path.Combine(stagePath, "replacement")));
+        Assert.Equal([6, 6], File.ReadAllBytes(System.IO.Path.Combine(stagePath, "post-swap-invalid")));
     }
 
     [Fact]
@@ -339,6 +510,17 @@ public sealed class PreflightOperationsTests
         var entry = new PreflightFileStatus(PreflightUnix.RegularFileType, 1, 0x180, 2, 8, 1, 11, 0, 0, 0, 0);
 
         Assert.Throws<PreflightBlockedException>(() => PreflightUnix.EnsureSameMount(entry, root));
+        Assert.Throws<PreflightBlockedException>(() => PreflightUnix.EnsureAncestrySameMount(entry, root));
+    }
+
+    [Fact]
+    public void AncestryGuardRejectsBindMountAliasOfTheAncestor()
+    {
+        var sourceRoot = new PreflightFileStatus(PreflightUnix.DirectoryType, 0, 0x1c0, 42, 8, 1, 10, 0, 0, 0, 0);
+        var bindAlias = new PreflightFileStatus(PreflightUnix.DirectoryType, 0, 0x1c0, 42, 8, 1, 11, 0, 0, 0, 0);
+
+        Assert.True(PreflightUnix.IsSameObject(sourceRoot, bindAlias));
+        Assert.Throws<PreflightBlockedException>(() => PreflightUnix.IsSameObjectOnSameMount(bindAlias, sourceRoot));
     }
 
     [Fact]

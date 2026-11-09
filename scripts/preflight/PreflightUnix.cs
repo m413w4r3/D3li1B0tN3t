@@ -26,6 +26,7 @@ internal static class PreflightUnix
     private const int NoFollow = 0x20000;
     private const int DirectoryFlag = 0x10000;
     private const int RenameNoReplace = 1;
+    private const int RenameExchange = 2;
     private const uint PrivateDirectoryMode = 0x1c0;
     private const uint PrivateFileMode = 0x180;
     private const int DirectoryNameOffset = 19;
@@ -203,7 +204,11 @@ internal static class PreflightUnix
 
     public static List<byte[]> EnumerateNames(SafeFileHandle directory)
     {
-        int duplicate = Dup(directory.DangerousGetHandle().ToInt32());
+        int duplicate = OpenAt(
+            directory.DangerousGetHandle().ToInt32(),
+            [(byte)'.', 0],
+            ReadOnly | DirectoryFlag | CloseOnExec,
+            0);
 
         if (duplicate < 0)
         {
@@ -349,6 +354,23 @@ internal static class PreflightUnix
         }
     }
 
+    public static void ExchangeAt(
+        SafeFileHandle firstParent,
+        byte[] firstName,
+        SafeFileHandle secondParent,
+        byte[] secondName)
+    {
+        if (RenameAt2(
+                firstParent.DangerousGetHandle().ToInt32(),
+                Terminate(firstName),
+                secondParent.DangerousGetHandle().ToInt32(),
+                Terminate(secondName),
+                RenameExchange) != 0)
+        {
+            throw NativeIOException("The directory entries could not be exchanged safely.");
+        }
+    }
+
     public static void UnlinkAt(SafeFileHandle parent, byte[] name)
     {
         if (UnlinkAtNative(parent.DangerousGetHandle().ToInt32(), Terminate(name), 0) != 0)
@@ -370,6 +392,23 @@ internal static class PreflightUnix
         }
     }
 
+    public static void SyncTree(SafeFileHandle root, Action? afterDirectorySynced = null)
+    {
+        PreflightFileStatus rootStatus = StatHandle(root);
+
+        if (rootStatus.Type != Directory)
+        {
+            throw new PreflightBlockedException("sync_root_invalid");
+        }
+
+        SyncDirectoryTree(root, rootStatus, afterDirectorySynced);
+    }
+
+    public static void EnsureAncestrySameMount(PreflightFileStatus child, PreflightFileStatus parent)
+    {
+        EnsureSameMount(parent, child);
+    }
+
     public static void EnsureSameMount(PreflightFileStatus entry, PreflightFileStatus root)
     {
         if (entry.MountId != root.MountId || entry.DeviceMajor != root.DeviceMajor || entry.DeviceMinor != root.DeviceMinor)
@@ -381,6 +420,17 @@ internal static class PreflightUnix
     public static bool IsSameObject(PreflightFileStatus left, PreflightFileStatus right)
     {
         return left.DeviceMajor == right.DeviceMajor && left.DeviceMinor == right.DeviceMinor && left.Inode == right.Inode;
+    }
+
+    public static bool IsSameObjectOnSameMount(PreflightFileStatus left, PreflightFileStatus right)
+    {
+        if (!IsSameObject(left, right))
+        {
+            return false;
+        }
+
+        EnsureSameMount(left, right);
+        return true;
     }
 
     public static SafeFileHandle DuplicateHandle(SafeFileHandle handle)
@@ -406,6 +456,7 @@ internal static class PreflightUnix
         }
 
         SafeFileHandle current = new(new IntPtr(duplicates), true);
+        PreflightFileStatus candidateStatus = StatHandle(current);
 
         try
         {
@@ -413,13 +464,14 @@ internal static class PreflightUnix
             {
                 PreflightFileStatus currentStatus = StatHandle(current);
 
-                if (IsSameObject(currentStatus, ancestorStatus))
+                if (IsSameObjectOnSameMount(currentStatus, ancestorStatus))
                 {
                     return true;
                 }
 
                 using SafeFileHandle parent = OpenDirectoryAt(current, [(byte)'.', (byte)'.']);
                 PreflightFileStatus parentStatus = StatHandle(parent);
+                EnsureAncestrySameMount(candidateStatus, parentStatus);
 
                 if (IsSameObject(parentStatus, currentStatus))
                 {
@@ -510,7 +562,7 @@ internal static class PreflightUnix
 
         if ((BitConverter.ToUInt32(buffer, 0) & StatxMountId) == 0)
         {
-            throw new IOException("The filesystem does not report mount identity.");
+            throw new PreflightBlockedException("mount_identity_unavailable");
         }
 
         int mode = BitConverter.ToUInt16(buffer, 28);
@@ -545,6 +597,7 @@ internal static class PreflightUnix
         }
 
         SafeFileHandle current = new(new IntPtr(descriptor), true);
+        PreflightFileStatus startingStatus = StatHandle(current);
 
         try
         {
@@ -555,6 +608,7 @@ internal static class PreflightUnix
 
                 using SafeFileHandle parent = OpenDirectoryAt(current, [(byte)'.', (byte)'.']);
                 PreflightFileStatus parentStatus = StatHandle(parent);
+                EnsureAncestrySameMount(startingStatus, parentStatus);
 
                 if (IsSameObject(currentStatus, parentStatus))
                 {
@@ -576,6 +630,61 @@ internal static class PreflightUnix
         {
             current.Dispose();
         }
+    }
+
+    private static void SyncDirectoryTree(
+        SafeFileHandle directory,
+        PreflightFileStatus rootStatus,
+        Action? afterDirectorySynced)
+    {
+        foreach (byte[] name in EnumerateNames(directory))
+        {
+            PreflightFileStatus entry = StatAt(directory, name);
+            EnsureSameMount(entry, rootStatus);
+
+            if (entry.Type == Directory)
+            {
+                using SafeFileHandle child = OpenDirectoryAt(directory, name);
+                PreflightFileStatus opened = StatHandle(child);
+
+                if (!IsSameObject(entry, opened))
+                {
+                    throw new PreflightBlockedException("sync_entry_changed");
+                }
+
+                EnsureSameMount(opened, rootStatus);
+                SyncDirectoryTree(child, rootStatus, afterDirectorySynced);
+                continue;
+            }
+
+            if (entry.Type == RegularFile)
+            {
+                using SafeFileHandle file = OpenFileAt(directory, name);
+                PreflightFileStatus opened = StatHandle(file);
+
+                if (!IsSameObject(entry, opened))
+                {
+                    throw new PreflightBlockedException("sync_entry_changed");
+                }
+
+                EnsureSameMount(opened, rootStatus);
+
+                if (Fsync(file.DangerousGetHandle().ToInt32()) != 0)
+                {
+                    throw NativeIOException("The file data could not be synchronized.");
+                }
+
+                continue;
+            }
+
+            if (entry.Type != SymbolicLink)
+            {
+                throw new PreflightBlockedException("sync_special_file_unsupported");
+            }
+        }
+
+        SyncDirectory(directory);
+        afterDirectorySynced?.Invoke();
     }
 
     private static byte[] Terminate(byte[] bytes)
