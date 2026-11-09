@@ -488,12 +488,6 @@ internal static class PreflightUnix
         return new SafeFileHandle(new IntPtr(duplicate), true);
     }
 
-    public static bool IsDescendantOrSelf(SafeFileHandle candidate, SafeFileHandle ancestor)
-    {
-        PreflightFileStatus ancestorStatus = StatHandle(ancestor);
-        return WalkAncestors(candidate, status => IsSameObject(status, ancestorStatus));
-    }
-
     public static void EnsureNoRepositoryMarker(SafeFileHandle directory)
     {
         IReadOnlyList<PreflightDirectoryIndex> repositoryIndexes = _repositoryDirectoryIndexes.Value;
