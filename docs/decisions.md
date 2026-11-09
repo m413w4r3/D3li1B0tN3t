@@ -7507,3 +7507,37 @@ Settled questions leave this table, and the decision that settles one says so.
   `3ebf635aecdc9ce632bbc898254a6d391035a255`; final integration base
   `3ebf635aecdc9ce632bbc898254a6d391035a255`. See `docs/P2O_OFFLINE_REPORT.md` and
   `docs/P2O_FIRST_LIVE_ACTION_RUNBOOK.md`.
+
+## D341: P2O preflight rejects bind aliases by directory identity
+
+*2026-11-09, P2O-PREFLIGHT-2 containment correction.*
+
+- **Decision**: use a device+inode index of every source directory to reject output through source bind aliases, and
+  the same identity-based ancestry checks for restore overlap and repository output protection. Ancestry may cross
+  unrelated outer mount transitions; tree-entry traversal continues to enforce mount boundaries. The previous A3
+  **REJECT** is addressed in code and evidence, but independent A3 re-audit is pending on code HEAD `c8e7f8b`; do not
+  claim READY. Live action remains separately **BLOCKED** under D340.
+- **Why**: walking `..` from a bind alias follows the alias mountpoint ancestry and may never reach the source root or
+  repository marker. Comparing each existing ancestor against indexed directory identities closes the observed source,
+  restore, and repository alias paths while preserving valid paths that cross unrelated mounts.
+- **Checked**: fix `1d645cf` and namespace coverage `c8e7f8b`; `scripts/preflight/PreflightDirectoryIdentity.cs:6-29`,
+  `PreflightDirectoryIndex.cs:7-53`, `PreflightUnix.cs:491-560,757-780` (`EnsureOutsideTree`,
+  `EnsureNoRepositoryMarker`, `DiscoverRepositoryDirectoryIndexes`),
+  `PreflightOperations.cs:396-410` (restore overlap), and
+  `tests/D3B.Scripts.Tests/Preflight/PreflightBindMountTests.cs:13-135`. On base
+  `c51a56e7d59c323645e013bce9b3e1d253e29246`, a real namespace RED reproduction wrote `manifest.json` into
+  `source/deep` through `/tmp/alias` and returned success. After the fix, the descendant, deep-missing-parent,
+  source-root, repository-descendant, and backup-restore alias cases return the expected `BLOCKED` codes without alias
+  writes or staging artifacts; normal external snapshot and restore verify `OK`. Scripts passed 92/92, including 7
+  real namespace scenarios with 0 skipped. The full suite passed 2,329 tests with 4 `D3B.Diagnostic` skips and 0
+  failures: 2,104 tests / 4 skips in a privileged Debian 12 container and 225/225 GUI tests on the host. The first
+  serialized host run as uid 1000 hit the 128-instance inotify limit and had 28 unrelated Network/Bot/App/Storage
+  failures; the same built assemblies passed with a fresh UID inotify budget. Build had 0 warnings/errors, format and
+  diff checks exited 0. Read-only live verifies returned OK for the 3-entry D3B client and 27,826-entry Ankama tree;
+  Ankama verify took about 91 seconds. Private snapshot parent and manifest modes were 0700 and 0600.
+- **Residual limits**: repository protection is anchored at `Directory.GetCurrentDirectory()` and
+  `AppContext.BaseDirectory`; a detached alias of another repository cannot be identified without mount metadata.
+  The repository index is a per-process snapshot; concurrent privileged mount/namespace or repository changes after
+  discovery are outside the pre-check. Transient changes during index capture fail closed as
+  `repository_index_unavailable`. A hostile local administrator is out of scope. The existing `renameat2`
+  check-to-syscall window remains. These checks concern observation preflight only.

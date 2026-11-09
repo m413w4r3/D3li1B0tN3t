@@ -1,6 +1,6 @@
 # P2O preflight mount boundary diagnostic
 
-**Status:** Phase A diagnosis complete. **Base:** `d5a3d8a` (`master`). **Branch:** `p2o/preflight-1`. **HEAD:** `a0bb4e2`.
+**Status:** Phase A diagnosis retained; P2O-PREFLIGHT-2 alias diagnosis fixed in code, with independent A3 re-audit pending. **Original base:** `d5a3d8a` (`master`). **Original branch:** `p2o/preflight-1`. **Original HEAD:** `a0bb4e2`. **Current base:** `c51a56e7d59c323645e013bce9b3e1d253e29246`. **Current branch:** `p2o/preflight-2`. **Code HEAD:** `c8e7f8b`.
 
 ## Symptom
 
@@ -26,7 +26,7 @@ This was an **implementation defect in output ancestry containment**. The source
 
 ## Fix history and RED evidence
 
-The fix sequence is:
+The Phase A fix sequence was:
 
 - `8d9f28a` — allow ancestry checks to cross unrelated mounts.
 - `bcbbf00` — add the regression test.
@@ -37,3 +37,22 @@ The regression `OutputContainmentAndRepositoryWalkAllowUnrelatedMountTransitions
 ## Phase D diagnostic behavior
 
 On a blocked mount boundary, a safe `DETAIL:` line reports the category, escaped relative path, expected and observed mount IDs, and expected and observed device major/minor values. It does not include file contents. The machine-readable `BLOCKED:` line remains present. Tests cover safe detail formatting and rejection when output is inside the source tree.
+
+## P2O-PREFLIGHT-2 alias diagnosis
+
+The A3 **MAJOR** on base `c51a56e7d59c323645e013bce9b3e1d253e29246` was a separate containment defect. Walking `..`
+from an external bind alias follows the alias mountpoint ancestry, so the old root-identity walk and marker scan never
+reach the source descendant. An output could therefore be written into the source through its alias.
+
+Commit `1d645cf` indexes every source and repository directory using device+inode identity (mount ID is excluded),
+checks every existing destination ancestor, allows unrelated outer mount transitions, and applies the same identity
+mechanism to restore overlap and repository protection. Commit `c8e7f8b` adds real Linux user+mount namespace tests.
+
+The RED reproduction on the base bind-mounted `source/deep` at `/tmp/alias`; snapshotting to `alias/manifest.json`
+exited 0 with `OK snapshot entries=1` and created the manifest inside `source/deep`. After the fix, descendant,
+deep-missing-parent, and source-root aliases return `BLOCKED: destination_aliases_source` without writing through the
+alias; a repository descendant returns `BLOCKED: repository_output_forbidden`; restore beneath backup aliases
+returns `BLOCKED: restore_paths_overlap` without a destination or `.preflight-stage-*`. Normal external snapshot
+and restore still succeed and verify `OK`. The 7 namespace scenarios ran with 0 skips on this host; they skip with an
+explicit reason when `unshare` or mount capability is unavailable. The implementation and residual limits are recorded
+in [the report](P2O_PREFLIGHT_REPORT.md).

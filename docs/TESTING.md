@@ -42,10 +42,10 @@ The Avalonia tests use Avalonia Headless. They do not require a display server.
 `scripts/preflight.cs` is an offline file-based tool. Its manifests use canonical JSON with base64 relative path bytes,
 SHA-256 for regular files, Unix modes, and raw symbolic-link target bytes. It never prints file contents or absolute
 private paths. Linux directory descriptors and no-follow entry operations keep traversal rooted, reject symlinked path
-components, and reject entries on a different device or mount. Source/output ancestry checks also reject a mount-ID
-change while walking toward a source tree or repository marker; paths whose ancestry crosses a mount boundary are
-blocked. Snapshot and compare outputs are atomically replaced in a private directory (`0700`) with a private manifest
-file (`0600`); a missing output parent is created privately.
+components, and reject entries on a different device or mount. Source/output ancestry may cross unrelated mounts;
+a device+inode directory index rejects bind aliases of source or repository descendants. Strict mount-boundary checks
+remain inside snapshot, backup, verify, and restore trees. Snapshot and compare outputs are atomically replaced in a
+private directory (`0700`) with a private manifest file (`0600`); a missing output parent is created privately.
 Backups contain regular files and symlinks in a private `tree/` directory plus `manifest.json`. Directory entries and
 directory modes, including empty directories, are intentionally not represented; restore recreates only parent
 directories needed by manifest entries.
@@ -105,9 +105,22 @@ storage. Never infer which tree to keep from the name alone. Manual cleanup must
 recursive deletion.
 
 Automated mount-boundary coverage uses synthetic `statx` mount-ID values, including the same directory inode observed
-through a different mount ID. A real bind-mount namespace test could not run here:
-`unshare --user --map-root-user --mount` returns `Operation not permitted`. The bind-mount namespace case remains a
-privilege-limited integration check.
+through a different mount ID. Real bind-mount integration tests now run in Linux user and mount namespaces; all 7
+scenarios ran successfully on this host, including source, repository, restore-alias, and normal-path controls. They
+skip with an explicit reason when `unshare` or mount capability is unavailable.
+
+### P2O-PREFLIGHT-2 verification record
+
+The pinned SDK build completed with 0 warnings and 0 errors. `D3B.Scripts.Tests` passed 92/92, including 7 real
+namespace scenarios with 0 skipped. The serialized full suite recorded 2,329 tests, 4 skipped in `D3B.Diagnostic`,
+and 0 failed: 10 non-GUI assemblies ran in a privileged Debian 12 container with the pinned SDK/runtime (2,104 tests,
+4 skipped), and `D3B.Gui.Tests` ran on the host because its X11 tools are host-only (225/225). `dotnet format
+--verify-no-changes` and `git diff --check` exited 0.
+
+The first standard host `dotnet test --solution` run as uid 1000 produced 28 failures in Network/Bot/App/Storage
+after exhausting `fs.inotify.max_user_instances=128` (`The configured user limit (128) on the number of inotify
+instances has been reached`). The same built assemblies passed with a fresh UID inotify budget; the initial failures
+were an environment limit, not a preflight containment regression.
 
 ## L7c verification
 
