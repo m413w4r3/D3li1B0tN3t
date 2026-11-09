@@ -73,6 +73,7 @@ public sealed class GuiWalkToCellCoordinatorTests
     [InlineData("wrong-client-map")]
     [InlineData("no-server-movement")]
     [InlineData("wrong-actor")]
+    [InlineData("wrong-endpoint")]
     [InlineData("wrong-server-cell")]
     [InlineData("refusal")]
     [InlineData("missing-final-confirm")]
@@ -814,6 +815,13 @@ public sealed class GuiWalkToCellCoordinatorTests
 
         context.Connection.Server(movement);
         await context.Bot.ProcessedAsync();
+
+        if (condition == "wrong-endpoint")
+        {
+            context.Connection.Client(new MapMovementConfirmResponse());
+            await context.Bot.ProcessedAsync();
+            return;
+        }
 
         if (condition == "missing-final-confirm")
             return;
