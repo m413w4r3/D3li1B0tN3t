@@ -411,8 +411,22 @@ internal static class PreflightUnix
 
     public static void EnsureSameMount(PreflightFileStatus entry, PreflightFileStatus root)
     {
+        EnsureSameMount(entry, root, null);
+    }
+
+    public static void EnsureSameMount(
+        PreflightFileStatus entry,
+        PreflightFileStatus root,
+        byte[]? relativePath)
+    {
         if (entry.MountId != root.MountId || entry.DeviceMajor != root.DeviceMajor || entry.DeviceMinor != root.DeviceMinor)
         {
+            if (relativePath is not null)
+            {
+                PreflightBlockedDetail detail = PreflightBlockedDetail.MountBoundary(relativePath, root, entry);
+                throw new PreflightBlockedException("mount_boundary_unsupported", detail);
+            }
+
             throw new PreflightBlockedException("mount_boundary_unsupported");
         }
     }

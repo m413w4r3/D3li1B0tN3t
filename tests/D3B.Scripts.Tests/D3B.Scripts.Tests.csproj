@@ -36,6 +36,7 @@
     <Compile Include="../../scripts/preflight/PreflightManifestEntry.cs" Link="Scripts/Preflight/PreflightManifestEntry.cs" />
     <Compile Include="../../scripts/preflight/PreflightManifestJsonContext.cs" Link="Scripts/Preflight/PreflightManifestJsonContext.cs" />
     <Compile Include="../../scripts/preflight/PreflightBlockedException.cs" Link="Scripts/Preflight/PreflightBlockedException.cs" />
+    <Compile Include="../../scripts/preflight/PreflightBlockedDetail.cs" Link="Scripts/Preflight/PreflightBlockedDetail.cs" />
     <Compile Include="../../scripts/preflight/PreflightManifestCodec.cs" Link="Scripts/Preflight/PreflightManifestCodec.cs" />
     <Compile Include="../../scripts/preflight/PreflightPath.cs" Link="Scripts/Preflight/PreflightPath.cs" />
     <Compile Include="../../scripts/preflight/PreflightSnapshot.cs" Link="Scripts/Preflight/PreflightSnapshot.cs" />

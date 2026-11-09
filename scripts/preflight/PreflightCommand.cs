@@ -178,7 +178,7 @@ internal static class PreflightCommand
         }
         catch (PreflightBlockedException exception)
         {
-            Console.Error.WriteLine($"BLOCKED: {exception.Code}");
+            WriteBlocked(exception);
             return Blocked;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException)
@@ -197,13 +197,23 @@ internal static class PreflightCommand
         }
         catch (PreflightBlockedException exception)
         {
-            Console.Error.WriteLine($"BLOCKED: {exception.Code}");
+            WriteBlocked(exception);
             return Blocked;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException)
         {
             Console.Error.WriteLine("ERROR: I/O operation failed.");
             return Error;
+        }
+    }
+
+    private static void WriteBlocked(PreflightBlockedException exception)
+    {
+        Console.Error.WriteLine($"BLOCKED: {exception.Code}");
+
+        if (exception.Detail is not null)
+        {
+            Console.Error.WriteLine(exception.Detail.FormatSafeLine());
         }
     }
 }

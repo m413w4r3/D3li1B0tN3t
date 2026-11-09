@@ -68,7 +68,7 @@ internal static class PreflightSnapshot
                 throw new PreflightBlockedException("entry_unreadable");
             }
 
-            PreflightUnix.EnsureSameMount(status, rootStatus);
+            PreflightUnix.EnsureSameMount(status, rootStatus, pathBytes);
 
             if (status.Type == PreflightUnix.DirectoryType)
             {
@@ -91,7 +91,7 @@ internal static class PreflightSnapshot
                     throw new PreflightBlockedException("entry_changed_during_snapshot");
                 }
 
-                PreflightUnix.EnsureSameMount(openedStatus, rootStatus);
+                PreflightUnix.EnsureSameMount(openedStatus, rootStatus, pathBytes);
 
                 Walk(childDirectory, rootStatus, pathBytes, entries);
                 continue;

@@ -52,6 +52,7 @@
   </Folder>
   <Folder Name="/scripts/preflight/">
     <File Path="scripts/preflight/PreflightBlockedException.cs" />
+    <File Path="scripts/preflight/PreflightBlockedDetail.cs" />
     <File Path="scripts/preflight/PreflightCommand.cs" />
     <File Path="scripts/preflight/PreflightManifest.cs" />
     <File Path="scripts/preflight/PreflightManifestCodec.cs" />

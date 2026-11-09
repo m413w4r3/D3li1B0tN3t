@@ -724,6 +724,43 @@ public sealed class PreflightOperationsTests
     }
 
     [Fact]
+    public void MountBoundaryDetailEscapesPathAndContainsOnlySafeIdentityFields()
+    {
+        var root = new PreflightFileStatus(PreflightUnix.DirectoryType, 0, 0x1c0, 1, 8, 1, 10, 0, 0, 0, 0);
+        var entry = new PreflightFileStatus(PreflightUnix.RegularFileType, 1, 0x180, 2, 9, 2, 11, 0, 0, 0, 0);
+        byte[] relativePath = Encoding.UTF8.GetBytes("nested/line\nbreak");
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightUnix.EnsureSameMount(entry, root, relativePath));
+
+        string line = exception.Detail!.FormatSafeLine();
+        Assert.Equal("mount_boundary_unsupported", exception.Code);
+        Assert.Contains("category=mount_boundary", line, StringComparison.Ordinal);
+        Assert.Contains("relative_path=\"nested/line\\x0Abreak\"", line, StringComparison.Ordinal);
+        Assert.Contains("expected_mount_id=10", line, StringComparison.Ordinal);
+        Assert.Contains("observed_mount_id=11", line, StringComparison.Ordinal);
+        Assert.Contains("expected_device_major=8 expected_device_minor=1", line, StringComparison.Ordinal);
+        Assert.Contains("observed_device_major=9 observed_device_minor=2", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("synthetic file contents", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OutputInsideSourceTreeIsRejected()
+    {
+        using var directory = new PreflightTestDirectory();
+        string sourcePath = directory.Root;
+        string outputPath = System.IO.Path.Combine(sourcePath, "nested-output");
+        Directory.CreateDirectory(outputPath);
+        using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(sourcePath);
+        using SafeFileHandle output = PreflightUnix.OpenDirectoryPath(outputPath);
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightUnix.EnsureOutsideTree(output, source));
+
+        Assert.Equal("output_inside_source_tree", exception.Code);
+    }
+
+    [Fact]
     public void OutputContainmentAndRepositoryWalkAllowUnrelatedMountTransitions()
     {
         using var directory = new PreflightTestDirectory();

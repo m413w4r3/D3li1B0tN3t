@@ -4,9 +4,18 @@ internal sealed class PreflightBlockedException : Exception
 {
     public string Code { get; }
 
+    public PreflightBlockedDetail? Detail { get; }
+
     public PreflightBlockedException(string code)
         : base(code)
     {
         Code = code;
+    }
+
+    public PreflightBlockedException(string code, PreflightBlockedDetail detail)
+        : base(code)
+    {
+        Code = code;
+        Detail = detail;
     }
 }
