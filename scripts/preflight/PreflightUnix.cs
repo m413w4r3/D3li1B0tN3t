@@ -465,7 +465,6 @@ internal static class PreflightUnix
         }
 
         SafeFileHandle current = new(new IntPtr(duplicates), true);
-        PreflightFileStatus candidateStatus = StatHandle(current);
 
         try
         {
@@ -473,14 +472,14 @@ internal static class PreflightUnix
             {
                 PreflightFileStatus currentStatus = StatHandle(current);
 
-                if (IsSameObjectOnSameMount(currentStatus, ancestorStatus))
+                // Containment ancestry may cross unrelated mounts; object identity still rejects a bind alias of the ancestor.
+                if (IsSameObject(currentStatus, ancestorStatus))
                 {
                     return true;
                 }
 
                 using SafeFileHandle parent = OpenDirectoryAt(current, [(byte)'.', (byte)'.']);
                 PreflightFileStatus parentStatus = StatHandle(parent);
-                EnsureAncestrySameMount(candidateStatus, parentStatus);
 
                 if (IsSameObject(parentStatus, currentStatus))
                 {
@@ -606,7 +605,6 @@ internal static class PreflightUnix
         }
 
         SafeFileHandle current = new(new IntPtr(descriptor), true);
-        PreflightFileStatus startingStatus = StatHandle(current);
 
         try
         {
@@ -617,7 +615,6 @@ internal static class PreflightUnix
 
                 using SafeFileHandle parent = OpenDirectoryAt(current, [(byte)'.', (byte)'.']);
                 PreflightFileStatus parentStatus = StatHandle(parent);
-                EnsureAncestrySameMount(startingStatus, parentStatus);
 
                 if (IsSameObject(currentStatus, parentStatus))
                 {
