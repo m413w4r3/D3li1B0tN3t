@@ -67,6 +67,62 @@ public sealed class GuiWalkToCellCoordinatorTests
         Assert.False(await context.Bot.ConsumeGuiIntentAsync(result.IntentId!.Value, TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task ActorRevocationDuringPointerMovementCancelsBeforeTheClickCommand()
+    {
+        await using GuiWalkToCellTestContext context = await GuiWalkToCellTestContext.CreateAsync();
+        using CancellationTokenSource callerCancellation = new();
+        TaskCompletionSource<CancellationToken> pointerMovementStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int clickCommandCount = 0;
+        GuiWalkToCellTestInput input = new();
+        input.OnClick = async (_, _, cancellationToken) =>
+        {
+            Assert.Equal(GuiIntentCorrelationState.Clicked, context.Bot.GuiIntentState);
+            pointerMovementStarted.TrySetResult(cancellationToken);
+            using CancellationTokenSource waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                TestContext.Current.CancellationToken);
+
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, waitCancellation.Token);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return new GuiInputResult(GuiInputStatus.Canceled, "Actor revocation canceled pointer movement.");
+            }
+
+            Interlocked.Increment(ref clickCommandCount);
+            return new GuiInputResult(GuiInputStatus.Sent, ClickMayHaveBeenEmitted: true);
+        };
+        GuiWalkToCellRequest request = context.CreateRequest(context.CreatePlan(301), input);
+        GuiWalkToCellCoordinator coordinator = new(new GuiWalkToCellCoordinatorOptions(
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(2),
+            true));
+        Task<GuiWalkToCellResult> execution = coordinator.ExecuteAsync(request, callerCancellation.Token);
+
+        CancellationToken inputToken = await pointerMovementStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+        context.Connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight });
+        await context.Bot.ProcessedAsync();
+
+        bool actorRevokedInput = inputToken.IsCancellationRequested;
+        if (!actorRevokedInput)
+            callerCancellation.Cancel();
+
+        GuiWalkToCellResult result = await execution;
+
+        Assert.True(actorRevokedInput, "The actor did not cancel the backend token during pointer movement.");
+        Assert.Equal(GuiActionOutcomeStatus.Interrupted, result.Outcome.Status);
+        Assert.False(result.Outcome.ClickEmitted);
+        Assert.Equal(0, Volatile.Read(ref clickCommandCount));
+        Assert.Equal(GuiIntentCorrelationState.Unconfirmed, context.Bot.GuiIntentState);
+        Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, context.Bot.GuiIntentState);
+    }
+
     [Theory]
     [InlineData("no-client-request")]
     [InlineData("wrong-client-cell")]
@@ -662,6 +718,63 @@ public sealed class GuiWalkToCellCoordinatorTests
         Assert.True(result.Outcome.ClickEmitted);
         Assert.Equal(1, input.ClickCount);
         Assert.Equal(GuiIntentCorrelationState.Unconfirmed, context.Bot.GuiIntentState);
+    }
+
+    [Fact]
+    public async Task ClickTimeoutBlocksANewIntentUntilTheNextSessionEpoch()
+    {
+        await using GuiWalkToCellTestContext context = await GuiWalkToCellTestContext.CreateAsync();
+        GuiWalkToCellCoordinator coordinator = new(new GuiWalkToCellCoordinatorOptions(
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(2),
+            true));
+        GuiWalkToCellTestInput firstInput = new();
+        firstInput.OnClick = (_, _, _) => Task.FromResult(new GuiInputResult(
+            GuiInputStatus.TimedOut,
+            "The synthetic click command timed out after launch.",
+            ClickMayHaveBeenEmitted: true));
+        GuiWalkToCellResult first = await coordinator.ExecuteAsync(
+            context.CreateRequest(context.CreatePlan(301), firstInput),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(GuiActionOutcomeStatus.Unconfirmed, first.Outcome.Status);
+        Assert.True(first.Outcome.ClickEmitted);
+        Assert.Equal(GuiIntentCorrelationState.Unconfirmed, context.Bot.GuiIntentState);
+
+        GuiWalkToCellTestInput secondInput = new();
+        secondInput.OnClick = (_, _, _) => Task.FromResult(new GuiInputResult(GuiInputStatus.Failed, "The second click was reached."));
+        GuiWalkToCellResult second = await coordinator.ExecuteAsync(
+            context.CreateRequest(context.CreatePlan(301), secondInput),
+            TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(first.IntentId, second.IntentId);
+        Assert.Equal(GuiActionOutcomeStatus.Blocked, second.Outcome.Status);
+        Assert.Equal("This session already made its one permitted GUI click attempt.", second.Outcome.Detail);
+        Assert.False(second.Outcome.ClickEmitted);
+        Assert.Equal(0, secondInput.ClickCount);
+
+        var replacement = context.Play.Connect(TestPlay.Account);
+        context.Bot.Attach(replacement.Session, context.Bot.State with
+        {
+            Fight = null,
+            Path = [],
+            Use = null,
+            Dialog = null,
+            MovementAnswerAmbiguous = false,
+            MapId = TestPlay.EastMapId,
+            Cell = 300,
+            Provenance = CellProvenance.ServerConfirmed,
+        });
+        await context.Bot.ProcessedAsync();
+        GuiWalkToCellTestInput replacementInput = new();
+        replacementInput.OnClick = (_, _, _) => Task.FromResult(new GuiInputResult(GuiInputStatus.Failed, "The test stopped before confirmation."));
+        GuiWalkToCellResult afterReconnect = await coordinator.ExecuteAsync(
+            context.CreateRequest(context.CreatePlan(301), replacementInput),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(GuiActionOutcomeStatus.Failed, afterReconnect.Outcome.Status);
+        Assert.Equal(1, replacementInput.ClickCount);
     }
 
     [Fact]

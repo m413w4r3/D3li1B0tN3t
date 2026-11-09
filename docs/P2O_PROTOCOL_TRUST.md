@@ -15,6 +15,9 @@ P2O has two different ways an action could be unsafe, and they require separate 
 The GUI policy is a pure decision component. It calls `GuiActionGate` itself and requires `Ready`; it does not accept a
 caller-supplied readiness result. It accepts only a first `WalkToCell` intent whose expected client action is `Walk` and
 whose expected server outcome is `MovementConfirmed`. A blocked decision reports one first failing `GuiSafetyReason`.
+An allowed decision is still not standalone authorization: `GuiWalkToCellCoordinator` must separately validate the
+caller-supplied plan against the server-proven current cell and current map, and bind the plan endpoint to the verified
+visual target and intent before registration or input.
 
 ## WalkToCell proof required
 

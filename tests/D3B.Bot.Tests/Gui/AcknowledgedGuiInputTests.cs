@@ -19,7 +19,8 @@ public sealed class AcknowledgedGuiInputTests
             {
                 gateCalls++;
                 return Task.FromResult(false);
-            });
+            },
+            TestContext.Current.CancellationToken);
 
         GuiInputResult result = await input.ClickAsync(new DesktopPixels(100, 200), fixture.Window, CancellationToken.None);
 
@@ -42,7 +43,8 @@ public sealed class AcknowledgedGuiInputTests
             {
                 seenIntent = intentId;
                 return Task.FromResult(true);
-            });
+            },
+            TestContext.Current.CancellationToken);
         DesktopPixels point = new(120, 240);
 
         GuiInputResult result = await input.ClickAsync(point, fixture.Window, CancellationToken.None);
@@ -59,7 +61,7 @@ public sealed class AcknowledgedGuiInputTests
     {
         using GuiProtocolTrustTestFixture fixture = new();
         RecordingGuiInput inner = new();
-        AcknowledgedGuiInput input = CreateInput(fixture, inner, (_, _, _, _) => Task.FromResult(true));
+        AcknowledgedGuiInput input = CreateInput(fixture, inner, (_, _, _, _) => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         GuiInputResult first = await input.ClickAsync(new DesktopPixels(120, 240), fixture.Window, CancellationToken.None);
         GuiInputResult second = await input.ClickAsync(new DesktopPixels(120, 240), fixture.Window, CancellationToken.None);
@@ -75,7 +77,7 @@ public sealed class AcknowledgedGuiInputTests
     {
         using GuiProtocolTrustTestFixture fixture = new();
         RecordingGuiInput inner = new() { IsEnabled = false, EmitsRealInput = true };
-        AcknowledgedGuiInput input = CreateInput(fixture, inner, (_, _, _, _) => Task.FromResult(true));
+        AcknowledgedGuiInput input = CreateInput(fixture, inner, (_, _, _, _) => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         Assert.False(input.IsEnabled);
         Assert.True(input.EmitsRealInput);
@@ -94,7 +96,8 @@ public sealed class AcknowledgedGuiInputTests
             {
                 cancellation.Cancel();
                 return Task.FromResult(true);
-            });
+            },
+            TestContext.Current.CancellationToken);
 
         GuiInputResult result = await input.ClickAsync(new DesktopPixels(120, 240), fixture.Window, cancellation.Token);
 
@@ -111,7 +114,8 @@ public sealed class AcknowledgedGuiInputTests
         AcknowledgedGuiInput input = CreateInput(
             fixture,
             inner,
-            (_, _, _, _) => Task.FromException<bool>(new InvalidOperationException("synthetic actor failure")));
+            (_, _, _, _) => Task.FromException<bool>(new InvalidOperationException("synthetic actor failure")),
+            TestContext.Current.CancellationToken);
 
         GuiInputResult result = await input.ClickAsync(new DesktopPixels(120, 240), fixture.Window, CancellationToken.None);
 
@@ -124,8 +128,15 @@ public sealed class AcknowledgedGuiInputTests
     private static AcknowledgedGuiInput CreateInput(
         GuiProtocolTrustTestFixture fixture,
         IGuiInput inner,
-        Func<Guid, D3B.Gui.Safety.GuiWorldSnapshot, GameWindowSnapshot, CancellationToken, Task<bool>> gate)
+        Func<Guid, D3B.Gui.Safety.GuiWorldSnapshot, GameWindowSnapshot, CancellationToken, Task<bool>> gate,
+        CancellationToken actorRevocationToken)
     {
-        return new AcknowledgedGuiInput(fixture.Intent.IntentId, fixture.World, fixture.Window, gate, inner);
+        return new AcknowledgedGuiInput(
+            fixture.Intent.IntentId,
+            fixture.World,
+            fixture.Window,
+            gate,
+            inner,
+            actorRevocationToken);
     }
 }

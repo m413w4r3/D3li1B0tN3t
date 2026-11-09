@@ -8,6 +8,10 @@ using D3B.Gui.Windowing;
 namespace D3B.Bot.Gui;
 
 /// <summary>Applies protocol, scene, window, calibration, and input evidence to one GUI action.</summary>
+/// <remarks>
+/// An allowed decision is one required proof, not standalone authorization. GuiWalkToCellCoordinator separately checks
+/// the plan path and binds its endpoint to the verified visual target before it registers or delegates input.
+/// </remarks>
 public sealed class GuiProtocolTrustPolicy
 {
     private readonly GuiActionGate _gate;
