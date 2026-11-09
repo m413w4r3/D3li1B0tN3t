@@ -5,6 +5,7 @@ using D3B.Engine.Maps;
 using D3B.Gui.Actions;
 using D3B.Gui.Calibration;
 using D3B.Gui.Capture;
+using D3B.Gui.Input;
 using D3B.Gui.Safety;
 using D3B.Gui.Vision;
 using D3B.Gui.Windowing;
@@ -239,9 +240,9 @@ public sealed class GuiWalkToCellCoordinator
                 return Result(refusal);
             }
 
-            CancellationToken actorRevocationToken = request.Bot.GetGuiClickCancellationToken(intent.IntentId);
+            GuiClickLease clickLease = request.Bot.GetGuiClickLease(intent.IntentId);
 
-            if (actorRevocationToken.IsCancellationRequested)
+            if (clickLease.IsCancelled)
             {
                 string detail = "The actor revoked the intention after acknowledgement and before input.";
                 await CancelIntentAsync(request, intent.IntentId, false, detail, cancellationToken).ConfigureAwait(false);
@@ -295,7 +296,7 @@ public sealed class GuiWalkToCellCoordinator
                     return marked;
                 },
                 request.Input,
-                actorRevocationToken);
+                clickLease);
 
             GuiActionOutcome execution = await request.Executor.ExecuteAsync(
                 intent,

@@ -18,4 +18,20 @@ public interface IGuiInput
     /// <param name="cancellationToken">Cancels checks or an external input command.</param>
     /// <returns>The explicit outcome and, when needed, a bounded sanitized detail.</returns>
     Task<GuiInputResult> ClickAsync(DesktopPixels point, GameWindowSnapshot expectedWindow, CancellationToken cancellationToken);
+
+    /// <summary>Clicks with a lease that linearizes actor revocation against the launch of the click command.</summary>
+    /// <param name="point">The global desktop position; local image coordinates are never accepted here.</param>
+    /// <param name="expectedWindow">The window observation against which identity and geometry are checked.</param>
+    /// <param name="lease">The one-action lease shared with the actor that can revoke this click.</param>
+    /// <param name="cancellationToken">Cancels checks or an external input command.</param>
+    /// <returns>The explicit outcome and, when needed, a bounded sanitized detail.</returns>
+    Task<GuiInputResult> ClickAsync(
+        DesktopPixels point,
+        GameWindowSnapshot expectedWindow,
+        GuiClickLease lease,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        return ClickAsync(point, expectedWindow, cancellationToken);
+    }
 }

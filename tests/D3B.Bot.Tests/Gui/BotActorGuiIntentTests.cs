@@ -7,6 +7,7 @@ using D3B.Bot.Tests.Runtime;
 using D3B.Engine.Maps;
 using D3B.Gui.Actions;
 using D3B.Gui.Calibration;
+using D3B.Gui.Input;
 using D3B.Gui.Safety;
 using D3B.Gui.Windowing;
 using D3B.Protocol.Game;
@@ -312,12 +313,12 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         Assert.Equal(GuiIntentRegistrationStatus.Registered,
             (await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken)).Status);
         Assert.True(await bot.AcknowledgeGuiIntentAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
-        CancellationToken clickCancellationToken = bot.GetGuiClickCancellationToken(intent.IntentId);
+        GuiClickLease clickLease = bot.GetGuiClickLease(intent.IntentId);
         Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
 
         Assert.True(await bot.CancelGuiIntentAsync(intent.IntentId, true, "uncertain click", TestContext.Current.CancellationToken));
 
-        Assert.True(clickCancellationToken.IsCancellationRequested);
+        Assert.True(clickLease.IsCancelled);
         Assert.Equal(GuiIntentCorrelationState.Cancelled, bot.GuiIntentState);
         Assert.Null(await outcome);
         Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
@@ -359,8 +360,8 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         Assert.Equal(GuiIntentRegistrationStatus.Registered,
             (await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken)).Status);
         Assert.True(await bot.AcknowledgeGuiIntentAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
-        CancellationToken clickCancellationToken = bot.GetGuiClickCancellationToken(intent.IntentId);
-        Assert.False(clickCancellationToken.IsCancellationRequested);
+        GuiClickLease clickLease = bot.GetGuiClickLease(intent.IntentId);
+        Assert.False(clickLease.IsCancelled);
         Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
 
         switch (transition)
@@ -392,7 +393,7 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         if (transition != "stop")
             await bot.ProcessedAsync();
 
-        Assert.True(clickCancellationToken.IsCancellationRequested);
+        Assert.True(clickLease.IsCancelled);
         Assert.Equal(GuiIntentCorrelationState.Cancelled, bot.GuiIntentState);
         Assert.Null(await outcome);
         Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
@@ -407,16 +408,36 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         var intent = CreateIntent(world);
         await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken);
         Assert.True(await bot.AcknowledgeGuiIntentAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
-        CancellationToken clickCancellationToken = bot.GetGuiClickCancellationToken(intent.IntentId);
+        GuiClickLease clickLease = bot.GetGuiClickLease(intent.IntentId);
         Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
 
         connection.ServerRaw([0x12, 0x7F, 0x01]);
         await bot.ProcessedAsync();
 
-        Assert.True(clickCancellationToken.IsCancellationRequested);
+        Assert.True(clickLease.IsCancelled);
         Assert.Equal(GuiIntentCorrelationState.Cancelled, bot.GuiIntentState);
         Assert.Null(await outcome);
         Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task TranslationLatchFromAnotherSessionCannotRevokeTheCurrentClickLease()
+    {
+        var (connection, bot) = await EnterAsync();
+        GuiWorldSnapshot world = _adapter.Capture(bot);
+        GuiActionIntent intent = CreateIntent(world);
+        Assert.Equal(GuiIntentRegistrationStatus.Registered,
+            (await bot.RegisterGuiIntentAsync(intent, world, _fixture.Window, TestContext.Current.CancellationToken)).Status);
+        Assert.True(await bot.AcknowledgeGuiIntentAsync(intent.IntentId, world, _fixture.Window, TestContext.Current.CancellationToken));
+        GuiClickLease lease = bot.GetGuiClickLease(intent.IntentId);
+        TestConnection unrelated = _play.Connect(TestPlay.Account);
+
+        bot.RevokeGuiClickLeaseForTranslationBlocked(unrelated.Session);
+
+        Assert.False(lease.IsCancelled);
+        Assert.True(await bot.CancelGuiIntentAsync(intent.IntentId, false, "test cleanup", TestContext.Current.CancellationToken));
+        Assert.True(lease.IsCancelled);
+        Assert.Empty(connection.Sent);
     }
 
     [Fact]
@@ -439,7 +460,7 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
     public async Task MatchingWalkRequestMovementAndConfirmationCompleteAndConsumeOnce()
     {
         var (connection, bot, intent) = await ClickIntentAsync();
-        CancellationToken clickCancellationToken = bot.GetGuiClickCancellationToken(intent.IntentId);
+        GuiClickLease clickLease = bot.GetGuiClickLease(intent.IntentId);
         Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
         MapMovementRequest request = ReachableWalkRequest(out int[] cells);
 
@@ -455,12 +476,12 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         await bot.ProcessedAsync();
 
         Assert.Equal(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
-        Assert.False(clickCancellationToken.IsCancellationRequested);
+        Assert.False(clickLease.IsCancelled);
         Assert.Equal(GuiServerOutcome.MovementConfirmed, await outcome);
         Assert.Equal(TargetCell, bot.State.Cell);
         Assert.Equal(CellProvenance.ServerConfirmed, bot.State.Provenance);
         Assert.True(await bot.ConsumeGuiIntentAsync(intent.IntentId, TestContext.Current.CancellationToken));
-        Assert.True(clickCancellationToken.IsCancellationRequested);
+        Assert.True(clickLease.IsCancelled);
         Assert.False(await bot.ConsumeGuiIntentAsync(intent.IntentId, TestContext.Current.CancellationToken));
         Assert.Null(await bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken));
         Assert.False(await bot.MarkGuiIntentClickedAsync(intent.IntentId, _adapter.Capture(bot), _fixture.Window, TestContext.Current.CancellationToken));
@@ -728,12 +749,12 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
     public async Task WaiterExpiresWithTheIntention()
     {
         var (_, bot, intent) = await ClickIntentAsync();
-        CancellationToken clickCancellationToken = bot.GetGuiClickCancellationToken(intent.IntentId);
+        GuiClickLease clickLease = bot.GetGuiClickLease(intent.IntentId);
         Task<GuiServerOutcome?> outcome = bot.WaitForGuiOutcomeAsync(intent.IntentId, TestContext.Current.CancellationToken);
         _play.Time.Advance(intent.ExpiresAt - _play.Time.GetUtcNow());
         await bot.ProcessedAsync();
 
-        Assert.True(clickCancellationToken.IsCancellationRequested);
+        Assert.True(clickLease.IsCancelled);
         Assert.Null(await outcome);
         Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
     }
@@ -742,12 +763,12 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
     public async Task ClickedIntentExpiryRevokesInputWithoutAnOutcomeWaiter()
     {
         var (_, bot, intent) = await ClickIntentAsync();
-        CancellationToken clickCancellationToken = bot.GetGuiClickCancellationToken(intent.IntentId);
+        GuiClickLease clickLease = bot.GetGuiClickLease(intent.IntentId);
 
         _play.Time.Advance(intent.ExpiresAt - _play.Time.GetUtcNow());
         await bot.ProcessedAsync();
 
-        Assert.True(clickCancellationToken.IsCancellationRequested);
+        Assert.True(clickLease.IsCancelled);
         Assert.Equal(GuiIntentCorrelationState.Unconfirmed, bot.GuiIntentState);
     }
 

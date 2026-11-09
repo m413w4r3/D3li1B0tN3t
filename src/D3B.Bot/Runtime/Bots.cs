@@ -169,7 +169,10 @@ public sealed class Bots : IGameObserver, IAsyncDisposable
             if (frame.IsRead)
                 bot.See(session, direction, frame.Content, session.IsMovementTranslationBlocked);
             else if (session.IsMovementTranslationBlocked)
+            {
+                bot.RevokeGuiClickLeaseForTranslationBlocked(session);
                 bot.NotifyTranslationBlocked(session);
+            }
 
             return;
         }

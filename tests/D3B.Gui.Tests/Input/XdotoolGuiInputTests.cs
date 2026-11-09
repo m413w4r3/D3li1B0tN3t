@@ -202,6 +202,83 @@ public sealed class XdotoolGuiInputTests
     }
 
     [Fact]
+    public async Task LeaseRevocationDuringFinalWindowRevalidationPreventsClickLaunch()
+    {
+        GameWindowSnapshot snapshot = CreateTestSnapshot();
+        TaskCompletionSource revalidationStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseRevalidation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        BlockingGameWindowLocator locator = new(snapshot, revalidationStarted, releaseRevalidation);
+        string directory = Path.Combine(Path.GetTempPath(), $"d3b-gui-input-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string moveMarker = Path.Combine(directory, "move");
+        string clickMarker = Path.Combine(directory, "click");
+        string fakeXdotool = Path.Combine(directory, "fake-xdotool");
+        XvfbTestCommands.WriteExecutable(
+            fakeXdotool,
+            $"#!/bin/sh\nif [ \"$1\" = \"mousemove\" ]; then printf moved > '{moveMarker}'; exit 0; fi\nif [ \"$1\" = \"click\" ]; then printf clicked > '{clickMarker}'; exit 0; fi\nexit 1\n");
+        IGuiInput input = new XdotoolGuiInput(locator, fakeXdotool, GetTestEnvironmentValue);
+        GuiClickLease lease = new();
+
+        try
+        {
+            Task<GuiInputResult> execution = input.ClickAsync(
+                GetClientCenter(snapshot),
+                snapshot,
+                lease,
+                CancellationToken.None);
+            await revalidationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await Task.Run(lease.Cancel, TestContext.Current.CancellationToken);
+            releaseRevalidation.TrySetResult();
+            GuiInputResult result = await execution.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            Assert.Equal(GuiInputStatus.Canceled, result.Status);
+            Assert.False(result.ClickMayHaveBeenEmitted);
+            Assert.True(File.Exists(moveMarker));
+            Assert.False(File.Exists(clickMarker));
+            Assert.False(lease.LaunchStarted);
+        }
+        finally
+        {
+            releaseRevalidation.TrySetResult();
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task FailureAfterLeaseLaunchPointMayHaveEmittedClick()
+    {
+        GameWindowSnapshot snapshot = CreateTestSnapshot();
+        SequenceGameWindowLocator locator = new(snapshot, snapshot);
+        string directory = Path.Combine(Path.GetTempPath(), $"d3b-gui-input-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string clickMarker = Path.Combine(directory, "click");
+        string fakeXdotool = Path.Combine(directory, "fake-xdotool");
+        XvfbTestCommands.WriteExecutable(
+            fakeXdotool,
+            $"#!/bin/sh\nif [ \"$1\" = \"mousemove\" ]; then exit 0; fi\nif [ \"$1\" = \"click\" ]; then printf clicked > '{clickMarker}'; exit 7; fi\nexit 1\n");
+        IGuiInput input = new XdotoolGuiInput(locator, fakeXdotool, GetTestEnvironmentValue);
+        GuiClickLease lease = new();
+
+        try
+        {
+            GuiInputResult result = await input.ClickAsync(
+                GetClientCenter(snapshot),
+                snapshot,
+                lease,
+                CancellationToken.None);
+
+            Assert.Equal(GuiInputStatus.Failed, result.Status);
+            Assert.True(result.ClickMayHaveBeenEmitted);
+            Assert.True(lease.LaunchStarted);
+            Assert.True(File.Exists(clickMarker));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task FailedClickCommandAfterLaunchMayHaveEmittedInput()
     {
         GameWindowSnapshot snapshot = CreateTestSnapshot();
@@ -419,6 +496,38 @@ public sealed class XdotoolGuiInputTests
                 _cancellation.Cancel();
 
             return Task.FromResult(_snapshot);
+        }
+    }
+
+    private sealed class BlockingGameWindowLocator : IGameWindowLocator
+    {
+        private readonly GameWindowSnapshot _snapshot;
+        private readonly TaskCompletionSource _revalidationStarted;
+        private readonly TaskCompletionSource _releaseRevalidation;
+        private int _locateCount;
+
+        public BlockingGameWindowLocator(
+            GameWindowSnapshot snapshot,
+            TaskCompletionSource revalidationStarted,
+            TaskCompletionSource releaseRevalidation)
+        {
+            _snapshot = snapshot;
+            _revalidationStarted = revalidationStarted;
+            _releaseRevalidation = releaseRevalidation;
+        }
+
+        public async Task<GameWindowSnapshot> LocateAsync(
+            long xid,
+            GameWindowExpectation expectation,
+            CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _locateCount) == 2)
+            {
+                _revalidationStarted.TrySetResult();
+                await _releaseRevalidation.Task;
+            }
+
+            return _snapshot;
         }
     }
 

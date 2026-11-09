@@ -43,11 +43,31 @@ public sealed class XdotoolGuiInput : IGuiInput
     }
 
     /// <inheritdoc />
-    public async Task<GuiInputResult> ClickAsync(DesktopPixels point, GameWindowSnapshot expectedWindow, CancellationToken cancellationToken)
+    public Task<GuiInputResult> ClickAsync(DesktopPixels point, GameWindowSnapshot expectedWindow, CancellationToken cancellationToken)
+    {
+        return ClickAsync(point, expectedWindow, new GuiClickLease(), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<GuiInputResult> ClickAsync(
+        DesktopPixels point,
+        GameWindowSnapshot expectedWindow,
+        GuiClickLease lease,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        return ClickWithLeaseAsync(point, expectedWindow, lease, cancellationToken);
+    }
+
+    private async Task<GuiInputResult> ClickWithLeaseAsync(
+        DesktopPixels point,
+        GameWindowSnapshot expectedWindow,
+        GuiClickLease lease,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(expectedWindow);
 
-        if (cancellationToken.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested || lease.IsCancelled)
         {
             return new GuiInputResult(GuiInputStatus.Canceled);
         }
@@ -87,7 +107,7 @@ public sealed class XdotoolGuiInput : IGuiInput
             return validationFailure;
         }
 
-        if (cancellationToken.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested || lease.IsCancelled)
         {
             return new GuiInputResult(GuiInputStatus.Canceled);
         }
@@ -116,7 +136,7 @@ public sealed class XdotoolGuiInput : IGuiInput
             return moveFailure;
         }
 
-        if (cancellationToken.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested || lease.IsCancelled)
         {
             return new GuiInputResult(GuiInputStatus.Canceled);
         }
@@ -143,19 +163,20 @@ public sealed class XdotoolGuiInput : IGuiInput
             return validationFailure;
         }
 
-        if (cancellationToken.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested || lease.IsCancelled)
         {
             return new GuiInputResult(GuiInputStatus.Canceled);
         }
 
-        return await RunClickCommandAsync(childEnvironment, cancellationToken).ConfigureAwait(false);
+        return await RunClickCommandAsync(childEnvironment, lease, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<GuiInputResult> RunClickCommandAsync(
         IReadOnlyDictionary<string, string?> environment,
+        GuiClickLease lease,
         CancellationToken cancellationToken)
     {
-        if (cancellationToken.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested || lease.IsCancelled)
             return new GuiInputResult(GuiInputStatus.Canceled);
 
         ProcessStartInfo startInfo = new()
@@ -174,8 +195,11 @@ public sealed class XdotoolGuiInput : IGuiInput
 
         using Process process = new() { StartInfo = startInfo };
 
-        if (cancellationToken.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested || lease.IsCancelled)
             return new GuiInputResult(GuiInputStatus.Canceled);
+
+        if (!lease.TryBeginClick())
+            return new GuiInputResult(GuiInputStatus.Canceled, ClickMayHaveBeenEmitted: lease.LaunchStarted);
 
         bool started;
 
@@ -186,11 +210,11 @@ public sealed class XdotoolGuiInput : IGuiInput
         catch (Exception exception) when (
             exception is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
         {
-            return new GuiInputResult(GuiInputStatus.Failed, SanitizeDetail(exception.Message));
+            return new GuiInputResult(GuiInputStatus.Failed, SanitizeDetail(exception.Message), true);
         }
 
         if (!started)
-            return new GuiInputResult(GuiInputStatus.Failed, "The click command did not start.");
+            return new GuiInputResult(GuiInputStatus.Failed, "The click command did not start.", true);
 
         try
         {

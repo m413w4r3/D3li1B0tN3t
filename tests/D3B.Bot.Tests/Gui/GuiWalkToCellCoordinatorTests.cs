@@ -3,6 +3,7 @@ using D3B.Bot.Gui;
 using D3B.Bot.Characters;
 using D3B.Bot.Fights;
 using D3B.Bot.Movement;
+using D3B.Bot.Tests.Network;
 using D3B.Bot.Tests.Runtime;
 using D3B.Data.Maps;
 using D3B.Engine.Maps;
@@ -68,30 +69,28 @@ public sealed class GuiWalkToCellCoordinatorTests
     }
 
     [Fact]
-    public async Task ActorRevocationDuringPointerMovementCancelsBeforeTheClickCommand()
+    public async Task ActorRevocationWinsTheClickLeaseWhilePointerMovementIsBlocked()
     {
         await using GuiWalkToCellTestContext context = await GuiWalkToCellTestContext.CreateAsync();
         using CancellationTokenSource callerCancellation = new();
-        TaskCompletionSource<CancellationToken> pointerMovementStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<GuiClickLease> pointerMovementStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releasePointerMovement = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> clickGateOpened = new(TaskCreationOptions.RunContinuationsAsynchronously);
         int clickCommandCount = 0;
         GuiWalkToCellTestInput input = new();
-        input.OnClick = async (_, _, cancellationToken) =>
+        input.OnLeaseAwareClick = async (_, _, lease, _) =>
         {
             Assert.Equal(GuiIntentCorrelationState.Clicked, context.Bot.GuiIntentState);
-            pointerMovementStarted.TrySetResult(cancellationToken);
-            using CancellationTokenSource waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                TestContext.Current.CancellationToken);
+            pointerMovementStarted.TrySetResult(lease);
+            await releasePointerMovement.Task.WaitAsync(TestContext.Current.CancellationToken);
 
-            try
+            if (!lease.TryBeginClick())
             {
-                await Task.Delay(Timeout.InfiniteTimeSpan, waitCancellation.Token);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                return new GuiInputResult(GuiInputStatus.Canceled, "Actor revocation canceled pointer movement.");
+                clickGateOpened.TrySetResult(false);
+                return new GuiInputResult(GuiInputStatus.Canceled, "The click lease was revoked during pointer movement.");
             }
 
+            clickGateOpened.TrySetResult(true);
             Interlocked.Increment(ref clickCommandCount);
             return new GuiInputResult(GuiInputStatus.Sent, ClickMayHaveBeenEmitted: true);
         };
@@ -103,24 +102,103 @@ public sealed class GuiWalkToCellCoordinatorTests
             true));
         Task<GuiWalkToCellResult> execution = coordinator.ExecuteAsync(request, callerCancellation.Token);
 
-        CancellationToken inputToken = await pointerMovementStarted.Task.WaitAsync(
+        GuiClickLease lease = await pointerMovementStarted.Task.WaitAsync(
             TimeSpan.FromSeconds(5),
             TestContext.Current.CancellationToken);
         context.Connection.Server(new ContextCreationEvent { Context = ContextCreationEvent.Types.GameContext.Fight });
         await context.Bot.ProcessedAsync();
 
-        bool actorRevokedInput = inputToken.IsCancellationRequested;
+        bool actorRevokedInput = lease.IsCancelled;
         if (!actorRevokedInput)
             callerCancellation.Cancel();
 
+        releasePointerMovement.TrySetResult();
         GuiWalkToCellResult result = await execution;
 
-        Assert.True(actorRevokedInput, "The actor did not cancel the backend token during pointer movement.");
+        Assert.True(actorRevokedInput, "The actor did not revoke the shared click lease during pointer movement.");
         Assert.Equal(GuiActionOutcomeStatus.Interrupted, result.Outcome.Status);
         Assert.False(result.Outcome.ClickEmitted);
+        Assert.False(await clickGateOpened.Task);
+        Assert.False(lease.LaunchStarted);
         Assert.Equal(0, Volatile.Read(ref clickCommandCount));
         Assert.Equal(GuiIntentCorrelationState.Unconfirmed, context.Bot.GuiIntentState);
         Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, context.Bot.GuiIntentState);
+    }
+
+    [Fact]
+    public async Task UnreadFrameSynchronouslyRevokesLeaseBeforeActorInboxHandlesLatchNotification()
+    {
+        await using GuiWalkToCellTestContext context = await GuiWalkToCellTestContext.CreateAsync();
+        TaskCompletionSource<GuiClickLease> pointerMovementStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releasePointerMovement = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource actorLoopBlocked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseActorLoop = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> clickGateOpened = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int clickCommandCount = 0;
+        GuiWalkToCellTestInput input = new();
+        input.OnLeaseAwareClick = async (_, _, lease, _) =>
+        {
+            pointerMovementStarted.TrySetResult(lease);
+            await releasePointerMovement.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+            bool admitted = lease.TryBeginClick();
+            clickGateOpened.TrySetResult(admitted);
+            if (!admitted)
+                return new GuiInputResult(GuiInputStatus.Canceled, "The translation latch revoked the click lease.");
+
+            Interlocked.Increment(ref clickCommandCount);
+            return new GuiInputResult(GuiInputStatus.Sent, ClickMayHaveBeenEmitted: true);
+        };
+        GuiWalkToCellCoordinator coordinator = new(new GuiWalkToCellCoordinatorOptions(
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(2),
+            true));
+        Task<GuiWalkToCellResult> execution = coordinator.ExecuteAsync(
+            context.CreateRequest(context.CreatePlan(301), input),
+            TestContext.Current.CancellationToken);
+        GuiClickLease lease = await pointerMovementStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+
+        Task actorWait = context.Bot.WaitUntilAsync(_ =>
+        {
+            actorLoopBlocked.TrySetResult();
+            releaseActorLoop.Task.GetAwaiter().GetResult();
+            return true;
+        }, TestContext.Current.CancellationToken);
+
+        try
+        {
+            await actorLoopBlocked.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            context.Connection.ServerRaw(TestGame.UnknownCarriedEvent());
+
+            Assert.True(lease.IsCancelled, "The unread frame did not synchronously revoke the click lease.");
+            Assert.False(lease.TryBeginClick());
+            Assert.False(lease.LaunchStarted);
+
+            releasePointerMovement.TrySetResult();
+            releaseActorLoop.TrySetResult();
+            await actorWait;
+            GuiWalkToCellResult result = await execution.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            Assert.Equal(GuiActionOutcomeStatus.Interrupted, result.Outcome.Status);
+            Assert.False(result.Outcome.ClickEmitted);
+            Assert.False(await clickGateOpened.Task);
+            Assert.Equal(0, Volatile.Read(ref clickCommandCount));
+            Assert.NotEqual(GuiIntentCorrelationState.ServerConfirmed, context.Bot.GuiIntentState);
+            Assert.Contains(context.Bot.GuiIntentState, new[]
+            {
+                GuiIntentCorrelationState.Cancelled,
+                GuiIntentCorrelationState.Interrupted,
+                GuiIntentCorrelationState.Unconfirmed,
+            });
+        }
+        finally
+        {
+            releasePointerMovement.TrySetResult();
+            releaseActorLoop.TrySetResult();
+        }
     }
 
     [Theory]
@@ -569,11 +647,15 @@ public sealed class GuiWalkToCellCoordinatorTests
     }
 
     [Fact]
-    public async Task BackendExceptionAfterClickGateIsUnconfirmedAndNeverRetried()
+    public async Task BackendExceptionAfterLeaseLaunchIsUnconfirmedAndNeverRetried()
     {
         await using GuiWalkToCellTestContext context = await GuiWalkToCellTestContext.CreateAsync();
         GuiWalkToCellTestInput input = new();
-        input.OnClick = (_, _, _) => throw new InvalidOperationException("Synthetic backend exception.");
+        input.OnLeaseAwareClick = (_, _, lease, _) =>
+        {
+            Assert.True(lease.TryBeginClick());
+            return Task.FromException<GuiInputResult>(new InvalidOperationException("Synthetic backend exception."));
+        };
         GuiWalkToCellRequest request = context.CreateRequest(context.CreatePlan(301), input);
 
         GuiWalkToCellResult result = await new GuiWalkToCellCoordinator(new GuiWalkToCellCoordinatorOptions(

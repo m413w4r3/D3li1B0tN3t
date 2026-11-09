@@ -47,22 +47,26 @@ observations. A change in process metadata availability or identity status durin
 XdotoolGuiInput is the real-input implementation. It checks that the expected process is verified, re-locates the
 same XID, verifies mapping, geometry, active/focused state, X11, DISPLAY, and XTEST, and checks that the point is
 inside the client area with a 2-pixel margin. It then moves the pointer with xdotool mousemove --sync X Y, re-locates
-and revalidates the window immediately before sending xdotool click 1. It checks the linked cancellation token again
-immediately before starting the click command; actor revocation during pointer movement therefore prevents the click
-launch. The click has no --window option: it is a global XTest event. This input implementation requires the expected
+and revalidates the window immediately before sending xdotool click 1. It calls `GuiClickLease.TryBeginClick` after the
+caller-token and lease-state checks and immediately before `Process.Start`. That lock-protected claim is the linearization point:
+revocation that wins first prevents click launch, while a claim that wins first is treated as possibly emitted. The
+click has no --window option: it is a global XTest event. This input implementation requires the expected
 and current ProcessId and ExecutablePath to match exactly, and the current status to be Verified. The action gate
 independently requires both compared identities to be Verified with exact Xid, ProcessId, and ExecutablePath equality.
 
 The focus observation and global click are not atomic. A focus change in the small interval after revalidation and
 before the click remains possible. P2N input tests use only a fake window in Xvfb.
 
-`GuiInputResult.ClickMayHaveBeenEmitted` is true once the click command has launched. If that command then fails,
-times out, or is canceled, its result is uncertain because XTest may already have emitted the click. The action
-executor reports that case as `UNCONFIRMED` and does not retry. Validation refusals and other failures before command
-launch report no possible click.
+`GuiInputResult.ClickMayHaveBeenEmitted` is true once the lease's launch point wins. If the command then fails, times
+out, or is canceled, its result is uncertain because XTest may already have emitted the click. The action executor
+reports that case as `UNCONFIRMED` and does not retry. Validation refusals and failures before the lease claim report
+no possible click.
 
-After the actor's `MarkClicked` gate succeeds, a session epoch has spent its one permitted GUI click attempt even if
-the backend is canceled before launching the command. A new action requires a new session epoch.
+An unread frame that closes the movement translation latch cancels the active lease synchronously in `Bots.OnFrame`,
+before the actor inbox notification is posted. After the actor's `MarkClicked` gate succeeds, a session epoch has spent
+its one permitted GUI click attempt even if the backend is canceled before launching the command. A new action requires
+a new session epoch. If the lease's launch claim wins before revocation, the click cannot be retracted and any later
+failure or cancellation is uncertain; the action is not retried.
 
 ## Privileges and dependencies
 
