@@ -7571,3 +7571,34 @@ Settled questions leave this table, and the decision that settles one says so.
   discovery are outside the pre-check. Transient repository changes during index capture fail closed as
   `repository_index_unavailable`. A hostile local administrator is out of scope. The `renameat2` check-to-syscall
   window remains. Live action remains BLOCKED under D340.
+
+## D343: P2O passive observation preparation is READY
+
+*2026-11-09, P2O-PREFLIGHT-3 preparation.*
+
+- **Decision**: record the fast-forward integration to b82780a1f2cdf9dd6e1de2e2491e5042e8189f0f and the external
+  origin/master update by push observed at 15:35:28 +0100. The audited code at 64d65b984dcedf2bbed96af09e70390959b36e5f
+  is unchanged; the intervening diff is four documentation files only. The private P2O apphost was published from
+  b82780a and staged for observation, while the installed apphost remains the older P2L build. Mark Phase B
+  preparation **PASS** and **READY FOR P2O PASSIVE OBSERVATION** preparation only. Execution requires a separate
+  explicit owner GO. Live action remains **BLOCKED** under D340. No merge or push was performed by this session.
+- **Why**: client identity, redirect state, private backup/restore, build, runtime artifacts, storage state, and
+  process/listener checks are prepared and verified. The staged P2O apphost and private session database provide the
+  reviewed offline preparation boundary without installing or starting a live session.
+- **Checked**: client 3.7.13.17, build 2026-11-03T14:11:23+00:00; full 27,826-entry client tree verified OK;
+  Phase F backup and restore verified; staged P2O apphost informational version
+  0.0.0-alpha.0.144+b82780a1f2cdf9dd6e1de2e2491e5042e8189f0f, manifest SHA-256
+  87454f0aa8b9d30e40496645a066cf923e0aa8b8570355d426426bc86e307057; engine SHA-256
+  2ac365be2ac70cd5a3fe5e338179ab58cf1a83fdffedcf283e522b3d5200836b; staged data hashes recorded in
+  docs/P2O_PREFLIGHT_3_REPORT.md. The old P2L apphost 0.0.0-alpha.0.102+8cfa4f03… is not suitable for P2O.
+  Three stale test-harness processes were terminated by the parent; after cleanup, no game, host, app, test, or
+  diagnostic process and no listener on 127.0.13.59:5555, :443, or :5556 was observed. Captures were absent
+  and remain explicitly disabled; no live session was run.
+- **Residual limits**: no live protocol/UI correspondence or real diagnostic coverage has been established. Captures
+  remain disabled by design. The apphost help probe initialized 10 modules and exited before services because its
+  default client directory is wrong; the runbook passes --Client:Directory. Stale test processes were cleaned up,
+  so the process gate must be repeated before execution. D341/D342 preflight residuals remain: detached aliases of
+  other repositories are not identifiable without mount metadata; directory identity is a per-process snapshot;
+  concurrent privileged mount/namespace changes after discovery are outside the check; the renameat2
+  check-to-syscall window remains; hostile local administrators are out of scope. Live action remains **BLOCKED**
+  under D340.
