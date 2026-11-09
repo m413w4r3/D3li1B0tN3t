@@ -4,7 +4,7 @@
 
 ## Summary
 
-Phase A found that the source trees had no mount boundary. The false block came from output parent ancestry checks that rejected unrelated mount transitions on the way to `/`. The implementation has been corrected, the failure has a regression test, and Phase D now provides safe boundary details. The evidence supports **READY FOR P2O OBSERVATION PREFLIGHT** for the offline preflight only. This status is provisional pending the independent A3 audit and does not establish live action safety.
+Phase A found that the source trees had no mount boundary. The false block came from output parent ancestry checks that rejected unrelated mount transitions on the way to `/`. The implementation has been corrected, the failure has a regression test, and Phase D now provides safe boundary details. The independent A3 audit returned **REJECT** for a bind-mount descendant alias gap, so the mission verdict is **BLOCKED**. Phase F proves normal-path preflight only and does not establish live action safety.
 
 See [the diagnostic](P2O_PREFLIGHT_DIAGNOSTIC.md) for the Phase A measurements and cause analysis.
 
@@ -44,9 +44,10 @@ Phase F used the fixed tool in a temporary worktree at `bcbbf00` and private des
 - Numeric mount IDs are namespace-local and must not be compared across namespaces as stable identifiers.
 - A real bind-mount integration test was not run. Automated coverage exercises the safe formatting and output-inside-source rejection cases.
 - An external verify of the private backup tree reports the expected mode difference described above; its internal content verification passed.
-- The independent A3 audit is a separate read-only task. Its verdict is **PENDING** at the time of this report.
+- **A3 independent audit: REJECT.** MAJOR: an external bind mount of a source **descendant** can evade `EnsureOutsideTree`, restore-overlap, and the `WalkAncestors` repository-marker scan because walking `..` from the alias follows the external mountpoint ancestry and never reaches the source root. This requires a pre-existing privileged mount. Paths: `scripts/preflight/PreflightUnix.cs:471,612`; `PreflightOperations.cs:379-385`. MINOR: no real bind-mount test; the bind test uses synthetic statuses and does not exercise the live walk. A second independent review rated the same gap MINOR; the more severe A3 verdict is retained.
+- Phase F proves normal-path snapshot/backup/restore on the actual roots; it does not cover the bind-alias gap.
 - Live action remains separately blocked. This report makes no claim that a live Dofus action is safe or accepted.
 
 ## Verdict
 
-**READY FOR P2O OBSERVATION PREFLIGHT** — offline preflight evidence complete. This verdict is provisional pending the independent A3 audit. It is not live action approval or a live-client acceptance result.
+**BLOCKED** for P2O observation preflight. Normal-path preflight evidence is complete, but the A3 REJECT MAJOR bind-mount descendant alias gap must be fixed and independently re-audited before READY. This is not live action approval or a live-client acceptance result.
