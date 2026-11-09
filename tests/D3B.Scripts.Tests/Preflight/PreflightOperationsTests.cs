@@ -82,6 +82,20 @@ public sealed class PreflightOperationsTests
     }
 
     [Fact]
+    public void ParserRejectsNoncanonicalLinkTargetBase64()
+    {
+        using var directory = new PreflightTestDirectory();
+        string root = directory.Root;
+        File.CreateSymbolicLink(System.IO.Path.Combine(root, "link"), "x");
+        JsonObject json = JsonNode.Parse(PreflightOperations.SerializeManifest(PreflightOperations.Snapshot(root)))!.AsObject();
+        JsonObject entry = json["entries"]!.AsArray()[0]!.AsObject();
+        Assert.Equal("eA==", entry["linkTargetBase64"]!.GetValue<string>());
+        entry["linkTargetBase64"] = "eB==";
+
+        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.ParseManifest(JsonSerializer.SerializeToUtf8Bytes(json)));
+    }
+
+    [Fact]
     public void TamperedManifestHashSizeAndKindAreRejected()
     {
         using var directory = new PreflightTestDirectory();
@@ -165,6 +179,9 @@ public sealed class PreflightOperationsTests
     {
         using var directory = new PreflightTestDirectory();
         var root = directory.Root;
+        string nested = System.IO.Path.Combine(root, "nested");
+        Directory.CreateDirectory(nested);
+        directory.WriteFile(nested, "nested-config", [11, 12]);
         directory.WriteFile(root, "target", [8, 9, 10]);
         string config = directory.WriteFile(root, "config file", [1, 2, 3, 4]);
         File.SetUnixFileMode(config, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
@@ -187,16 +204,31 @@ public sealed class PreflightOperationsTests
         PreflightManifest supersededManifest = PreflightOperations.Snapshot(root);
         int syncedStageDirectories = 0;
         bool parentSyncedAfterSwap = false;
+        var durabilityEvents = new List<string>();
         string? supersededName = PreflightOperations.RestoreWithResult(
             backup,
             manifestPath,
             root,
-            afterSwap: () => parentSyncedAfterSwap = true,
-            afterStageDirectorySynced: () => syncedStageDirectories++);
+            beforeSwap: () =>
+            {
+                Assert.Equal(2, syncedStageDirectories);
+                durabilityEvents.Add("before-exchange");
+            },
+            afterSwap: () =>
+            {
+                parentSyncedAfterSwap = true;
+                durabilityEvents.Add("after-exchange");
+            },
+            afterStageDirectorySynced: () =>
+            {
+                syncedStageDirectories++;
+                durabilityEvents.Add("stage-directory");
+            });
         Assert.NotNull(supersededName);
         Assert.StartsWith(".preflight-stage-", supersededName, StringComparison.Ordinal);
-        Assert.True(syncedStageDirectories > 0);
+        Assert.Equal(2, syncedStageDirectories);
         Assert.True(parentSyncedAfterSwap);
+        Assert.Equal(["stage-directory", "stage-directory", "before-exchange", "after-exchange"], durabilityEvents);
         string supersededPath = directory.Combine(supersededName);
         Assert.True(Directory.Exists(supersededPath));
         PreflightOperations.Verify(supersededPath, supersededManifest);
@@ -479,6 +511,16 @@ public sealed class PreflightOperationsTests
 
         Assert.Throws<PreflightBlockedException>(() => PreflightUnix.EnsureSameMount(entry, root));
         Assert.Throws<PreflightBlockedException>(() => PreflightUnix.EnsureAncestrySameMount(entry, root));
+    }
+
+    [Fact]
+    public void AncestryGuardRejectsBindMountAliasOfTheAncestor()
+    {
+        var sourceRoot = new PreflightFileStatus(PreflightUnix.DirectoryType, 0, 0x1c0, 42, 8, 1, 10, 0, 0, 0, 0);
+        var bindAlias = new PreflightFileStatus(PreflightUnix.DirectoryType, 0, 0x1c0, 42, 8, 1, 11, 0, 0, 0, 0);
+
+        Assert.True(PreflightUnix.IsSameObject(sourceRoot, bindAlias));
+        Assert.Throws<PreflightBlockedException>(() => PreflightUnix.IsSameObjectOnSameMount(bindAlias, sourceRoot));
     }
 
     [Fact]

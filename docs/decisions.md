@@ -7403,9 +7403,13 @@ Settled questions leave this table, and the decision that settles one says so.
   and retained prior tree, and exchange them back if verification fails. Keep the prior tree under the stage name.
   When the destination is absent, use `RENAME_NOREPLACE` so a concurrent creator is never overwritten. Synchronize
   staged files and directories bottom-up, then synchronize the parent around installation. Fail ancestry checks when
-  they cross a mount ID; cross-mount output paths are blocked.
+  they cross a mount ID, including a matching directory inode observed through a different mount ID; cross-mount
+  output paths and unavailable mount identity are `BLOCKED`.
 - **Recovery**: never recursively delete a stage, superseded tree, or incomplete backup. A staging or backup failure
   may leave a private artifact for manual inspection and cleanup.
+- **Checked**: pinned solution build, serialized `D3B.Scripts.Tests` 60/60, preflight help, formatting, and diff check
+  passed. Synthetic mount-ID tests cover the ancestry boundary; the user-namespace bind-mount probe was denied by the
+  environment.
 - **Why**: a pair of separate renames can leave the requested path absent after interruption or a competing creator.
   An exchange keeps a tree at the destination name throughout the namespace update, and synchronization makes the
   verified stage and its installation durable on filesystems that honor `fsync`.

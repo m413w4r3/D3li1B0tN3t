@@ -422,6 +422,17 @@ internal static class PreflightUnix
         return left.DeviceMajor == right.DeviceMajor && left.DeviceMinor == right.DeviceMinor && left.Inode == right.Inode;
     }
 
+    public static bool IsSameObjectOnSameMount(PreflightFileStatus left, PreflightFileStatus right)
+    {
+        if (!IsSameObject(left, right))
+        {
+            return false;
+        }
+
+        EnsureSameMount(left, right);
+        return true;
+    }
+
     public static SafeFileHandle DuplicateHandle(SafeFileHandle handle)
     {
         int duplicate = Dup(handle.DangerousGetHandle().ToInt32());
@@ -453,7 +464,7 @@ internal static class PreflightUnix
             {
                 PreflightFileStatus currentStatus = StatHandle(current);
 
-                if (IsSameObject(currentStatus, ancestorStatus))
+                if (IsSameObjectOnSameMount(currentStatus, ancestorStatus))
                 {
                     return true;
                 }
@@ -551,7 +562,7 @@ internal static class PreflightUnix
 
         if ((BitConverter.ToUInt32(buffer, 0) & StatxMountId) == 0)
         {
-            throw new IOException("The filesystem does not report mount identity.");
+            throw new PreflightBlockedException("mount_identity_unavailable");
         }
 
         int mode = BitConverter.ToUInt16(buffer, 28);
