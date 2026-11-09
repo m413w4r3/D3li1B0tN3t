@@ -7602,3 +7602,31 @@ Settled questions leave this table, and the decision that settles one says so.
   concurrent privileged mount/namespace changes after discovery are outside the check; the renameat2
   check-to-syscall window remains; hostile local administrators are out of scope. Live action remains **BLOCKED**
   under D340.
+
+## D344: P2O passive observation stopped on translation latch closure
+
+*2026-11-09, P2O passive observation.*
+
+- **Decision**: record a **P2O PASS — PASSIVE OBSERVATION CONFIRMED**, scoped to the owner-confirmed map
+  `120063492` (UI label Astrub (Tainela)), position cell `103`, visible harvestable Walnut tree (Lumberjack Lvl.40),
+  complete diagnostic coverage (122/122 analyzed, 82 types, 0 drops), zero D3B automation game commands, and verified
+  restoration and P2O cleanup. The owner confirmed the map, position, and tree on 2026-11-09 after the live session.
+  This is not a live-action pass; live action remains **BLOCKED** under D340. The session, executed under explicit
+  owner GO, stopped at the first inconsistency when 58 unread non-allowlisted carried types closed the movement
+  translation latch. Record 24 proven non-position frames and 11 partial-readable event types as limits. Do not
+  claim a latch-open result or a fully decoded session. No retry in the same session, mapping change, resolver
+  promotion, or push.
+- **Why**: the owner-confirmed visual observations, bounded diagnostic coverage, zero automation-command count, and
+  verified configuration restoration support the stated passive scope. The latch stop and remaining field-level
+  and protocol-readability gaps prevent a broader claim.
+- **Checked**: private diagnostic report: 122 enqueued/122 analyzed; 0 dropped; 0 unattributed; 82 types; 122 valid
+  occurrences; 122 type-URL checks OK; 0 mismatches; 0 problems; complete coverage; 12 `SHAPE_VARIATION`
+  contradictions across `ira` (2), `ism` (2), `jgm` (2), `kna` (3), `kpx` (3). Session duration
+  `00:01:12.5631650`; host totals 1,416 client bytes, 99,893 server bytes, and 0 frames from D3B. ClientRedirect
+  restored the Ankama version file and the full live-client preflight verify returned OK; the host, engine, and
+  listeners stopped. A later Dofus.x64 instance is outside the observation and owner GO, uses direct Ankama
+  configuration, and is not P2O evidence. See `docs/P2O_PASSIVE_OBSERVATION_REPORT.md`.
+- **Residual limits**: `ElementId`/`CellId`/`GfxId`/screen-position correlation was not established; no map
+  transitions were observed; 58 unread tokens and 12 `SHAPE_VARIATION` contradictions remain for offline review.
+  No mapping change or resolver promotion is authorized by this evidence. A future observation requires a new
+  explicit owner GO. Live action remains **BLOCKED** under D340.
