@@ -118,7 +118,8 @@ internal static class PreflightOperations
         Action? beforeSwap = null,
         Action? afterSwap = null,
         Action? afterStageDirectorySynced = null,
-        Action<SafeFileHandle, byte[], SafeFileHandle, byte[]>? exchange = null)
+        Action<SafeFileHandle, byte[], SafeFileHandle, byte[]>? exchange = null,
+        Action? afterStageEntryCopied = null)
     {
         try
         {
@@ -130,7 +131,8 @@ internal static class PreflightOperations
                 beforeSwap,
                 afterSwap,
                 afterStageDirectorySynced,
-                exchange);
+                exchange,
+                afterStageEntryCopied);
         }
         catch (PreflightBlockedException)
         {
@@ -150,7 +152,8 @@ internal static class PreflightOperations
         Action? beforeSwap,
         Action? afterSwap,
         Action? afterStageDirectorySynced,
-        Action<SafeFileHandle, byte[], SafeFileHandle, byte[]>? exchange)
+        Action<SafeFileHandle, byte[], SafeFileHandle, byte[]>? exchange,
+        Action? afterStageEntryCopied)
     {
         using SafeFileHandle backup = PreflightUnix.OpenDirectoryPath(backupDirectory);
         PreflightFileStatus backupStatus = PreflightUnix.StatHandle(backup);
@@ -189,7 +192,7 @@ internal static class PreflightOperations
             originalRoot = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
             originalRootStatus = PreflightUnix.StatHandle(originalRoot);
 
-            if (!PreflightUnix.IsSameObject(destinationStatus, originalRootStatus))
+            if (!PreflightUnix.IsSameEntry(destinationStatus, originalRootStatus))
             {
                 originalRoot.Dispose();
                 throw new PreflightBlockedException("restore_root_changed");
@@ -220,7 +223,7 @@ internal static class PreflightOperations
             byte[] stageName = CreateStageDirectory(rootParent);
             using SafeFileHandle stage = PreflightUnix.OpenDirectoryAt(rootParent, stageName);
             afterStageCreated?.Invoke();
-            CopyEntries(backupTree, stage, manifest, true);
+            CopyEntries(backupTree, stage, manifest, true, afterStageEntryCopied);
             Verify(stage, manifest, "restore_staging_mismatch");
             PreflightFileStatus stageStatus = PreflightUnix.StatHandle(stage);
             PreflightUnix.SyncTree(stage, afterStageDirectorySynced);
@@ -230,7 +233,7 @@ internal static class PreflightOperations
             if (originalRoot is not null)
             {
                 if (!PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? currentRootStatus)
-                    || !PreflightUnix.IsSameObject(originalRootStatus!, currentRootStatus!))
+                    || !PreflightUnix.IsSameEntry(originalRootStatus!, currentRootStatus!))
                 {
                     throw new PreflightBlockedException("restore_root_changed");
                 }
@@ -239,15 +242,18 @@ internal static class PreflightOperations
 
                 (exchange ?? PreflightUnix.ExchangeAt)(rootParent, stageName, rootParent, rootNameBytes);
 
+                EnsureExchangeEntriesMatchOrRecover(rootParent, rootNameBytes, stageName, stageStatus, originalRootStatus!, exchange);
+
                 try
                 {
                     PreflightUnix.SyncDirectory(rootParent);
                     afterSwap?.Invoke();
+                    EnsureExchangeEntriesMatchOrRecover(rootParent, rootNameBytes, stageName, stageStatus, originalRootStatus!, exchange);
 
                     using SafeFileHandle installed = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
                     PreflightFileStatus installedStatus = PreflightUnix.StatHandle(installed);
 
-                    if (!PreflightUnix.IsSameObject(stageStatus, installedStatus))
+                    if (!PreflightUnix.IsSameEntry(stageStatus, installedStatus))
                     {
                         throw new PreflightBlockedException("restore_installed_tree_changed");
                     }
@@ -256,47 +262,53 @@ internal static class PreflightOperations
                     using SafeFileHandle retained = PreflightUnix.OpenDirectoryAt(rootParent, stageName);
                     PreflightFileStatus retainedStatus = PreflightUnix.StatHandle(retained);
 
-                    if (!PreflightUnix.IsSameObject(originalRootStatus!, retainedStatus))
+                    if (!PreflightUnix.IsSameEntry(originalRootStatus!, retainedStatus))
                     {
                         throw new PreflightBlockedException("restore_superseded_tree_changed");
                     }
 
                     Verify(retained, originalManifest!, "restore_superseded_verification_failed");
 
-                    if (!PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? installedPathStatus)
-                        || !PreflightUnix.IsSameObject(stageStatus, installedPathStatus!)
-                        || !PreflightUnix.TryStatAt(rootParent, stageName, out PreflightFileStatus? retainedPathStatus)
-                        || !PreflightUnix.IsSameObject(originalRootStatus!, retainedPathStatus!))
-                    {
-                        throw new PreflightBlockedException("restore_installation_changed");
-                    }
+                    EnsureExchangeEntriesMatchOrRecover(rootParent, rootNameBytes, stageName, stageStatus, originalRootStatus!, exchange);
 
                     return System.Text.Encoding.UTF8.GetString(stageName);
                 }
                 catch
                 {
+                    if (!ExchangeEntriesMatch(rootParent, rootNameBytes, stageName, stageStatus, originalRootStatus!))
+                    {
+                        RestoreDisplacedDestinationIfSafe(rootParent, rootNameBytes, stageName, stageStatus, exchange);
+                        throw new PreflightBlockedException("restore_destination_changed");
+                    }
+
                     try
                     {
-                        if (!PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? installedStatus)
-                            || !PreflightUnix.IsSameObject(stageStatus, installedStatus!)
-                            || !PreflightUnix.TryStatAt(rootParent, stageName, out PreflightFileStatus? retainedStatus)
-                            || !PreflightUnix.IsSameObject(originalRootStatus!, retainedStatus!))
-                        {
-                            throw new PreflightBlockedException("restore_rollback_state_changed");
-                        }
-
                         (exchange ?? PreflightUnix.ExchangeAt)(rootParent, stageName, rootParent, rootNameBytes);
                         PreflightUnix.SyncDirectory(rootParent);
 
-                        using SafeFileHandle restored = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
-                        PreflightFileStatus restoredStatus = PreflightUnix.StatHandle(restored);
-
-                        if (!PreflightUnix.IsSameObject(originalRootStatus!, restoredStatus))
+                        if (!PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? restoredPathStatus)
+                            || !PreflightUnix.IsSameEntry(originalRootStatus!, restoredPathStatus!)
+                            || !PreflightUnix.TryStatAt(rootParent, stageName, out PreflightFileStatus? retainedPathStatus)
+                            || !PreflightUnix.IsSameEntry(stageStatus, retainedPathStatus!))
                         {
+                            RestoreConcurrentDestinationAfterRollbackIfSafe(
+                                rootParent,
+                                rootNameBytes,
+                                stageName,
+                                originalRootStatus!,
+                                stageStatus,
+                                exchange);
                             throw new PreflightBlockedException("restore_rollback_state_changed");
                         }
 
+                        using SafeFileHandle restored = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
                         Verify(restored, originalManifest!, "restore_rollback_verification_failed");
+
+                        if (!PreflightUnix.TryStatAt(rootParent, rootNameBytes, out restoredPathStatus)
+                            || !PreflightUnix.IsSameEntry(originalRootStatus!, restoredPathStatus!))
+                        {
+                            throw new PreflightBlockedException("restore_rollback_state_changed");
+                        }
                     }
                     catch
                     {
@@ -356,6 +368,109 @@ internal static class PreflightOperations
         }
     }
 
+    private static bool ExchangeEntriesMatch(
+        SafeFileHandle parent,
+        byte[] destinationName,
+        byte[] stageName,
+        PreflightFileStatus stageStatus,
+        PreflightFileStatus originalStatus)
+    {
+        return PreflightUnix.TryStatAt(parent, destinationName, out PreflightFileStatus? destinationStatus)
+            && PreflightUnix.IsSameEntry(stageStatus, destinationStatus!)
+            && PreflightUnix.TryStatAt(parent, stageName, out PreflightFileStatus? retainedStatus)
+            && PreflightUnix.IsSameEntry(originalStatus, retainedStatus!);
+    }
+
+    private static void EnsureExchangeEntriesMatchOrRecover(
+        SafeFileHandle parent,
+        byte[] destinationName,
+        byte[] stageName,
+        PreflightFileStatus stageStatus,
+        PreflightFileStatus originalStatus,
+        Action<SafeFileHandle, byte[], SafeFileHandle, byte[]>? exchange)
+    {
+        if (ExchangeEntriesMatch(parent, destinationName, stageName, stageStatus, originalStatus))
+        {
+            return;
+        }
+
+        RestoreDisplacedDestinationIfSafe(parent, destinationName, stageName, stageStatus, exchange);
+        throw new PreflightBlockedException("restore_destination_changed");
+    }
+
+    private static void RestoreDisplacedDestinationIfSafe(
+        SafeFileHandle parent,
+        byte[] destinationName,
+        byte[] stageName,
+        PreflightFileStatus stageStatus,
+        Action<SafeFileHandle, byte[], SafeFileHandle, byte[]>? exchange)
+    {
+        if (!PreflightUnix.TryStatAt(parent, destinationName, out PreflightFileStatus? destinationStatus)
+            || !PreflightUnix.IsSameEntry(stageStatus, destinationStatus!))
+        {
+            return;
+        }
+
+        if (!PreflightUnix.TryStatAt(parent, stageName, out PreflightFileStatus? displacedStatus))
+        {
+            PreflightUnix.RenameAt(parent, destinationName, parent, stageName);
+            PreflightUnix.SyncDirectory(parent);
+
+            if (PreflightUnix.TryStatAt(parent, destinationName, out _)
+                || !PreflightUnix.TryStatAt(parent, stageName, out PreflightFileStatus? movedStageStatus)
+                || !PreflightUnix.IsSameEntry(stageStatus, movedStageStatus!))
+            {
+                throw new PreflightBlockedException("restore_conflict_recovery_failed");
+            }
+
+            return;
+        }
+
+        if (PreflightUnix.IsSameEntry(stageStatus, displacedStatus!))
+        {
+            return;
+        }
+
+        (exchange ?? PreflightUnix.ExchangeAt)(parent, stageName, parent, destinationName);
+        PreflightUnix.SyncDirectory(parent);
+
+        if (!PreflightUnix.TryStatAt(parent, destinationName, out PreflightFileStatus? restoredDestination)
+            || !PreflightUnix.IsSameEntry(displacedStatus!, restoredDestination!)
+            || !PreflightUnix.TryStatAt(parent, stageName, out PreflightFileStatus? retainedStage)
+            || !PreflightUnix.IsSameEntry(stageStatus, retainedStage!))
+        {
+            throw new PreflightBlockedException("restore_conflict_recovery_failed");
+        }
+    }
+
+    private static void RestoreConcurrentDestinationAfterRollbackIfSafe(
+        SafeFileHandle parent,
+        byte[] destinationName,
+        byte[] stageName,
+        PreflightFileStatus originalStatus,
+        PreflightFileStatus stageStatus,
+        Action<SafeFileHandle, byte[], SafeFileHandle, byte[]>? exchange)
+    {
+        if (!PreflightUnix.TryStatAt(parent, destinationName, out PreflightFileStatus? destinationStatus)
+            || !PreflightUnix.IsSameEntry(originalStatus, destinationStatus!)
+            || !PreflightUnix.TryStatAt(parent, stageName, out PreflightFileStatus? concurrentStatus)
+            || PreflightUnix.IsSameEntry(stageStatus, concurrentStatus!))
+        {
+            return;
+        }
+
+        (exchange ?? PreflightUnix.ExchangeAt)(parent, stageName, parent, destinationName);
+        PreflightUnix.SyncDirectory(parent);
+
+        if (!PreflightUnix.TryStatAt(parent, destinationName, out PreflightFileStatus? restoredDestination)
+            || !PreflightUnix.IsSameEntry(concurrentStatus!, restoredDestination!)
+            || !PreflightUnix.TryStatAt(parent, stageName, out PreflightFileStatus? retainedOriginal)
+            || !PreflightUnix.IsSameEntry(originalStatus, retainedOriginal!))
+        {
+            throw new PreflightBlockedException("restore_conflict_recovery_failed");
+        }
+    }
+
     private static void Verify(SafeFileHandle root, PreflightManifest expected)
     {
         Verify(root, expected, "tree_mismatch");
@@ -401,7 +516,8 @@ internal static class PreflightOperations
         SafeFileHandle sourceRoot,
         SafeFileHandle destinationRoot,
         PreflightManifest manifest,
-        bool preserveModes)
+        bool preserveModes,
+        Action? afterEntryCopied = null)
     {
         PreflightFileStatus sourceRootStatus = PreflightUnix.StatHandle(sourceRoot);
         PreflightFileStatus destinationRootStatus = PreflightUnix.StatHandle(destinationRoot);
@@ -426,6 +542,8 @@ internal static class PreflightOperations
             {
                 throw new PreflightBlockedException("manifest_kind_invalid");
             }
+
+            afterEntryCopied?.Invoke();
         }
     }
 

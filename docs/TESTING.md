@@ -51,30 +51,51 @@ directory modes, including empty directories, are intentionally not represented;
 directories needed by manifest entries.
 
 Restore verifies the backup, copies it to a private sibling `.preflight-stage-*` directory, verifies and synchronizes
-the staged files and directories, then installs it. An existing destination is exchanged atomically with the staged
-tree using `renameat2(RENAME_EXCHANGE)`. Restore verifies both trees after the exchange and exchanges them back if
-verification fails. The old destination stays under the stage name for manual cleanup; restore never recursively
-deletes it. If the destination did not exist, `RENAME_NOREPLACE` installs the stage, so a concurrent creator is
-blocked without being overwritten.
+the staged files and directories, then installs it. For an existing destination, restore records the destination's
+device, inode, mount ID and type, and the staged tree's same identity fields. It checks the destination again before
+using `renameat2(RENAME_EXCHANGE)`, then reads both names without following symlinks and checks that the expected
+staged tree and original destination inode landed at the expected names. If a concurrent replacement was exchanged
+into the stage name while the staged tree is still at the requested path, restore exchanges back only while that
+staged-tree identity remains at the requested path. It confirms that the displaced entry returned there before
+returning `BLOCKED`.
+
+If the requested path has changed after the exchange, restore does not exchange back over it. It returns `BLOCKED`
+and leaves the observed concurrent entry at the requested path; the original inode may remain at the stage name.
+When the expected original inode is at the stage name and the staged tree is still at the requested path, restore
+verifies both trees. A verification failure exchanges them back only after checking both identities, preserving the
+original destination and retaining the attempted replacement under the stage name. Restore never recursively deletes
+the original, a concurrent entry, or a stage. If the destination did not exist, `RENAME_NOREPLACE` installs the stage,
+so a concurrent creator is blocked without being overwritten.
+
+`renameat2` exchanges names and does not offer an inode-conditioned compare-and-swap. There remains a narrow race
+between each final identity check and the corresponding rename syscall. Restore checks identities immediately after
+each exchange and only performs recovery when the names still contain the entries that recovery expects. A writer
+that races a recovery syscall can still require manual inspection; restore returns `BLOCKED` and does not recursively
+delete anything. A concurrent writer can itself move or remove the original destination inode. The tool does not
+replace a concurrent entry it observes at the requested path with the restore tree.
 
 Restore synchronizes regular files and directories bottom-up before installation, synchronizes the parent before
 installation, and synchronizes it again after the exchange or no-replace rename. This makes the staged tree and
 namespace update crash-durable on filesystems and storage that honor `fsync`. A process failure before installation
 can leave a private `.preflight-stage-*` directory. A failed backup can leave its requested private output directory
 with an incomplete `tree/` and no manifest. These artifacts are retained for inspection or manual cleanup; preflight
-does not recursively remove them or any superseded tree. Recovery states are:
+does not recursively remove them or any superseded tree. A concurrent writer can cause the original destination inode
+to be lost by its own action; preflight never recursively deletes it or replaces an observed concurrent destination
+with the restore tree. Recovery states are:
 
 | Failure point | Destination name | Retained artifact |
 | --- | --- | --- |
 | Backup copy fails | Source is unchanged | Private backup directory with a possibly partial `tree/`; no `manifest.json`. |
-| Restore staging fails | Existing destination is unchanged (or remains absent) | Private stage directory may be incomplete. |
+| Restore staging fails, including a failure after copying starts | Existing destination is unchanged (or remains absent) | Private stage directory may contain a partial copy. |
 | Existing-destination exchange fails | Original destination is unchanged | Complete, verified replacement remains under `.preflight-stage-*`. |
-| Post-exchange verification fails and exchange-back succeeds | Original destination is restored | The attempted replacement remains under `.preflight-stage-*`; inspect it before any manual cleanup. |
+| Destination changes after the final check and is exchanged into the stage name | Concurrent entry is restored to the requested path if it still contains the staged tree | Complete, verified replacement remains under `.preflight-stage-*`; the original inode may have been moved by the writer. |
+| Destination changes after the exchange | Observed concurrent entry remains at the requested path; no exchange-back is attempted | The original may remain under `.preflight-stage-*`; the writer may have moved or removed the replacement tree. Inspect both names. |
+| Post-exchange verification fails while both expected identities remain | Original destination is restored | The attempted replacement remains under `.preflight-stage-*`; inspect it before any manual cleanup. |
 | No-replace install meets a concurrent creator | Concurrent destination is untouched | Verified stage remains under `.preflight-stage-*`. |
 | Process stops during an existing-destination exchange | Destination names one of the two trees | The other tree remains under `.preflight-stage-*`; verify both against their manifests before recovery. |
 
-If exchange-back itself fails, the result is `BLOCKED` and the destination and stage may no longer match the expected
-pair; inspect both without deleting either. A crash around installation of a previously absent destination can leave
+If safe exchange-back or its identity check fails, the result is `BLOCKED`; inspect the destination and stage without
+deleting either. A crash around installation of a previously absent destination can leave
 the verified tree at the destination or under its stage name, depending on whether the namespace change reached
 storage. Never infer which tree to keep from the name alone. Manual cleanup must be deliberate and must not use
 recursive deletion.

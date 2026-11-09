@@ -422,6 +422,15 @@ internal static class PreflightUnix
         return left.DeviceMajor == right.DeviceMajor && left.DeviceMinor == right.DeviceMinor && left.Inode == right.Inode;
     }
 
+    public static bool IsSameEntry(PreflightFileStatus left, PreflightFileStatus right)
+    {
+        return left.Type == right.Type
+            && left.DeviceMajor == right.DeviceMajor
+            && left.DeviceMinor == right.DeviceMinor
+            && left.Inode == right.Inode
+            && left.MountId == right.MountId;
+    }
+
     public static bool IsSameObjectOnSameMount(PreflightFileStatus left, PreflightFileStatus right)
     {
         if (!IsSameObject(left, right))
