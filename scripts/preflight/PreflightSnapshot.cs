@@ -12,10 +12,17 @@ internal static class PreflightSnapshot
         PreflightUnix.EnsureLinux();
 
         using SafeFileHandle rootHandle = PreflightUnix.OpenDirectoryPath(root);
-        return Capture(rootHandle);
+        PreflightDirectoryIndex directoryIndex = PreflightDirectoryIndex.Capture(rootHandle);
+        return Capture(rootHandle, directoryIndex);
     }
 
     public static PreflightManifest Capture(SafeFileHandle root)
+    {
+        PreflightDirectoryIndex directoryIndex = PreflightDirectoryIndex.Capture(root);
+        return Capture(root, directoryIndex);
+    }
+
+    public static PreflightManifest Capture(SafeFileHandle root, PreflightDirectoryIndex directoryIndex)
     {
         PreflightFileStatus rootStatus = PreflightUnix.StatHandle(root);
 
@@ -24,8 +31,13 @@ internal static class PreflightSnapshot
             throw new PreflightBlockedException("root_not_directory");
         }
 
+        if (!directoryIndex.Contains(rootStatus))
+        {
+            throw new PreflightBlockedException("directory_changed_during_index");
+        }
+
         var entries = new List<PreflightManifestEntry>();
-        Walk(root, rootStatus, [], entries);
+        Walk(root, rootStatus, directoryIndex, [], entries);
         entries.Sort(ComparePaths);
         return new PreflightManifest(entries);
     }
@@ -33,6 +45,7 @@ internal static class PreflightSnapshot
     private static void Walk(
         SafeFileHandle directory,
         PreflightFileStatus rootStatus,
+        PreflightDirectoryIndex directoryIndex,
         byte[] relativeDirectory,
         List<PreflightManifestEntry> entries)
     {
@@ -41,6 +54,11 @@ internal static class PreflightSnapshot
         if (before.Type != PreflightUnix.DirectoryType)
         {
             throw new PreflightBlockedException("directory_changed_during_snapshot");
+        }
+
+        if (!directoryIndex.Contains(before))
+        {
+            throw new PreflightBlockedException("directory_changed_during_index");
         }
 
         List<byte[]> children;
@@ -86,14 +104,19 @@ internal static class PreflightSnapshot
                 using SafeFileHandle childDirectory = openedDirectory;
                 PreflightFileStatus openedStatus = PreflightUnix.StatHandle(childDirectory);
 
-                if (!PreflightUnix.IsSameObject(status, openedStatus) || !IsStable(status, openedStatus))
+                if (!PreflightUnix.IsSameObject(status, openedStatus) || !PreflightUnix.IsStableStatus(status, openedStatus))
                 {
                     throw new PreflightBlockedException("entry_changed_during_snapshot");
                 }
 
+                if (!directoryIndex.Contains(openedStatus))
+                {
+                    throw new PreflightBlockedException("directory_changed_during_index");
+                }
+
                 PreflightUnix.EnsureSameMount(openedStatus, rootStatus, pathBytes);
 
-                Walk(childDirectory, rootStatus, pathBytes, entries);
+                Walk(childDirectory, rootStatus, directoryIndex, pathBytes, entries);
                 continue;
             }
 
@@ -114,7 +137,7 @@ internal static class PreflightSnapshot
 
         PreflightFileStatus after = PreflightUnix.StatHandle(directory);
 
-        if (!IsStable(before, after))
+        if (!PreflightUnix.IsStableStatus(before, after))
         {
             throw new PreflightBlockedException("directory_changed_during_snapshot");
         }
@@ -131,7 +154,7 @@ internal static class PreflightSnapshot
             using SafeFileHandle file = PreflightUnix.OpenFileAt(parent, name);
             PreflightFileStatus opened = PreflightUnix.StatHandle(file);
 
-            if (opened.Type != PreflightUnix.RegularFileType || !IsStable(before, opened))
+            if (opened.Type != PreflightUnix.RegularFileType || !PreflightUnix.IsStableStatus(before, opened))
             {
                 throw new PreflightBlockedException("entry_changed_during_snapshot");
             }
@@ -140,7 +163,7 @@ internal static class PreflightSnapshot
             byte[] hash = SHA256.HashData(stream);
             PreflightFileStatus after = PreflightUnix.StatHandle(file);
 
-            if (!IsStable(opened, after))
+            if (!PreflightUnix.IsStableStatus(opened, after))
             {
                 throw new PreflightBlockedException("entry_changed_during_snapshot");
             }
@@ -174,7 +197,7 @@ internal static class PreflightSnapshot
             byte[] target = PreflightUnix.ReadLinkAt(parent, name);
             PreflightFileStatus after = PreflightUnix.StatAt(parent, name);
 
-            if (after.Type != PreflightUnix.SymbolicLinkType || !IsStable(before, after))
+            if (after.Type != PreflightUnix.SymbolicLinkType || !PreflightUnix.IsStableStatus(before, after))
             {
                 throw new PreflightBlockedException("entry_changed_during_snapshot");
             }
@@ -204,18 +227,4 @@ internal static class PreflightSnapshot
         return PreflightUnix.CompareBytes(leftBytes, rightBytes);
     }
 
-    private static bool IsStable(PreflightFileStatus before, PreflightFileStatus after)
-    {
-        return before.Type == after.Type
-            && before.Size == after.Size
-            && before.Mode == after.Mode
-            && before.Inode == after.Inode
-            && before.DeviceMajor == after.DeviceMajor
-            && before.DeviceMinor == after.DeviceMinor
-            && before.MountId == after.MountId
-            && before.ChangeSeconds == after.ChangeSeconds
-            && before.ChangeNanoseconds == after.ChangeNanoseconds
-            && before.ModifiedSeconds == after.ModifiedSeconds
-            && before.ModifiedNanoseconds == after.ModifiedNanoseconds;
-    }
 }

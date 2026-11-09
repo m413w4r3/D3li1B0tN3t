@@ -12,6 +12,12 @@ internal sealed class PreflightBlockedException : Exception
         Code = code;
     }
 
+    public PreflightBlockedException(string code, Exception innerException)
+        : base(code, innerException)
+    {
+        Code = code;
+    }
+
     public PreflightBlockedException(string code, PreflightBlockedDetail detail)
         : base(code)
     {

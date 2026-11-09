@@ -11,6 +11,8 @@ internal static class PreflightUnix
     private const int AtSymlinkNoFollow = 0x100;
     private const int AtEmptyPath = 0x1000;
     private const uint StatxBasicStats = 0x7ff;
+    private const uint StatxType = 0x1;
+    private const uint StatxInode = 0x100;
     private const uint StatxMountId = 0x1000;
     private const int TypeMask = 0xf000;
     private const int RegularFile = 0x8000;
@@ -31,6 +33,9 @@ internal static class PreflightUnix
     private const uint PrivateFileMode = 0x180;
     private const int DirectoryNameOffset = 19;
     private const int MaximumLinkBytes = 1_048_576;
+    private const string RepositoryMarkerName = "D3B.slnx";
+    private static readonly byte[] _repositoryMarkerNameBytes = Encoding.ASCII.GetBytes(RepositoryMarkerName);
+    private static readonly Lazy<IReadOnlyList<PreflightDirectoryIndex>> _repositoryDirectoryIndexes = new(DiscoverRepositoryDirectoryIndexes);
 
     public static int RegularFileType
     {
@@ -436,6 +441,21 @@ internal static class PreflightUnix
         return left.DeviceMajor == right.DeviceMajor && left.DeviceMinor == right.DeviceMinor && left.Inode == right.Inode;
     }
 
+    public static bool IsStableStatus(PreflightFileStatus before, PreflightFileStatus after)
+    {
+        return before.Type == after.Type
+            && before.Size == after.Size
+            && before.Mode == after.Mode
+            && before.Inode == after.Inode
+            && before.DeviceMajor == after.DeviceMajor
+            && before.DeviceMinor == after.DeviceMinor
+            && before.MountId == after.MountId
+            && before.ChangeSeconds == after.ChangeSeconds
+            && before.ChangeNanoseconds == after.ChangeNanoseconds
+            && before.ModifiedSeconds == after.ModifiedSeconds
+            && before.ModifiedNanoseconds == after.ModifiedNanoseconds;
+    }
+
     public static bool IsSameEntry(PreflightFileStatus left, PreflightFileStatus right)
     {
         return left.Type == right.Type
@@ -471,74 +491,93 @@ internal static class PreflightUnix
     public static bool IsDescendantOrSelf(SafeFileHandle candidate, SafeFileHandle ancestor)
     {
         PreflightFileStatus ancestorStatus = StatHandle(ancestor);
-        int duplicates = Dup(candidate.DangerousGetHandle().ToInt32());
-
-        if (duplicates < 0)
-        {
-            throw NativeIOException("The directory ancestry could not be checked.");
-        }
-
-        SafeFileHandle current = new(new IntPtr(duplicates), true);
-
-        try
-        {
-            while (true)
-            {
-                PreflightFileStatus currentStatus = StatHandle(current);
-
-                // Containment ancestry may cross unrelated mounts; object identity still rejects a bind alias of the ancestor.
-                if (IsSameObject(currentStatus, ancestorStatus))
-                {
-                    return true;
-                }
-
-                using SafeFileHandle parent = OpenDirectoryAt(current, [(byte)'.', (byte)'.']);
-                PreflightFileStatus parentStatus = StatHandle(parent);
-
-                if (IsSameObject(parentStatus, currentStatus))
-                {
-                    return false;
-                }
-
-                current.Dispose();
-                int parentDuplicate = Dup(parent.DangerousGetHandle().ToInt32());
-
-                if (parentDuplicate < 0)
-                {
-                    throw NativeIOException("The directory ancestry could not be checked.");
-                }
-
-                current = new SafeFileHandle(new IntPtr(parentDuplicate), true);
-            }
-        }
-        finally
-        {
-            current.Dispose();
-        }
+        return WalkAncestors(candidate, status => IsSameObject(status, ancestorStatus));
     }
 
     public static void EnsureNoRepositoryMarker(SafeFileHandle directory)
     {
-        WalkAncestors(directory, current =>
-        {
-            try
+        IReadOnlyList<PreflightDirectoryIndex> repositoryIndexes = _repositoryDirectoryIndexes.Value;
+        WalkAncestors(
+            directory,
+            status =>
             {
-                StatAt(current, Encoding.ASCII.GetBytes("D3B.slnx"));
-                throw new PreflightBlockedException("repository_output_forbidden");
-            }
-            catch (IOException exception) when (Marshal.GetLastPInvokeError() == 2)
+                if (IsRepositoryIdentity(status, repositoryIndexes))
+                {
+                    throw new PreflightBlockedException("repository_output_forbidden");
+                }
+
+                return false;
+            },
+            current =>
             {
-                _ = exception;
-            }
-        });
+                if (TryStatAt(current, _repositoryMarkerNameBytes, out _))
+                {
+                    throw new PreflightBlockedException("repository_output_forbidden");
+                }
+
+                return false;
+            });
     }
 
-    public static void EnsureOutsideTree(SafeFileHandle directory, SafeFileHandle root)
+    internal static void EnsureNoRepositoryIdentity(
+        IEnumerable<PreflightFileStatus> ancestors,
+        IReadOnlyList<PreflightDirectoryIndex> repositoryIndexes)
     {
-        if (IsDescendantOrSelf(directory, root))
+        if (WalkAncestors(ancestors, status => IsRepositoryIdentity(status, repositoryIndexes)))
         {
-            throw new PreflightBlockedException("output_inside_source_tree");
+            throw new PreflightBlockedException("repository_output_forbidden");
         }
+    }
+
+    public static void EnsureOutsideTree(SafeFileHandle directory, PreflightDirectoryIndex sourceIndex)
+    {
+        bool aliasesSource = false;
+        WalkAncestors(directory, status =>
+        {
+            aliasesSource |= IsSourceDescendantStatus(status, sourceIndex);
+            return false;
+        });
+
+        if (aliasesSource)
+        {
+            throw new PreflightBlockedException("destination_aliases_source");
+        }
+    }
+
+    public static void EnsureOutsideTree(IEnumerable<PreflightFileStatus> ancestors, PreflightDirectoryIndex sourceIndex)
+    {
+        bool aliasesSource = false;
+        WalkAncestors(ancestors, status =>
+        {
+            aliasesSource |= IsSourceDescendantStatus(status, sourceIndex);
+            return false;
+        });
+
+        if (aliasesSource)
+        {
+            throw new PreflightBlockedException("destination_aliases_source");
+        }
+    }
+
+    public static bool HasAncestorInIndex(SafeFileHandle directory, PreflightDirectoryIndex sourceIndex)
+    {
+        return WalkAncestors(directory, sourceIndex.Contains);
+    }
+
+    internal static bool HasAncestorInIndex(IEnumerable<PreflightFileStatus> ancestors, PreflightDirectoryIndex sourceIndex)
+    {
+        return WalkAncestors(ancestors, sourceIndex.Contains);
+    }
+
+    internal static IReadOnlyList<PreflightFileStatus> GetAncestorStatuses(SafeFileHandle directory)
+    {
+        var ancestors = new List<PreflightFileStatus>();
+        WalkAncestors(directory, status =>
+        {
+            ancestors.Add(status);
+            return false;
+        });
+        return ancestors;
     }
 
     public static void EnsurePrivateDirectory(SafeFileHandle directory)
@@ -582,7 +621,9 @@ internal static class PreflightUnix
             throw NativeIOException("The filesystem entry could not be inspected.");
         }
 
-        if ((BitConverter.ToUInt32(buffer, 0) & StatxMountId) == 0)
+        uint mask = BitConverter.ToUInt32(buffer, 0);
+
+        if ((mask & StatxMountId) == 0)
         {
             throw new PreflightBlockedException("mount_identity_unavailable");
         }
@@ -606,10 +647,19 @@ internal static class PreflightUnix
             BitConverter.ToInt64(buffer, 96),
             BitConverter.ToUInt32(buffer, 104),
             BitConverter.ToInt64(buffer, 112),
-            BitConverter.ToUInt32(buffer, 120));
+            BitConverter.ToUInt32(buffer, 120),
+            (mask & (StatxType | StatxInode)) == (StatxType | StatxInode));
     }
 
-    private static void WalkAncestors(SafeFileHandle directory, Action<SafeFileHandle> action)
+    private static bool WalkAncestors(SafeFileHandle directory, Func<PreflightFileStatus, bool> action)
+    {
+        return WalkAncestors(directory, action, null);
+    }
+
+    private static bool WalkAncestors(
+        SafeFileHandle directory,
+        Func<PreflightFileStatus, bool> action,
+        Func<SafeFileHandle, bool>? handleAction)
     {
         int descriptor = Dup(directory.DangerousGetHandle().ToInt32());
 
@@ -624,15 +674,24 @@ internal static class PreflightUnix
         {
             while (true)
             {
-                action(current);
                 PreflightFileStatus currentStatus = StatHandle(current);
+
+                if (action(currentStatus))
+                {
+                    return true;
+                }
+
+                if (handleAction is not null && handleAction(current))
+                {
+                    return true;
+                }
 
                 using SafeFileHandle parent = OpenDirectoryAt(current, [(byte)'.', (byte)'.']);
                 PreflightFileStatus parentStatus = StatHandle(parent);
 
                 if (IsSameObject(currentStatus, parentStatus))
                 {
-                    break;
+                    return false;
                 }
 
                 int parentDescriptor = Dup(parent.DangerousGetHandle().ToInt32());
@@ -650,6 +709,103 @@ internal static class PreflightUnix
         {
             current.Dispose();
         }
+    }
+
+    private static bool WalkAncestors(IEnumerable<PreflightFileStatus> ancestors, Func<PreflightFileStatus, bool> action)
+    {
+        foreach (PreflightFileStatus status in ancestors)
+        {
+            if (action(status))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsSourceDescendantStatus(PreflightFileStatus status, PreflightDirectoryIndex sourceIndex)
+    {
+        PreflightDirectoryIdentity identity = PreflightDirectoryIdentity.FromStatus(status);
+
+        if (identity == sourceIndex.RootIdentity)
+        {
+            if (status.MountId == sourceIndex.RootStatus.MountId)
+            {
+                throw new PreflightBlockedException("output_inside_source_tree");
+            }
+
+            return true;
+        }
+
+        return sourceIndex.Contains(status);
+    }
+
+    private static bool IsRepositoryIdentity(PreflightFileStatus status, IReadOnlyList<PreflightDirectoryIndex> repositoryIndexes)
+    {
+        foreach (PreflightDirectoryIndex repositoryIndex in repositoryIndexes)
+        {
+            if (repositoryIndex.Contains(status))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static System.Collections.ObjectModel.ReadOnlyCollection<PreflightDirectoryIndex> DiscoverRepositoryDirectoryIndexes()
+    {
+        var repositoryIndexes = new List<PreflightDirectoryIndex>();
+        string[] anchors = [System.IO.Directory.GetCurrentDirectory(), AppContext.BaseDirectory];
+
+        foreach (string anchor in anchors)
+        {
+            using SafeFileHandle anchorDirectory = OpenDirectoryPath(anchor);
+            using SafeFileHandle? repositoryRoot = FindRepositoryRoot(anchorDirectory);
+
+            if (repositoryRoot is null)
+            {
+                continue;
+            }
+
+            PreflightDirectoryIndex repositoryIndex;
+
+            try
+            {
+                repositoryIndex = PreflightDirectoryIndex.Capture(repositoryRoot, true);
+            }
+            catch (Exception exception)
+            {
+                throw new PreflightBlockedException("repository_index_unavailable", exception);
+            }
+
+            if (!repositoryIndexes.Exists(index => index.RootIdentity == repositoryIndex.RootIdentity))
+            {
+                repositoryIndexes.Add(repositoryIndex);
+            }
+        }
+
+        return repositoryIndexes.AsReadOnly();
+    }
+
+    private static SafeFileHandle? FindRepositoryRoot(SafeFileHandle anchorDirectory)
+    {
+        SafeFileHandle? repositoryRoot = null;
+        WalkAncestors(
+            anchorDirectory,
+            _ => false,
+            current =>
+            {
+                if (!TryStatAt(current, _repositoryMarkerNameBytes, out _))
+                {
+                    return false;
+                }
+
+                repositoryRoot = DuplicateHandle(current);
+                return true;
+            });
+        return repositoryRoot;
     }
 
     private static void SyncDirectoryTree(

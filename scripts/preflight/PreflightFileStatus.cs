@@ -16,6 +16,8 @@ internal sealed class PreflightFileStatus
 
     public ulong MountId { get; }
 
+    public bool IdentityAvailable { get; }
+
     public long ChangeSeconds { get; }
 
     public uint ChangeNanoseconds { get; }
@@ -35,7 +37,8 @@ internal sealed class PreflightFileStatus
         long changeSeconds,
         uint changeNanoseconds,
         long modifiedSeconds,
-        uint modifiedNanoseconds)
+        uint modifiedNanoseconds,
+        bool identityAvailable = true)
     {
         Type = type;
         Size = size;
@@ -44,6 +47,7 @@ internal sealed class PreflightFileStatus
         DeviceMajor = deviceMajor;
         DeviceMinor = deviceMinor;
         MountId = mountId;
+        IdentityAvailable = identityAvailable;
         ChangeSeconds = changeSeconds;
         ChangeNanoseconds = changeNanoseconds;
         ModifiedSeconds = modifiedSeconds;

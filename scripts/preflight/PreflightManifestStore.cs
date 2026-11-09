@@ -10,7 +10,7 @@ internal static class PreflightManifestStore
     private const int MaximumManifestBytes = 67_108_864;
     private const int PrivateFileMode = 0x180;
 
-    public static PreflightManifest Read(string path, SafeFileHandle? sourceRoot = null)
+    public static PreflightManifest Read(string path, PreflightDirectoryIndex? sourceIndex = null)
     {
         try
         {
@@ -19,9 +19,9 @@ internal static class PreflightManifestStore
             string fileName = Path.GetFileName(fullPath);
             using SafeFileHandle parent = PreflightUnix.OpenDirectoryPath(parentPath);
 
-            if (sourceRoot is not null)
+            if (sourceIndex is not null)
             {
-                PreflightUnix.EnsureOutsideTree(parent, sourceRoot);
+                PreflightUnix.EnsureOutsideTree(parent, sourceIndex);
             }
 
             PreflightFileStatus before = PreflightUnix.StatAt(parent, PreflightUnix.EncodeName(fileName));
@@ -71,7 +71,7 @@ internal static class PreflightManifestStore
         }
     }
 
-    public static void WriteAtomically(string path, PreflightManifest manifest, SafeFileHandle? sourceRoot = null)
+    public static void WriteAtomically(string path, PreflightManifest manifest, PreflightDirectoryIndex? sourceIndex = null)
     {
         PreflightUnix.EnsureLinux();
         PreflightManifestCodec.Validate(manifest);
@@ -92,9 +92,9 @@ internal static class PreflightManifestStore
             {
                 PreflightUnix.EnsureNoRepositoryMarker(directory);
 
-                if (sourceRoot is not null)
+                if (sourceIndex is not null)
                 {
-                    PreflightUnix.EnsureOutsideTree(directory, sourceRoot);
+                    PreflightUnix.EnsureOutsideTree(directory, sourceIndex);
                 }
             });
         PreflightUnix.EnsurePrivateDirectory(parent);

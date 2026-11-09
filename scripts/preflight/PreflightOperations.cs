@@ -21,8 +21,9 @@ internal static class PreflightOperations
     public static PreflightManifest SnapshotToFile(string root, string outputPath)
     {
         using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(root);
-        PreflightManifest manifest = PreflightSnapshot.Capture(source);
-        PreflightManifestStore.WriteAtomically(outputPath, manifest, source);
+        PreflightDirectoryIndex sourceIndex = PreflightDirectoryIndex.Capture(source);
+        PreflightManifest manifest = PreflightSnapshot.Capture(source, sourceIndex);
+        PreflightManifestStore.WriteAtomically(outputPath, manifest, sourceIndex);
         return manifest;
     }
 
@@ -44,29 +45,33 @@ internal static class PreflightOperations
     public static void Verify(string root, string manifestPath)
     {
         using SafeFileHandle rootHandle = PreflightUnix.OpenDirectoryPath(root);
-        PreflightManifest expected = PreflightManifestStore.Read(manifestPath, rootHandle);
-        Verify(rootHandle, expected);
+        PreflightDirectoryIndex sourceIndex = PreflightDirectoryIndex.Capture(rootHandle);
+        PreflightManifest expected = PreflightManifestStore.Read(manifestPath, sourceIndex);
+        Verify(rootHandle, expected, "tree_mismatch", sourceIndex);
     }
 
     public static void Verify(string root, PreflightManifest expected)
     {
         using SafeFileHandle rootHandle = PreflightUnix.OpenDirectoryPath(root);
-        Verify(rootHandle, expected);
+        PreflightDirectoryIndex sourceIndex = PreflightDirectoryIndex.Capture(rootHandle);
+        Verify(rootHandle, expected, "tree_mismatch", sourceIndex);
     }
 
     public static bool Compare(string root, string beforePath, string afterOutputPath)
     {
         using SafeFileHandle rootHandle = PreflightUnix.OpenDirectoryPath(root);
-        PreflightManifest before = PreflightManifestStore.Read(beforePath, rootHandle);
-        PreflightManifest after = PreflightSnapshot.Capture(rootHandle);
-        PreflightManifestStore.WriteAtomically(afterOutputPath, after, rootHandle);
+        PreflightDirectoryIndex sourceIndex = PreflightDirectoryIndex.Capture(rootHandle);
+        PreflightManifest before = PreflightManifestStore.Read(beforePath, sourceIndex);
+        PreflightManifest after = PreflightSnapshot.Capture(rootHandle, sourceIndex);
+        PreflightManifestStore.WriteAtomically(afterOutputPath, after, sourceIndex);
         return AreEqual(before, after);
     }
 
     public static string Backup(string root, string outputDirectory, Action? afterBackupTreeCreated = null)
     {
         using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(root);
-        PreflightManifest manifest = PreflightSnapshot.Capture(source);
+        PreflightDirectoryIndex sourceIndex = PreflightDirectoryIndex.Capture(source);
+        PreflightManifest manifest = PreflightSnapshot.Capture(source, sourceIndex);
         string fullOutput = PreflightPath.FullPath(outputDirectory);
         string outputName = Path.GetFileName(fullOutput);
 
@@ -82,7 +87,7 @@ internal static class PreflightOperations
             directory =>
             {
                 PreflightUnix.EnsureNoRepositoryMarker(directory);
-                PreflightUnix.EnsureOutsideTree(directory, source);
+                PreflightUnix.EnsureOutsideTree(directory, sourceIndex);
             });
         byte[] outputNameBytes = PreflightUnix.EncodeName(outputName);
 
@@ -99,9 +104,10 @@ internal static class PreflightOperations
         CopyEntries(source, tree, manifest, false);
         PreflightUnix.SyncTree(tree);
         PreflightUnix.SyncDirectory(backup);
-        VerifyBackupTree(tree, manifest);
+        PreflightDirectoryIndex backupTreeIndex = PreflightDirectoryIndex.Capture(tree);
+        VerifyBackupTree(tree, manifest, backupTreeIndex);
         string manifestPath = Path.Combine(fullOutput, BackupManifestName);
-        PreflightManifestStore.WriteAtomically(manifestPath, manifest, source);
+        PreflightManifestStore.WriteAtomically(manifestPath, manifest, sourceIndex);
         return manifestPath;
     }
 
@@ -166,6 +172,8 @@ internal static class PreflightOperations
             throw new PreflightBlockedException("backup_directory_invalid");
         }
 
+        PreflightDirectoryIndex backupIndex = PreflightDirectoryIndex.Capture(backup);
+
         using SafeFileHandle backupTree = PreflightUnix.OpenDirectoryAt(backup, PreflightUnix.EncodeName(BackupTreeName));
         string fullRoot = PreflightPath.FullPath(root);
         string rootName = Path.GetFileName(fullRoot);
@@ -180,8 +188,10 @@ internal static class PreflightOperations
         PreflightUnix.EnsureNoRepositoryMarker(rootParent);
         byte[] rootNameBytes = PreflightUnix.EncodeName(rootName);
         PreflightFileStatus parentStatus = PreflightUnix.StatHandle(rootParent);
+        IReadOnlyList<PreflightFileStatus> backupAncestors = PreflightUnix.GetAncestorStatuses(backup);
         SafeFileHandle? originalRoot = null;
         PreflightFileStatus? originalRootStatus = null;
+        PreflightDirectoryIndex? originalRootIndex = null;
         PreflightManifest? originalManifest = null;
 
         if (PreflightUnix.TryStatAt(rootParent, rootNameBytes, out PreflightFileStatus? destinationStatus))
@@ -202,15 +212,21 @@ internal static class PreflightOperations
             }
 
             PreflightUnix.EnsureNoRepositoryMarker(originalRoot);
-            RejectOverlappingRestorePaths(backup, originalRoot);
-            originalManifest = PreflightSnapshot.Capture(originalRoot);
+            originalRootIndex = PreflightDirectoryIndex.Capture(originalRoot);
+            RejectOverlappingRestorePaths(
+                backupAncestors,
+                backupIndex,
+                PreflightUnix.GetAncestorStatuses(originalRoot),
+                originalRootIndex);
+            originalManifest = PreflightSnapshot.Capture(originalRoot, originalRootIndex);
         }
         else
         {
-            if (PreflightUnix.IsDescendantOrSelf(rootParent, backup))
-            {
-                throw new PreflightBlockedException("restore_paths_overlap");
-            }
+            RejectOverlappingRestorePaths(
+                backupAncestors,
+                backupIndex,
+                PreflightUnix.GetAncestorStatuses(rootParent),
+                null);
         }
 
         using (originalRoot)
@@ -218,16 +234,17 @@ internal static class PreflightOperations
             if (originalRoot is not null)
             {
                 using SafeFileHandle manifestParent = PreflightUnix.OpenDirectoryPath(Path.GetDirectoryName(PreflightPath.FullPath(manifestPath)) ?? "/");
-                PreflightUnix.EnsureOutsideTree(manifestParent, originalRoot);
+                PreflightUnix.EnsureOutsideTree(manifestParent, originalRootIndex!);
             }
 
-            PreflightManifest manifest = PreflightManifestStore.Read(manifestPath, originalRoot);
-            VerifyBackupTree(backupTree, manifest);
+            PreflightManifest manifest = PreflightManifestStore.Read(manifestPath, originalRootIndex);
+            VerifyBackupTree(backupTree, manifest, backupIndex);
             byte[] stageName = CreateStageDirectory(rootParent);
             using SafeFileHandle stage = PreflightUnix.OpenDirectoryAt(rootParent, stageName);
             afterStageCreated?.Invoke();
             CopyEntries(backupTree, stage, manifest, true, afterStageEntryCopied);
-            Verify(stage, manifest, "restore_staging_mismatch");
+            PreflightDirectoryIndex stageIndex = PreflightDirectoryIndex.Capture(stage);
+            Verify(stage, manifest, "restore_staging_mismatch", stageIndex);
             PreflightFileStatus stageStatus = PreflightUnix.StatHandle(stage);
             PreflightUnix.SyncTree(stage, afterStageDirectorySynced);
             PreflightUnix.SyncDirectory(rootParent);
@@ -241,7 +258,7 @@ internal static class PreflightOperations
                     throw new PreflightBlockedException("restore_root_changed");
                 }
 
-                Verify(originalRoot, originalManifest!, "restore_root_changed");
+                Verify(originalRoot, originalManifest!, "restore_root_changed", originalRootIndex!);
 
                 beforeExchange?.Invoke();
 
@@ -268,7 +285,7 @@ internal static class PreflightOperations
                         throw new PreflightBlockedException("restore_installed_tree_changed");
                     }
 
-                    Verify(installed, manifest, "restore_verification_failed");
+                    Verify(installed, manifest, "restore_verification_failed", stageIndex);
                     using SafeFileHandle retained = PreflightUnix.OpenDirectoryAt(rootParent, stageName);
                     PreflightFileStatus retainedStatus = PreflightUnix.StatHandle(retained);
 
@@ -277,7 +294,7 @@ internal static class PreflightOperations
                         throw new PreflightBlockedException("restore_superseded_tree_changed");
                     }
 
-                    Verify(retained, originalManifest!, "restore_superseded_verification_failed");
+                    Verify(retained, originalManifest!, "restore_superseded_verification_failed", originalRootIndex!);
 
                     EnsureExchangeEntriesMatchOrRecover(rootParent, rootNameBytes, stageName, stageStatus, originalRootStatus!, exchange);
 
@@ -318,7 +335,7 @@ internal static class PreflightOperations
                         }
 
                         using SafeFileHandle restored = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
-                        Verify(restored, originalManifest!, "restore_rollback_verification_failed");
+                        Verify(restored, originalManifest!, "restore_rollback_verification_failed", originalRootIndex!);
 
                         if (!PreflightUnix.TryStatAt(rootParent, rootNameBytes, out restoredPathStatus)
                             || !PreflightUnix.IsSameEntry(originalRootStatus!, restoredPathStatus!))
@@ -343,7 +360,7 @@ internal static class PreflightOperations
                 afterSwap?.Invoke();
 
                 using SafeFileHandle installed = PreflightUnix.OpenDirectoryAt(rootParent, rootNameBytes);
-                Verify(installed, manifest, "restore_verification_failed");
+                Verify(installed, manifest, "restore_verification_failed", stageIndex);
                 return null;
             }
             catch
@@ -358,7 +375,7 @@ internal static class PreflightOperations
                         PreflightUnix.SyncDirectory(rootParent);
 
                         using SafeFileHandle retained = PreflightUnix.OpenDirectoryAt(rootParent, stageName);
-                        Verify(retained, manifest, "restore_rollback_verification_failed");
+                        Verify(retained, manifest, "restore_rollback_verification_failed", stageIndex);
 
                         if (PreflightUnix.TryStatAt(rootParent, rootNameBytes, out _))
                         {
@@ -376,9 +393,18 @@ internal static class PreflightOperations
         }
     }
 
-    private static void RejectOverlappingRestorePaths(SafeFileHandle backup, SafeFileHandle root)
+    internal static void RejectOverlappingRestorePaths(
+        IEnumerable<PreflightFileStatus> backupAncestors,
+        PreflightDirectoryIndex? backupIndex,
+        IEnumerable<PreflightFileStatus> rootAncestors,
+        PreflightDirectoryIndex? rootIndex)
     {
-        if (PreflightUnix.IsDescendantOrSelf(backup, root) || PreflightUnix.IsDescendantOrSelf(root, backup))
+        bool backupIsInsideRoot = rootIndex is not null
+            && PreflightUnix.HasAncestorInIndex(backupAncestors, rootIndex);
+        bool rootIsInsideBackup = backupIndex is not null
+            && PreflightUnix.HasAncestorInIndex(rootAncestors, backupIndex);
+
+        if (backupIsInsideRoot || rootIsInsideBackup)
         {
             throw new PreflightBlockedException("restore_paths_overlap");
         }
@@ -525,13 +551,24 @@ internal static class PreflightOperations
 
     private static void Verify(SafeFileHandle root, PreflightManifest expected)
     {
-        Verify(root, expected, "tree_mismatch");
+        PreflightDirectoryIndex directoryIndex = PreflightDirectoryIndex.Capture(root);
+        Verify(root, expected, "tree_mismatch", directoryIndex);
     }
 
     private static void Verify(SafeFileHandle root, PreflightManifest expected, string mismatchCode)
     {
+        PreflightDirectoryIndex directoryIndex = PreflightDirectoryIndex.Capture(root);
+        Verify(root, expected, mismatchCode, directoryIndex);
+    }
+
+    private static void Verify(
+        SafeFileHandle root,
+        PreflightManifest expected,
+        string mismatchCode,
+        PreflightDirectoryIndex directoryIndex)
+    {
         PreflightManifestCodec.Validate(expected);
-        PreflightManifest actual = PreflightSnapshot.Capture(root);
+        PreflightManifest actual = PreflightSnapshot.Capture(root, directoryIndex);
 
         if (!AreEqual(expected, actual))
         {
@@ -541,7 +578,16 @@ internal static class PreflightOperations
 
     private static void VerifyBackupTree(SafeFileHandle root, PreflightManifest expected)
     {
-        PreflightManifest actual = PreflightSnapshot.Capture(root);
+        PreflightDirectoryIndex directoryIndex = PreflightDirectoryIndex.Capture(root);
+        VerifyBackupTree(root, expected, directoryIndex);
+    }
+
+    private static void VerifyBackupTree(
+        SafeFileHandle root,
+        PreflightManifest expected,
+        PreflightDirectoryIndex directoryIndex)
+    {
+        PreflightManifest actual = PreflightSnapshot.Capture(root, directoryIndex);
 
         if (expected.SchemaVersion != actual.SchemaVersion || expected.Entries.Count != actual.Entries.Count)
         {

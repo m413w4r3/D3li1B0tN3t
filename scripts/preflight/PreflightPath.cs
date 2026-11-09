@@ -117,8 +117,9 @@ internal static class PreflightPath
     public static void EnsureOutsideTree(string root, string path)
     {
         using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(root);
+        PreflightDirectoryIndex sourceIndex = PreflightDirectoryIndex.Capture(source);
         string parentPath = Path.GetDirectoryName(FullPath(path)) ?? "/";
         using SafeFileHandle destinationParent = PreflightUnix.OpenDirectoryPath(parentPath);
-        PreflightUnix.EnsureOutsideTree(destinationParent, source);
+        PreflightUnix.EnsureOutsideTree(destinationParent, sourceIndex);
     }
 }

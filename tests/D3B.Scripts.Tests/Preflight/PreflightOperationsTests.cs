@@ -322,7 +322,9 @@ public sealed class PreflightOperationsTests
         string sourceAlias = directory.Combine("source-alias");
         Directory.CreateSymbolicLink(sourceAlias, root);
 
-        Assert.Throws<PreflightBlockedException>(() => PreflightOperations.SnapshotToFile(root, System.IO.Path.Combine(sourceAlias, "manifest.json")));
+        PreflightBlockedException symlinkedSource = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightOperations.SnapshotToFile(root, System.IO.Path.Combine(sourceAlias, "manifest.json")));
+        Assert.Equal("path_component_unsafe", symlinkedSource.Code);
         Assert.Throws<PreflightBlockedException>(() => PreflightOperations.Compare(root, beforePath, System.IO.Path.Combine(sourceAlias, "after.json")));
 
         string repository = directory.Combine("repository");
@@ -714,6 +716,126 @@ public sealed class PreflightOperationsTests
     }
 
     [Fact]
+    public void RestoreRejectsDestinationInsideBackupBeforeCreatingStage()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        string sourceNested = System.IO.Path.Combine(source, "nested");
+        Directory.CreateDirectory(sourceNested);
+        directory.WriteFile(sourceNested, "source-file", [1, 2, 3]);
+        string backup = directory.Combine("backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+        string destination = System.IO.Path.Combine(backup, "tree", "nested");
+        string unchanged = directory.WriteFile(destination, "sentinel", [9, 8, 7]);
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightOperations.Restore(backup, manifestPath, destination));
+
+        Assert.Equal("restore_paths_overlap", exception.Code);
+        Assert.Equal([9, 8, 7], File.ReadAllBytes(unchanged));
+        Assert.Empty(Directory.GetDirectories(System.IO.Path.Combine(backup, "tree"), ".preflight-stage-*"));
+    }
+
+    [Fact]
+    public void RestoreRejectsBackupInsideDestinationBeforeCreatingStage()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        Directory.CreateDirectory(source);
+        directory.WriteFile(source, "replacement", [1, 2, 3]);
+        string destination = directory.Combine("destination");
+        Directory.CreateDirectory(destination);
+        string unchanged = directory.WriteFile(destination, "sentinel", [9, 8, 7]);
+        string backup = System.IO.Path.Combine(destination, "backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightOperations.Restore(backup, manifestPath, destination));
+
+        Assert.Equal("restore_paths_overlap", exception.Code);
+        Assert.Equal([9, 8, 7], File.ReadAllBytes(unchanged));
+        Assert.Empty(Directory.GetDirectories(directory.Path, ".preflight-stage-*"));
+    }
+
+    [Fact]
+    public void RestoreOverlapCheckRejectsBackupDescendantAliasAcrossMountIds()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        string sourceNested = System.IO.Path.Combine(source, "nested");
+        Directory.CreateDirectory(sourceNested);
+        directory.WriteFile(sourceNested, "file", [1]);
+        string backup = directory.Combine("backup");
+        _ = PreflightOperations.Backup(source, backup);
+        using SafeFileHandle backupRoot = PreflightUnix.OpenDirectoryPath(backup);
+        PreflightDirectoryIndex backupIndex = PreflightDirectoryIndex.Capture(backupRoot);
+        using SafeFileHandle descendantHandle = PreflightUnix.OpenDirectoryPath(System.IO.Path.Combine(backup, "tree", "nested"));
+        PreflightFileStatus descendant = PreflightUnix.StatHandle(descendantHandle);
+        PreflightFileStatus alias = WithMountId(descendant, checked(descendant.MountId + 1));
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightOperations.RejectOverlappingRestorePaths([], backupIndex, [alias], null));
+
+        Assert.Equal("restore_paths_overlap", exception.Code);
+    }
+
+    [Fact]
+    public void RestoreOverlapCheckRejectsDestinationDescendantAliasAcrossMountIds()
+    {
+        using var directory = new PreflightTestDirectory();
+        string destination = directory.Combine("destination");
+        string nested = System.IO.Path.Combine(destination, "nested");
+        Directory.CreateDirectory(nested);
+        using SafeFileHandle destinationRoot = PreflightUnix.OpenDirectoryPath(destination);
+        PreflightDirectoryIndex destinationIndex = PreflightDirectoryIndex.Capture(destinationRoot);
+        using SafeFileHandle descendantHandle = PreflightUnix.OpenDirectoryPath(nested);
+        PreflightFileStatus descendant = PreflightUnix.StatHandle(descendantHandle);
+        PreflightFileStatus alias = WithMountId(descendant, checked(descendant.MountId + 1));
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightOperations.RejectOverlappingRestorePaths([alias], null, [], destinationIndex));
+
+        Assert.Equal("restore_paths_overlap", exception.Code);
+    }
+
+    [Fact]
+    public void RestoreToExternalDestinationSucceeds()
+    {
+        using var directory = new PreflightTestDirectory();
+        string source = directory.Combine("source");
+        Directory.CreateDirectory(source);
+        directory.WriteFile(source, "restored", [1, 2, 3]);
+        string backup = directory.Combine("backup");
+        string manifestPath = PreflightOperations.Backup(source, backup);
+        string destination = directory.Combine("destination");
+        Directory.CreateDirectory(destination);
+
+        PreflightOperations.Restore(backup, manifestPath, destination);
+
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(System.IO.Path.Combine(destination, "restored")));
+    }
+
+    [Fact]
+    public void RepositoryIdentityCheckRejectsDescendantAliasAcrossMountIds()
+    {
+        using var directory = new PreflightTestDirectory();
+        string repository = directory.Combine("synthetic-repository");
+        string descendantPath = System.IO.Path.Combine(repository, "nested");
+        Directory.CreateDirectory(descendantPath);
+        File.WriteAllText(System.IO.Path.Combine(repository, "D3B.slnx"), "synthetic marker");
+        using SafeFileHandle repositoryRoot = PreflightUnix.OpenDirectoryPath(repository);
+        PreflightDirectoryIndex repositoryIndex = PreflightDirectoryIndex.Capture(repositoryRoot);
+        using SafeFileHandle descendantHandle = PreflightUnix.OpenDirectoryPath(descendantPath);
+        PreflightFileStatus descendant = PreflightUnix.StatHandle(descendantHandle);
+        PreflightFileStatus alias = WithMountId(descendant, checked(descendant.MountId + 1));
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightUnix.EnsureNoRepositoryIdentity([alias], [repositoryIndex]));
+
+        Assert.Equal("repository_output_forbidden", exception.Code);
+    }
+
+    [Fact]
     public void MountBoundaryCheckRejectsDifferentMountIdentity()
     {
         var root = new PreflightFileStatus(PreflightUnix.DirectoryType, 0, 0x1c0, 1, 8, 1, 10, 0, 0, 0, 0);
@@ -753,11 +875,160 @@ public sealed class PreflightOperationsTests
         Directory.CreateDirectory(outputPath);
         using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(sourcePath);
         using SafeFileHandle output = PreflightUnix.OpenDirectoryPath(outputPath);
+        PreflightDirectoryIndex sourceIndex = PreflightDirectoryIndex.Capture(source);
 
         PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
-            PreflightUnix.EnsureOutsideTree(output, source));
+            PreflightUnix.EnsureOutsideTree(output, sourceIndex));
 
         Assert.Equal("output_inside_source_tree", exception.Code);
+    }
+
+    [Fact]
+    public void DestinationAncestryWithSourceRootIdentityOnSameMountIsBlockedAsContainment()
+    {
+        PreflightFileStatus sourceRoot = DirectoryStatus(42, 8, 1, 10);
+        var sourceIndex = new PreflightDirectoryIndex(sourceRoot, [sourceRoot]);
+        PreflightFileStatus directRoot = DirectoryStatus(42, 8, 1, 10);
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightUnix.EnsureOutsideTree([directRoot], sourceIndex));
+
+        Assert.Equal("output_inside_source_tree", exception.Code);
+    }
+
+    [Fact]
+    public void RealSourceDescendantIdentityOnDifferentMountIsBlockedAsAlias()
+    {
+        using var directory = new PreflightTestDirectory();
+        string nestedPath = System.IO.Path.Combine(directory.Root, "nested");
+        Directory.CreateDirectory(nestedPath);
+        using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(directory.Root);
+        PreflightDirectoryIndex sourceIndex = PreflightDirectoryIndex.Capture(source);
+        PreflightFileStatus descendant = PreflightUnix.StatAt(source, PreflightUnix.EncodeName("nested"));
+        var descendantAlias = new PreflightFileStatus(
+            descendant.Type,
+            descendant.Size,
+            descendant.Mode,
+            descendant.Inode,
+            descendant.DeviceMajor,
+            descendant.DeviceMinor,
+            checked(descendant.MountId + 1),
+            descendant.ChangeSeconds,
+            descendant.ChangeNanoseconds,
+            descendant.ModifiedSeconds,
+            descendant.ModifiedNanoseconds,
+            descendant.IdentityAvailable);
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightUnix.EnsureOutsideTree([descendantAlias], sourceIndex));
+
+        Assert.Equal("destination_aliases_source", exception.Code);
+    }
+
+    [Fact]
+    public void SnapshotToFileRejectsDestinationInsideSourceTree()
+    {
+        using var directory = new PreflightTestDirectory();
+        string sourcePath = directory.Root;
+        string outputPath = System.IO.Path.Combine(sourcePath, "nested", "manifest.json");
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightOperations.SnapshotToFile(sourcePath, outputPath));
+
+        Assert.Equal("output_inside_source_tree", exception.Code);
+    }
+
+    [Fact]
+    public void SnapshotToFileAcceptsDestinationOutsideSourceTree()
+    {
+        using var directory = new PreflightTestDirectory();
+        string sourcePath = directory.Root;
+        string outputPath = directory.Combine("outside/manifest.json");
+
+        PreflightOperations.SnapshotToFile(sourcePath, outputPath);
+
+        Assert.True(File.Exists(outputPath));
+    }
+
+    [Fact]
+    public void DestinationAncestryWithSourceRootIdentityIsBlockedAcrossMountIds()
+    {
+        PreflightFileStatus sourceRoot = DirectoryStatus(42, 8, 1, 10);
+        var sourceIndex = new PreflightDirectoryIndex(sourceRoot, [sourceRoot]);
+        PreflightFileStatus rootAlias = DirectoryStatus(42, 8, 1, 11);
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightUnix.EnsureOutsideTree([rootAlias], sourceIndex));
+
+        Assert.Equal("destination_aliases_source", exception.Code);
+    }
+
+    [Fact]
+    public void DestinationAncestryWithSourceDescendantIdentityIsBlockedAcrossMountIds()
+    {
+        PreflightFileStatus sourceRoot = DirectoryStatus(42, 8, 1, 10);
+        PreflightFileStatus sourceDescendant = DirectoryStatus(43, 8, 1, 10);
+        var sourceIndex = new PreflightDirectoryIndex(sourceRoot, [sourceRoot, sourceDescendant]);
+        PreflightFileStatus descendantAlias = DirectoryStatus(43, 8, 1, 11);
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightUnix.EnsureOutsideTree([descendantAlias], sourceIndex));
+
+        Assert.Equal("destination_aliases_source", exception.Code);
+    }
+
+    [Fact]
+    public void DestinationAncestryChecksEveryExistingAncestorForSourceAliases()
+    {
+        PreflightFileStatus sourceRoot = DirectoryStatus(42, 8, 1, 10);
+        PreflightFileStatus sourceDescendant = DirectoryStatus(43, 8, 1, 10);
+        var sourceIndex = new PreflightDirectoryIndex(sourceRoot, [sourceRoot, sourceDescendant]);
+        PreflightFileStatus destination = DirectoryStatus(50, 8, 1, 10);
+        PreflightFileStatus parent = DirectoryStatus(51, 8, 1, 10);
+        PreflightFileStatus descendantAlias = DirectoryStatus(43, 8, 1, 11);
+        PreflightFileStatus outsideParent = DirectoryStatus(52, 8, 1, 10);
+
+        PreflightBlockedException exception = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightUnix.EnsureOutsideTree([destination, parent, descendantAlias, outsideParent], sourceIndex));
+
+        Assert.Equal("destination_aliases_source", exception.Code);
+    }
+
+    [Fact]
+    public void DestinationOnSameFilesystemWithDifferentDirectoryIdentityIsAccepted()
+    {
+        PreflightFileStatus sourceRoot = DirectoryStatus(42, 8, 1, 10);
+        var sourceIndex = new PreflightDirectoryIndex(sourceRoot, [sourceRoot]);
+        PreflightFileStatus destination = DirectoryStatus(43, 8, 1, 10);
+
+        PreflightUnix.EnsureOutsideTree([destination], sourceIndex);
+    }
+
+    [Fact]
+    public void DestinationAncestryAcrossUnrelatedMountsIsAcceptedWithoutIdentityMatch()
+    {
+        PreflightFileStatus sourceRoot = DirectoryStatus(42, 8, 1, 10);
+        var sourceIndex = new PreflightDirectoryIndex(sourceRoot, [sourceRoot]);
+        PreflightFileStatus destination = DirectoryStatus(50, 8, 1, 10);
+        PreflightFileStatus unrelatedMount = DirectoryStatus(51, 9, 2, 11);
+        PreflightFileStatus outsideRoot = DirectoryStatus(52, 9, 2, 11);
+
+        PreflightUnix.EnsureOutsideTree([destination, unrelatedMount, outsideRoot], sourceIndex);
+    }
+
+    [Fact]
+    public void DirectoryIdentityRejectsNonDirectoriesAndUnavailableIdentity()
+    {
+        var file = new PreflightFileStatus(PreflightUnix.RegularFileType, 1, 0x180, 42, 8, 1, 10, 0, 0, 0, 0);
+        PreflightFileStatus unavailable = new(PreflightUnix.DirectoryType, 0, 0x1c0, 42, 8, 1, 10, 0, 0, 0, 0, false);
+
+        PreflightBlockedException nonDirectory = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightDirectoryIdentity.FromStatus(file));
+        PreflightBlockedException missingIdentity = Assert.Throws<PreflightBlockedException>(() =>
+            PreflightDirectoryIdentity.FromStatus(unavailable));
+
+        Assert.Equal("directory_identity_unavailable", nonDirectory.Code);
+        Assert.Equal("directory_identity_unavailable", missingIdentity.Code);
     }
 
     [Fact]
@@ -766,8 +1037,9 @@ public sealed class PreflightOperationsTests
         using var directory = new PreflightTestDirectory();
         using SafeFileHandle source = PreflightUnix.OpenDirectoryPath(directory.Root);
         using SafeFileHandle output = PreflightUnix.OpenDirectoryPath("/proc");
+        PreflightDirectoryIndex sourceIndex = PreflightDirectoryIndex.Capture(source);
 
-        PreflightUnix.EnsureOutsideTree(output, source);
+        PreflightUnix.EnsureOutsideTree(output, sourceIndex);
         PreflightUnix.EnsureNoRepositoryMarker(output);
     }
 
@@ -779,6 +1051,28 @@ public sealed class PreflightOperationsTests
 
         Assert.True(PreflightUnix.IsSameObject(sourceRoot, bindAlias));
         Assert.Throws<PreflightBlockedException>(() => PreflightUnix.IsSameObjectOnSameMount(bindAlias, sourceRoot));
+    }
+
+    private static PreflightFileStatus DirectoryStatus(ulong inode, uint deviceMajor, uint deviceMinor, ulong mountId)
+    {
+        return new PreflightFileStatus(PreflightUnix.DirectoryType, 0, 0x1c0, inode, deviceMajor, deviceMinor, mountId, 0, 0, 0, 0);
+    }
+
+    private static PreflightFileStatus WithMountId(PreflightFileStatus status, ulong mountId)
+    {
+        return new PreflightFileStatus(
+            status.Type,
+            status.Size,
+            status.Mode,
+            status.Inode,
+            status.DeviceMajor,
+            status.DeviceMinor,
+            mountId,
+            status.ChangeSeconds,
+            status.ChangeNanoseconds,
+            status.ModifiedSeconds,
+            status.ModifiedNanoseconds,
+            status.IdentityAvailable);
     }
 
     [Fact]

@@ -3,6 +3,8 @@
 #:include preflight/PreflightBlockedException.cs
 #:include preflight/PreflightBlockedDetail.cs
 #:include preflight/PreflightCommand.cs
+#:include preflight/PreflightDirectoryIdentity.cs
+#:include preflight/PreflightDirectoryIndex.cs
 #:include preflight/PreflightManifest.cs
 #:include preflight/PreflightManifestCodec.cs
 #:include preflight/PreflightManifestEntry.cs
