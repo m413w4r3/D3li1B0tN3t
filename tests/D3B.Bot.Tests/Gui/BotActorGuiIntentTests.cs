@@ -476,7 +476,7 @@ public sealed class BotActorGuiIntentTests : IAsyncDisposable
         await bot.ProcessedAsync();
 
         Assert.Equal(GuiIntentCorrelationState.ServerConfirmed, bot.GuiIntentState);
-        Assert.False(clickLease.IsCancelled);
+        Assert.True(clickLease.IsCancelled);
         Assert.Equal(GuiServerOutcome.MovementConfirmed, await outcome);
         Assert.Equal(TargetCell, bot.State.Cell);
         Assert.Equal(CellProvenance.ServerConfirmed, bot.State.Provenance);

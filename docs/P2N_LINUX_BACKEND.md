@@ -62,11 +62,13 @@ out, or is canceled, its result is uncertain because XTest may already have emit
 reports that case as `UNCONFIRMED` and does not retry. Validation refusals and failures before the lease claim report
 no possible click.
 
-An unread frame that closes the movement translation latch cancels the active lease synchronously in `Bots.OnFrame`,
-before the actor inbox notification is posted. After the actor's `MarkClicked` gate succeeds, a session epoch has spent
-its one permitted GUI click attempt even if the backend is canceled before launching the command. A new action requires
-a new session epoch. If the lease's launch claim wins before revocation, the click cannot be retracted and any later
-failure or cancellation is uncertain; the action is not retried.
+Every observable revocation cancels the active lease synchronously before actor inbox handling: pause, attach, detach,
+stop, decoded client gameplay, fight start, map state changes, self movement, movement refusal/confirmation, and an
+unread frame that closes the movement translation latch. The inbox then applies the same revocation to correlation as
+defense in depth. After the actor's `MarkClicked` gate succeeds, a session epoch has spent its one permitted GUI click
+attempt even if the backend is canceled before launching the command. A new action requires a new session epoch. If the
+lease's launch claim wins before revocation, the click cannot be retracted and any later failure or cancellation is
+uncertain; the action is not retried.
 
 ## Privileges and dependencies
 

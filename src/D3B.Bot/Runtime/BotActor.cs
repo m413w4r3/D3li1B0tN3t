@@ -211,21 +211,34 @@ public sealed class BotActor : IAsyncDisposable
         return canceledLease;
     }
 
-    /// <summary>Revokes the current session's click synchronously when its translation latch closes.</summary>
-    internal void RevokeGuiClickLeaseForTranslationBlocked(GameSession session)
+    /// <summary>Revokes the current intent's click synchronously at an external revocation source.</summary>
+    /// <param name="reason">The matching actor revocation that will also be queued or applied.</param>
+    /// <param name="session">The source session, when the revocation came from one specific connection.</param>
+    /// <param name="intentId">The source intent, when the revocation belongs to one specific intention.</param>
+    internal void RevokeGuiClickLease(string reason, GameSession? session = null, Guid? intentId = null)
     {
-        ArgumentNullException.ThrowIfNull(session);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
         GuiClickLease? lease;
 
         lock (_guiClickLeaseSync)
         {
-            lease = ReferenceEquals(_session, session)
-                && ReferenceEquals(_guiClickLeaseSession, session)
+            lease = _guiClickLeaseIntentId is not null
+                && (intentId is null || _guiClickLeaseIntentId == intentId)
+                && _guiClickLeaseSession is { } leaseSession
+                && ReferenceEquals(_session, leaseSession)
+                && (session is null || ReferenceEquals(leaseSession, session))
                 ? _guiClickLease
                 : null;
         }
 
         lease?.Cancel();
+    }
+
+    /// <summary>Revokes the current session's click synchronously when its translation latch closes.</summary>
+    internal void RevokeGuiClickLeaseForTranslationBlocked(GameSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        RevokeGuiClickLease("The session movement-translation latch closed.", session);
     }
 
     internal ILogger Log => _log;
@@ -421,6 +434,8 @@ public sealed class BotActor : IAsyncDisposable
         if (_stopping)
             return Task.FromResult(false);
 
+        RevokeGuiClickLease(reason, intentId: intentId);
+
         var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         if (!_inbox.Writer.TryWrite(new CancelGuiIntent(intentId, clickMayHaveBeenEmitted, reason, completed, cancellationToken)))
@@ -510,6 +525,7 @@ public sealed class BotActor : IAsyncDisposable
     /// <summary>Pauses the bot as the player's hand does, such as after a fight an activity's settings pause it after: it starts nothing until <see cref="Resume"/> (D144).</summary>
     internal void Pause()
     {
+        RevokeGuiClickLease("The bot was paused.");
         Post(new Pausing());
     }
 
@@ -560,7 +576,7 @@ public sealed class BotActor : IAsyncDisposable
     internal void BeginStopping()
     {
         _stopping = true;
-        CancelGuiClickLease();
+        RevokeGuiClickLease("The bot began stopping.");
     }
 
     /// <summary>Stops the bot: its behavior is interrupted, and its inbox read to the end.</summary>
@@ -598,8 +614,13 @@ public sealed class BotActor : IAsyncDisposable
     {
         lock (_sessionLock)
         {
-            if (_activeSession is { } previous && !ReferenceEquals(previous, session))
+            GameSession? previous = _activeSession ?? _session;
+
+            if (previous is not null && !ReferenceEquals(previous, session))
+            {
+                RevokeGuiClickLease("A new session replaced the active session.");
                 previous.Supersede();
+            }
 
             _activeSession = session;
         }
@@ -623,9 +644,12 @@ public sealed class BotActor : IAsyncDisposable
         {
             if (ReferenceEquals(_activeSession, session))
             {
+                RevokeGuiClickLease("The active session detached.", session);
                 session.Supersede();
                 _activeSession = null;
             }
+            else if (ReferenceEquals(_session, session))
+                RevokeGuiClickLease("The active session detached.", session);
         }
 
         Post(new Detached(session));
@@ -1015,6 +1039,7 @@ public sealed class BotActor : IAsyncDisposable
             static state =>
             {
                 var expiry = (GuiWaiterTimerState)state!;
+                expiry.Actor.RevokeGuiClickLease("The intention expired while awaiting its server outcome.", intentId: expiry.Waiter.IntentId);
                 expiry.Actor.Post(new ExpireGuiOutcomeWaiter(expiry.Waiter));
             },
             new GuiWaiterTimerState(this, waiter),
@@ -1043,6 +1068,7 @@ public sealed class BotActor : IAsyncDisposable
 
         if (remaining <= TimeSpan.Zero)
         {
+            RevokeGuiClickLease("The intention expired.", intentId: intent.IntentId);
             Post(new ExpireGuiIntent(intent.IntentId));
             return;
         }
@@ -1052,6 +1078,7 @@ public sealed class BotActor : IAsyncDisposable
             static state =>
             {
                 var expiry = (GuiIntentExpiryTimerState)state!;
+                expiry.Actor.RevokeGuiClickLease("The intention expired.", intentId: expiry.IntentId);
                 expiry.Actor.Post(new ExpireGuiIntent(expiry.IntentId));
             },
             new GuiIntentExpiryTimerState(this, intent.IntentId),
@@ -1939,6 +1966,7 @@ public sealed class BotActor : IAsyncDisposable
 
     private void OnStopping()
     {
+        RevokeGuiClickLease("The bot stopped.");
         CancelActiveGuiIntent("The bot stopped during the intention.");
 
         _session?.Supersede();
