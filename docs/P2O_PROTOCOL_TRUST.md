@@ -91,3 +91,29 @@ A future **MANUAL/SUPERVISED GO** must independently establish all of the follow
   **BLOCKED**, not GO.
 
 No live client action or supervised acceptance is claimed by this document or by the offline policy tests.
+
+## A2 audit verdict and residual
+
+**VERIFIED — audit record:** the initial A2 delta on `50da320369d820eeaa3524a3e9eff6564584a1d0` was **REJECT**.
+Its BLOCKER was stale dialog state leaving the click lease open; its MAJOR was that identical simultaneous human input
+could not be attributed fail-closed. L3f commit `012112e3f91a4f2492712f726de101a252f987d3` added synchronous
+revocation for client `DialogLeaveRequest` and server dialog, teleport, exchange, and interactive-use state frames,
+actor-side defense in depth, blocked-actor and end-to-end regression coverage, and a narrower
+`P2N_GUI_CONTRACT` claim. The A2 delta on integration commit `3ebf635aecdc9ce632bbc898254a6d391035a255` is
+**APPROVE — offline boundary only**. The stale-dialog BLOCKER is closed and verified.
+
+The remaining A2 MAJOR is the inherent identical-simultaneous-human-input attribution limit described above. The code
+cannot prove perfect attribution when the protocol observations are identical. This residual is accepted only as a
+documented offline boundary; it does not support a live action or a claim that the synthesized input caused the
+observed request.
+
+**A2 NIT:** the combined server-dialog-then-client-leave test does not assert actor state between those two frames.
+Separate tests cover each revocation path. This is a test-quality note, not evidence of a safety bypass.
+
+**OPEN:** no live evidence establishes the map/cell provenance, calibration freshness, latch state, scene stability,
+or action-time target. An unproven live condition remains **BLOCKED**. The P2O gate does not override the translation
+latch: it can use only an open latch and complete evidence. `GuiClientInput` does not change that trust rule.
+
+Audit and code anchors: `src/D3B.Bot/Runtime/Bots.cs:236-270` and
+`src/D3B.Bot/Runtime/BotActor.cs:967-991,1461-1644` at `012112e` / `3ebf635`; offline evidence and findings are
+recorded in `docs/P2O_OFFLINE_REPORT.md`.

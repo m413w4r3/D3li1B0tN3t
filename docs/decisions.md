@@ -7413,3 +7413,97 @@ Settled questions leave this table, and the decision that settles one says so.
 - **Why**: a pair of separate renames can leave the requested path absent after interruption or a competing creator.
   An exchange keeps a tree at the destination name throughout the namespace update, and synchronization makes the
   verified stage and its installation durable on filesystems that honor `fsync`.
+
+## D335: P2O keeps GUI actions inside the existing architecture
+
+*2026-11-09, P2O documentation and final offline boundary.*
+
+- **Decision**: keep window observation, `maim` capture, OpenCV calibration and target evidence in `D3B.Gui`; keep
+  character state, the serialized actor inbox, intent correlation and the caller-only `WalkToCell` coordinator in
+  `D3B.Bot`; keep relay admission in `D3B.Network` and translation in `D3B.Protocol`. Reuse `D3B.Engine` and
+  `D3B.Data`. Do not add a second planner, relay, Python daemon, or concurrent vision pipeline. Preserve
+  `HarvestActivity` in the existing bot modules without activating it from GUI mode.
+- **Why**: one action must join the existing server-observed state with current visual evidence while preserving clear
+  module boundaries. An additional controller or runtime would create a second source of state and action authority.
+- **Checked**: `src/D3B.Bot/Gui/GuiWalkToCellCoordinator.cs:27-28`; `src/D3B.Bot/Runtime/BotActor.cs:875-965`;
+  `src/D3B.Bot/Hosting/GuiHostCapability.cs:20-44`; `src/D3B.Bot/DefaultModules.cs:23-29`.
+
+## D336: P2O admits only one confirmed WalkToCell action contract
+
+*2026-11-09, P2O offline action contract.*
+
+- **Decision**: constrain the actor inbox to one active, expiring `WalkToCell` intent per session; bind its unique ID,
+  epoch, revision, map, target, window, calibration and expected client/server evidence. Require registration and ACK
+  before input, a final actor/window check at `MarkClicked`, at most one click, and no retry. `PASS` requires the
+  compatible client movement request, matching self movement event, and final server movement confirmation that
+  establishes the target with `ServerConfirmed` provenance. Keep `UseElement` deferred.
+- **Why**: the request, server path and final cell confirmation provide distinct evidence. A click, animation, refusal,
+  partial response or a single matching packet cannot establish the complete action result.
+- **Checked**: `src/D3B.Gui/Actions/GuiActionIntent.cs:6-107`;
+  `src/D3B.Bot/Runtime/BotActor.cs:875-965,1503-1644`; `src/D3B.Bot/Gui/GuiIntentCorrelation.cs:147-265`.
+
+## D337: P2O preserves protocol trust and the movement latch
+
+*2026-11-09, P2O A2 audit delta.*
+
+- **Decision**: network-injection admission and GUI-target trust remain separate authorizations. The only undecoded
+  message exception is an exact-build, exact-direction `NonPositionMessages` allowlist entry whose payload validates
+  against that build's schema. Every other unknown message closes the movement latch and blocks GUI trust. GUI input
+  mode never bypasses the latch. P2O may act only on an open latch and complete evidence.
+- **Why**: refusing a D3B-originated request does not decode unknown client/server state, and visual evidence cannot
+  repair incomplete protocol state. The A2 delta on `3ebf635` is **APPROVE — offline boundary only**; live proof remains
+  absent. The accepted attribution residual is that identical simultaneous human and synthesized clicks may be
+  indistinguishable.
+- **Checked**: `src/D3B.Bot/Network/GameSession.cs:260-313`;
+  `src/D3B.Bot/Network/NonPositionMessages.cs:25-100`;
+  `docs/P2O_PROTOCOL_TRUST.md`; A2 initial delta `50da320369d820eeaa3524a3e9eff6564584a1d0`, fix
+  `012112e3f91a4f2492712f726de101a252f987d3`, final delta `3ebf635aecdc9ce632bbc898254a6d391035a255`.
+
+## D338: GUI client input admission stays opt-in
+
+*2026-11-09, P2O network admission.*
+
+- **Decision**: production `GuiClientInput` admission remains off by default. `GuiOptions.Enabled` defaults to false
+  and `InputMode` defaults to `ProtocolInjection`; host validation requires `Gui:Enabled=true` for `GuiClientInput`.
+  Keep the production GUI gameplay allowlist empty and deny raw untyped sends in GUI mode. The relay's final admission
+  check and injected-frame write remain serialized with mode changes under `_admissionLock`.
+- **Why**: the explicit switch preserves the existing protocol-injection path by default and makes GUI-mode admission
+  reject D3B gameplay requests without changing the client's traffic.
+- **Checked**: `src/D3B.Gui/Safety/GuiOptions.cs:7-16`;
+  `src/D3B.Gui/Safety/GuiOptionsValidator.cs:20-28`; `src/D3B.Bot/Network/GameSession.cs:208-235`;
+  `src/D3B.Network/Relay/InjectedFrames.cs:132-189`; A1 APPROVE on
+  `19ca4593ec9b09caf4a70483621d063908d9886c` / `338f4fcdd3b316e50b23e7866a8ac9f2f6b3a351`, with the MINORs in
+  `docs/P2O_OFFLINE_REPORT.md`.
+
+## D339: P2O uses canonical private preflight manifests and verified restore
+
+*2026-11-09, P2O A3 preflight boundary.*
+
+- **Decision**: use the offline preflight tool's canonical manifest, private atomic snapshot/compare output, verified
+  private backup and manifest-driven restore for client configuration checks. Require post-close comparison and
+  restore verification; a missing or invalid result is **BLOCKED**. Retain failed stages and superseded trees for
+  inspection. Record that directory entries, empty directories and directory modes are outside the manifest contract.
+- **Why**: preflight must detect unexpected client configuration changes and provide verifiable recovery data without
+  putting private client state in Git or recursively deleting entries. `renameat2` has a residual check-to-syscall
+  window; fail-closed checks and manual inspection remain required.
+- **Checked**: `scripts/preflight/PreflightCommand.cs:33-93`;
+  `scripts/preflight/PreflightManifestStore.cs:74-117`; `docs/TESTING.md:40-100`; A3 APPROVE on
+  `166bd26f1545cc2ae1826bc40de3ef49ec357101` / `b2d17f3939e000a370ae9191c7b1f2b020b33f5c`.
+
+## D340: P2O remains BLOCKED for a supervised live action
+
+*2026-11-09, P2O final offline verdict.*
+
+- **Decision**: record the P2O offline integration as complete and audited, and keep live action **BLOCKED**. No READY
+  claim or GO is made. Require a separate observation authorization, live server-proven map/cell and fresh calibration,
+  action-time open-latch and scene-stability evidence, a verified target/window, and a separate explicit one-action GO
+  with an operator present. The current host's one-shot and executor capabilities remain unavailable.
+- **Why**: A2 approves the offline boundary only. No live server position, real action-time calibration, or live latch
+  window has been established; the accepted human-input attribution residual also remains.
+- **Checked**: A1 APPROVE on `19ca4593ec9b09caf4a70483621d063908d9886c` / `338f4fcdd3b316e50b23e7866a8ac9f2f6b3a351`;
+  A3 APPROVE on `166bd26f1545cc2ae1826bc40de3ef49ec357101` / `b2d17f3939e000a370ae9191c7b1f2b020b33f5c`;
+  A2 initial REJECT on `50da320369d820eeaa3524a3e9eff6564584a1d0`, L3f fix
+  `012112e3f91a4f2492712f726de101a252f987d3`, and APPROVE — offline boundary only on
+  `3ebf635aecdc9ce632bbc898254a6d391035a255`; final integration base
+  `3ebf635aecdc9ce632bbc898254a6d391035a255`. See `docs/P2O_OFFLINE_REPORT.md` and
+  `docs/P2O_FIRST_LIVE_ACTION_RUNBOOK.md`.
