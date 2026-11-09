@@ -171,6 +171,37 @@ public sealed class XdotoolGuiInputTests
     }
 
     [Fact]
+    public async Task CancellationAfterPointerMovementPreventsClickLaunch()
+    {
+        GameWindowSnapshot snapshot = CreateTestSnapshot();
+        using CancellationTokenSource cancellation = new();
+        CancelingGameWindowLocator locator = new(snapshot, cancellation, cancelOnLocate: 2);
+        string directory = Path.Combine(Path.GetTempPath(), $"d3b-gui-input-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string moveMarker = Path.Combine(directory, "move");
+        string clickMarker = Path.Combine(directory, "click");
+        string fakeXdotool = Path.Combine(directory, "fake-xdotool");
+        XvfbTestCommands.WriteExecutable(
+            fakeXdotool,
+            $"#!/bin/sh\nif [ \"$1\" = \"mousemove\" ]; then printf moved > '{moveMarker}'; exit 0; fi\nif [ \"$1\" = \"click\" ]; then printf clicked > '{clickMarker}'; exit 0; fi\nexit 1\n");
+        XdotoolGuiInput input = new(locator, fakeXdotool, GetTestEnvironmentValue);
+
+        try
+        {
+            GuiInputResult result = await input.ClickAsync(GetClientCenter(snapshot), snapshot, cancellation.Token);
+
+            Assert.Equal(GuiInputStatus.Canceled, result.Status);
+            Assert.False(result.ClickMayHaveBeenEmitted);
+            Assert.True(File.Exists(moveMarker));
+            Assert.False(File.Exists(clickMarker));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task FailedClickCommandAfterLaunchMayHaveEmittedInput()
     {
         GameWindowSnapshot snapshot = CreateTestSnapshot();
@@ -358,6 +389,37 @@ public sealed class XdotoolGuiInputTests
             ClientHeight: 480,
             Failure: null,
             CapturedAt: DateTimeOffset.UtcNow);
+    }
+
+    private sealed class CancelingGameWindowLocator : IGameWindowLocator
+    {
+        private readonly GameWindowSnapshot _snapshot;
+        private readonly CancellationTokenSource _cancellation;
+        private readonly int _cancelOnLocate;
+        private int _locateCount;
+
+        public CancelingGameWindowLocator(
+            GameWindowSnapshot snapshot,
+            CancellationTokenSource cancellation,
+            int cancelOnLocate)
+        {
+            _snapshot = snapshot;
+            _cancellation = cancellation;
+            _cancelOnLocate = cancelOnLocate;
+        }
+
+        public Task<GameWindowSnapshot> LocateAsync(
+            long xid,
+            GameWindowExpectation expectation,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (Interlocked.Increment(ref _locateCount) == _cancelOnLocate)
+                _cancellation.Cancel();
+
+            return Task.FromResult(_snapshot);
+        }
     }
 
     private static string? GetTestEnvironmentValue(string name)

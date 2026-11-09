@@ -40,7 +40,7 @@ flowchart LR
 | Project | References | Boundary |
 | --- | --- | --- |
 | src/D3B.Gui | D3B.Engine, D3B.Data | Platform and vision library. It has no dependency on Bot, Host, App, Protocol, or Network. OpenCV is supplied by the two central NuGet package references. |
-| src/D3B.Bot | D3B.Gui, D3B.Engine, D3B.Data, D3B.Network, D3B.Protocol, and the existing bot dependencies | Owns character state and the bounded WalkToCell observation path on BotActor's existing inbox. It does not send GUI input or install a capture loop or gameplay trigger. |
+| src/D3B.Bot | D3B.Gui, D3B.Engine, D3B.Data, D3B.Network, D3B.Protocol, and the existing bot dependencies | Owns character state, the bounded WalkToCell observation path, and the caller-invoked single-plan coordinator. The host does not register a capture loop or gameplay trigger. |
 | src/D3B.Storage | D3B.Bot | Existing account/profile storage module used by the executable projects. |
 | src/D3B.Host and src/D3B.App | D3B.Storage | These projects reach D3B.Bot through the existing storage dependency. Neither registers a GUI executor, capture loop, or gameplay trigger; D3B.Gui is transitive through D3B.Bot. |
 | tests/D3B.Gui.Tests | src/D3B.Gui | Pure contracts and synthetic fixtures, plus Xvfb tests against fake windows. |
@@ -74,6 +74,16 @@ BotActor, a client connection, or mutable character state.
   outcome, and final consumption. BotActor feeds WalkToCell observations on its existing inbox and exposes one
   outcome waiter. PlayerActions still pauses a running behavior on client gameplay requests; the observer does not send
   requests or modify GameSession's transport.
+- BotActor owns the active intent's click cancellation token and cancels it when actor state revokes the intent. The
+  coordinator links it to the caller token; XdotoolGuiInput checks cancellation after pointer movement and focus
+  revalidation immediately before starting the click command. A cancellation after command launch is uncertain and
+  remains terminal.
+- A successful MarkClicked gate consumes the session epoch's one permitted GUI click attempt. Pre-click intents that
+  never open that gate may be replaced; an opened gate cannot be retried in the same epoch, including after timeout.
+  Attach or reconnect advances the epoch and resets the allowance.
+- GuiProtocolTrustPolicy is one required evidence check, not standalone authorization. The coordinator separately
+  validates the same-map plan path and its agreement with the verified target cell before it registers or delegates a
+  click.
 - GameInputModePolicy is a pure policy seam. It is not installed at the relay's final network admission point.
 - The executor defaults to NeverConfirms. A click without a matching confirmation ends Unconfirmed and cannot be
   retried with the same intent identifier.

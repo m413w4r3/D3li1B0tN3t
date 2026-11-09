@@ -173,6 +173,10 @@ public sealed class XdotoolGuiInput : IGuiInput
             startInfo.Environment[entry.Key] = entry.Value;
 
         using Process process = new() { StartInfo = startInfo };
+
+        if (cancellationToken.IsCancellationRequested)
+            return new GuiInputResult(GuiInputStatus.Canceled);
+
         bool started;
 
         try

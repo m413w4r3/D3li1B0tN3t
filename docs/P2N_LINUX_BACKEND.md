@@ -47,10 +47,11 @@ observations. A change in process metadata availability or identity status durin
 XdotoolGuiInput is the real-input implementation. It checks that the expected process is verified, re-locates the
 same XID, verifies mapping, geometry, active/focused state, X11, DISPLAY, and XTEST, and checks that the point is
 inside the client area with a 2-pixel margin. It then moves the pointer with xdotool mousemove --sync X Y, re-locates
-and revalidates the window immediately before sending xdotool click 1. The click has no --window option: it is a
-global XTest event. This input implementation requires the expected and current ProcessId and ExecutablePath to match
-exactly, and the current status to be Verified. The action gate independently requires both compared identities to be
-Verified with exact Xid, ProcessId, and ExecutablePath equality.
+and revalidates the window immediately before sending xdotool click 1. It checks the linked cancellation token again
+immediately before starting the click command; actor revocation during pointer movement therefore prevents the click
+launch. The click has no --window option: it is a global XTest event. This input implementation requires the expected
+and current ProcessId and ExecutablePath to match exactly, and the current status to be Verified. The action gate
+independently requires both compared identities to be Verified with exact Xid, ProcessId, and ExecutablePath equality.
 
 The focus observation and global click are not atomic. A focus change in the small interval after revalidation and
 before the click remains possible. P2N input tests use only a fake window in Xvfb.
@@ -59,6 +60,9 @@ before the click remains possible. P2N input tests use only a fake window in Xvf
 times out, or is canceled, its result is uncertain because XTest may already have emitted the click. The action
 executor reports that case as `UNCONFIRMED` and does not retry. Validation refusals and other failures before command
 launch report no possible click.
+
+After the actor's `MarkClicked` gate succeeds, a session epoch has spent its one permitted GUI click attempt even if
+the backend is canceled before launching the command. A new action requires a new session epoch.
 
 ## Privileges and dependencies
 

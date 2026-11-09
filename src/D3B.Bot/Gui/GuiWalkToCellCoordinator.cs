@@ -239,6 +239,15 @@ public sealed class GuiWalkToCellCoordinator
                 return Result(refusal);
             }
 
+            CancellationToken actorRevocationToken = request.Bot.GetGuiClickCancellationToken(intent.IntentId);
+
+            if (actorRevocationToken.IsCancellationRequested)
+            {
+                string detail = "The actor revoked the intention after acknowledgement and before input.";
+                await CancelIntentAsync(request, intent.IntentId, false, detail, cancellationToken).ConfigureAwait(false);
+                return Result(GuiActionOutcome.CreateInterrupted(false, detail));
+            }
+
             GameWindowSnapshot clickWindow = await request.WindowLocator.LocateAsync(
                 request.Xid,
                 request.WindowExpectation,
@@ -285,7 +294,8 @@ public sealed class GuiWalkToCellCoordinator
                         clickGateOpened = true;
                     return marked;
                 },
-                request.Input);
+                request.Input,
+                actorRevocationToken);
 
             GuiActionOutcome execution = await request.Executor.ExecuteAsync(
                 intent,

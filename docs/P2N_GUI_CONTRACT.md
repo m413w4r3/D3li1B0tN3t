@@ -236,6 +236,11 @@ The executor also refuses implementations that emit real input while Mode is Pre
 Preview is the sole defined P2N mode and GuiOptionsValidator rejects AllowRealInput=true. The host does not register
 the executor or XdotoolGuiInput.
 
+GuiProtocolTrustPolicy is necessary evidence evaluation, not standalone authorization. GuiWalkToCellCoordinator must
+also validate that the supplied plan starts at the server-proven current cell, ends at its requested target, follows
+walkable adjacent cells on the current map, and agrees with the verified visual target before it registers or delegates
+input.
+
 ## Correlation and confirmation
 
 The future one-intent correlation sequence is:
@@ -251,6 +256,17 @@ Packet fields cannot identify whether an identical request came from a human cli
 same time. PotentiallyConcurrentHumanInput causes an interruption; the correlation contract does not claim
 cryptographic attribution. Missing or conflicting confirmation yields Unconfirmed and no automatic retry. Visual
 animation alone is not a server confirmation.
+
+BotActor owns a cancellation token for each registered intent. Actor revocation cancels it on cancellation, expiry,
+consumption, pause, session attach/detach/stop, fight or map change, client gameplay before the click gate, translation
+latch closure, or unexpected terminal evidence. AcknowledgedGuiInput links that token with the caller token, and
+XdotoolGuiInput checks it after pointer movement and focus revalidation immediately before launching the click command.
+Revocation before launch returns Canceled without reporting possible click emission. Once the command launches, a later
+cancellation or failure remains uncertain and is Unconfirmed; it cannot retract input already sent.
+
+BotActor permits one successful MarkClicked gate per SessionEpoch. An intent blocked or canceled before that gate does
+not use the session's attempt. Once the gate succeeds, no new intent is accepted in that epoch, even when cancellation
+prevents the backend from launching its click command. Attach or reconnect creates a new epoch and resets the allowance.
 
 For WalkToCell, BotActor now feeds GuiIntentCorrelation from its existing decoded-frame inbox. It matches the initial
 client MapMovementRequest by map and endpoint, requires the self MapMovementEvent and a matching
