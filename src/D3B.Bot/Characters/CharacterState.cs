@@ -122,6 +122,9 @@ public sealed record CharacterState
     /// <summary>Gets the stacks the character carries, by their own id.</summary>
     public ImmutableSortedDictionary<int, InventoryItem> Inventory { get; init; } = ImmutableSortedDictionary<int, InventoryItem>.Empty;
 
+    /// <summary>Gets the number of inventory-content changes observed in this session.</summary>
+    public long InventoryRevision { get; init; }
+
     /// <summary>Gets the weapon the character wears, the stack at <see cref="InventoryItem.Weapon"/>, or null for none.</summary>
     public InventoryItem? Weapon => Inventory.Values.FirstOrDefault(item => item.Position is InventoryItem.Weapon);
 
@@ -150,6 +153,15 @@ public sealed record CharacterState
 
     /// <summary>Gets the most the character can carry, in pods.</summary>
     public int MaxWeight { get; init; }
+
+    /// <summary>Gets whether the server reported the current inventory weight.</summary>
+    public InventoryWeightProvenance WeightProvenance { get; init; } = InventoryWeightProvenance.Unknown;
+
+    /// <summary>Gets the number of inventory weight reports seen in this session.</summary>
+    public long WeightRevision { get; init; }
+
+    /// <summary>Gets the inventory revision covered by the latest inventory weight report.</summary>
+    public long WeightInventoryRevision { get; init; }
 
     /// <summary>Gets how full the character is: the weight it carries over the most it can, 0 until the server said.</summary>
     public double Load => MaxWeight > 0 ? (double)Weight / MaxWeight : 0;

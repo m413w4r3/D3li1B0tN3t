@@ -1,4 +1,5 @@
 using D3B.Bot.Runtime;
+using D3B.Bot.Harvesting;
 using D3B.Data;
 
 namespace D3B.Bot.Interactives;
@@ -58,6 +59,37 @@ internal sealed class SupervisedElementUseSession
             return SupervisedElementUse.BlockedPreparation(target, reason);
 
         return SupervisedElementUse.Prepare(bot, _tables, target, attemptConsumed: Volatile.Read(ref _consumed) is not 0);
+    }
+
+    /// <summary>Passively plans a harvest without consuming the one-shot authorization.</summary>
+    /// <param name="destinationMapId">The map to plan toward.</param>
+    /// <param name="wantedItemId">The gathered item to identify.</param>
+    /// <param name="thresholdPercent">The maximum inventory load percent to allow.</param>
+    /// <returns>The mission plan, or a blocked plan if a single connected bot cannot be selected.</returns>
+    public HarvestMissionPlan PlanHarvest(long destinationMapId, int wantedItemId, int thresholdPercent)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(destinationMapId);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(wantedItemId);
+        ArgumentOutOfRangeException.ThrowIfLessThan(thresholdPercent, 0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(thresholdPercent, 100);
+
+        var bot = ConnectedBot(out var reason);
+
+        if (bot is null)
+        {
+            return new HarvestMissionPlan
+            {
+                Verdict = "PLAN_BLOCKED",
+                ReasonCode = reason,
+                Missing = [reason],
+                DestinationMapId = destinationMapId,
+                Pods = new HarvestPods { ThresholdPercent = thresholdPercent },
+            };
+        }
+
+        var request = new HarvestMissionRequest(destinationMapId, wantedItemId, thresholdPercent);
+
+        return HarvestMissionPlan.Plan(bot, _tables, _graphics, _itemName, request);
     }
 
     /// <summary>Attempts the single supervised use, consuming authorization only after a ready preflight.</summary>

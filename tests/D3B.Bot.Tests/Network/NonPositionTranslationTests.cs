@@ -106,6 +106,113 @@ public sealed class NonPositionTranslationTests
     }
 
     [Fact]
+    public async Task TheUnprovenAccountRoleStatusEventWithAValidThreeFieldSchemaClosesMovement()
+    {
+        var (relay, session, connection) = Session(
+            NonPositionMessages.ClientVersion,
+            obfuscation => obfuscation.AddSchemaMessage(
+                "mem",
+                (1, FieldDescriptorProto.Types.Type.Bool),
+                (2, FieldDescriptorProto.Types.Type.Int32),
+                (3, FieldDescriptorProto.Types.Type.Int32)));
+
+        // int32 is wire-compatible with the two enum fields (kyc and mem.mek), but ggpy and ggqa remain semantically unknown.
+        connection.ServerRaw(Event("mem", 0x08, 0x01, 0x10, 0x02, 0x18, 0x01));
+
+        Assert.True(session.IsMovementTranslationBlocked);
+        await Assert.ThrowsAsync<RelayInjectionException>(() => session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId }, TestContext.Current.CancellationToken));
+        Assert.Empty(relay.Sent);
+    }
+
+    [Theory]
+    [InlineData("lnu")]
+    [InlineData("ktc")]
+    public async Task AnEmptyServerEventWithAnEmptySchemaLeavesMovementOpen(string carriedType)
+    {
+        var (relay, session, connection) = Session(
+            NonPositionMessages.ClientVersion,
+            obfuscation => obfuscation.AddSchemaMessage(carriedType));
+
+        connection.ServerRaw(Event(carriedType));
+
+        Assert.False(session.IsMovementTranslationBlocked);
+        await session.SendAsync(new MapMovementRequest { MapId = (int)TestPlay.MapId }, TestContext.Current.CancellationToken);
+        Assert.Single(relay.Sent);
+    }
+
+    [Theory]
+    [InlineData("lnu")]
+    [InlineData("ktc")]
+    public async Task AnEmptyServerEventWithAFieldItsSchemaLacksClosesMovement(string carriedType)
+    {
+        var (relay, session, connection) = Session(
+            NonPositionMessages.ClientVersion,
+            obfuscation => obfuscation.AddSchemaMessage(carriedType));
+
+        connection.ServerRaw(Event(carriedType, 0x08, 0x01));
+
+        Assert.True(session.IsMovementTranslationBlocked);
+        await Assert.ThrowsAsync<RelayInjectionException>(() => session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId }, TestContext.Current.CancellationToken));
+        Assert.Empty(relay.Sent);
+    }
+
+    [Theory]
+    [InlineData("kmk")]
+    [InlineData("kmu")]
+    public async Task AnEmptyClientRequestWithAnEmptySchemaLeavesMovementOpen(string carriedType)
+    {
+        var (relay, session, connection) = Session(
+            NonPositionMessages.ClientVersion,
+            obfuscation => obfuscation.AddSchemaMessage(carriedType));
+
+        connection.ClientRaw(Request(carriedType));
+
+        Assert.False(session.IsMovementTranslationBlocked);
+        await session.SendAsync(new MapMovementRequest { MapId = (int)TestPlay.MapId }, TestContext.Current.CancellationToken);
+        Assert.Single(relay.Sent);
+    }
+
+    [Fact]
+    public async Task AnUnprovenAccountStatusTypeWithAValidSchemaStillClosesMovement()
+    {
+        var (relay, session, connection) = Session(
+            NonPositionMessages.ClientVersion,
+            obfuscation => obfuscation.AddSchemaMessage(
+                "kpx",
+                (1, FieldDescriptorProto.Types.Type.Bool),
+                (2, FieldDescriptorProto.Types.Type.Int32),
+                (3, FieldDescriptorProto.Types.Type.Bool)));
+
+        connection.ServerRaw(Event("kpx", 0x08, 0x01, 0x10, 0x02, 0x18, 0x01));
+
+        Assert.True(session.IsMovementTranslationBlocked);
+        await Assert.ThrowsAsync<RelayInjectionException>(() => session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId }, TestContext.Current.CancellationToken));
+        Assert.Empty(relay.Sent);
+    }
+
+    [Fact]
+    public async Task CorrectedAccountAndEmptyEventsLeaveMovementOpenForTheNextRequest()
+    {
+        var (relay, session, connection) = Session(
+            NonPositionMessages.ClientVersion,
+            obfuscation =>
+            {
+                obfuscation.AddSchemaMessage("lnu");
+                obfuscation.AddSchemaMessage("ktc");
+            });
+
+        connection.ServerRaw(Event("lnu"));
+        connection.ServerRaw(Event("ktc"));
+
+        Assert.False(session.IsMovementTranslationBlocked);
+        await session.SendAsync(new MapMovementRequest { MapId = (int)TestPlay.MapId }, TestContext.Current.CancellationToken);
+        Assert.Single(relay.Sent);
+    }
+
+    [Fact]
     public async Task AListedClientRequestFromTheClientDoesNotCloseMovement()
     {
         var (relay, session, connection) = Session(NonPositionMessages.ClientVersion, obfuscation => AddInt32Message(obfuscation, "hlf"));
@@ -131,6 +238,72 @@ public sealed class NonPositionTranslationTests
             new MapMovementRequest { MapId = (int)TestPlay.MapId },
             TestContext.Current.CancellationToken));
 
+        Assert.Empty(relay.Sent);
+    }
+
+    [Theory]
+    [InlineData("lnu")]
+    [InlineData("ktc")]
+    public async Task AListedServerMessageFromTheClientClosesMovement(string carriedType)
+    {
+        var (relay, session, connection) = Session(NonPositionMessages.ClientVersion, obfuscation => AddInt32Message(obfuscation, carriedType));
+
+        connection.ClientRaw(Event(carriedType, 0x08, 0x01));
+
+        Assert.True(session.IsMovementTranslationBlocked);
+        await Assert.ThrowsAsync<RelayInjectionException>(() => session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken));
+        Assert.Empty(relay.Sent);
+    }
+
+    [Theory]
+    [InlineData("kmk")]
+    [InlineData("kmu")]
+    public async Task AListedClientMessageTypeSentFromTheServerClosesMovement(string carriedType)
+    {
+        var (relay, session, connection) = Session(NonPositionMessages.ClientVersion, obfuscation => AddInt32Message(obfuscation, carriedType));
+
+        connection.ServerRaw(Event(carriedType, 0x08, 0x01));
+
+        Assert.True(session.IsMovementTranslationBlocked);
+        await Assert.ThrowsAsync<RelayInjectionException>(() => session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken));
+        Assert.Empty(relay.Sent);
+    }
+
+    [Fact]
+    public async Task AListedServerMessageWithAForeignTypeUrlClosesMovement()
+    {
+        var (relay, session, connection) = Session(NonPositionMessages.ClientVersion, obfuscation => AddInt32Message(obfuscation, "lnu"));
+        var envelope = GameMessage.Parser.ParseFrom(Event("lnu", 0x08, 0x01));
+        envelope.Event.Content.TypeUrl = "type.ankama.com/x/lnu";
+
+        connection.ServerRaw(envelope.ToByteArray());
+
+        Assert.True(session.IsMovementTranslationBlocked);
+        await Assert.ThrowsAsync<RelayInjectionException>(() => session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken));
+        Assert.Empty(relay.Sent);
+    }
+
+    [Theory]
+    [InlineData("kmk")]
+    [InlineData("kmu")]
+    public async Task AnEmptyClientRequestWithAFieldItsSchemaLacksClosesMovement(string carriedType)
+    {
+        var (relay, session, connection) = Session(
+            NonPositionMessages.ClientVersion,
+            obfuscation => obfuscation.AddSchemaMessage(carriedType));
+
+        connection.ClientRaw(Request(carriedType, 0x08, 0x01));
+
+        Assert.True(session.IsMovementTranslationBlocked);
+        await Assert.ThrowsAsync<RelayInjectionException>(() => session.SendAsync(
+            new MapMovementRequest { MapId = (int)TestPlay.MapId },
+            TestContext.Current.CancellationToken));
         Assert.Empty(relay.Sent);
     }
 

@@ -9,4 +9,8 @@ namespace D3B.Bot.Characters;
 /// <param name="LevelFloor">The experience the level starts at.</param>
 /// <param name="NextLevelFloor">The experience the next level starts at.</param>
 /// <param name="Skills">The skills it lets the character use, by id in the client's tables, empty until the server says.</param>
-public sealed record CharacterJob(int JobId, int Level, long Experience, long LevelFloor, long NextLevelFloor, ImmutableArray<int> Skills);
+public sealed record CharacterJob(int JobId, int Level, long Experience, long LevelFloor, long NextLevelFloor, ImmutableArray<int> Skills)
+{
+    /// <summary>Gets whether the server reported this job's level.</summary>
+    public bool LevelKnown { get; init; }
+}

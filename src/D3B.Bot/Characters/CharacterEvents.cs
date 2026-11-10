@@ -164,14 +164,32 @@ public static class CharacterEvents
             StorageContentEvent content when state.Storage is { } storage => state with { Storage = storage with { Kamas = content.Kamas } },
             StorageKamasUpdateEvent kamas when state.Storage is { } storage => state with { Storage = storage with { Kamas = kamas.Kamas } },
             ExchangeLeaveEvent => state with { Storage = null },
-            InventoryContentEvent content => state with { Inventory = Stacks(content.Objects), Kamas = content.Kamas },
-            ObjectAddedEvent { Object: { Item: not null } added } => state with { Inventory = state.Inventory.SetItem(added.Item.Uid, Stack(added)) },
+            InventoryContentEvent content => state with
+            {
+                Inventory = Stacks(content.Objects),
+                Kamas = content.Kamas,
+                InventoryRevision = state.InventoryRevision + 1,
+            },
+            ObjectAddedEvent { Object: { Item: not null } added } => state with
+            {
+                Inventory = state.Inventory.SetItem(added.Item.Uid, Stack(added)),
+                InventoryRevision = state.InventoryRevision + 1,
+            },
             ObjectQuantityEvent { Object: { } changed } when state.Inventory.TryGetValue(changed.Uid, out var stack) => state with
             {
                 Inventory = state.Inventory.SetItem(changed.Uid, stack with { Quantity = changed.Quantity }),
+                InventoryRevision = state.InventoryRevision + 1,
             },
-            ObjectsDeletedEvent deleted => state with { Inventory = state.Inventory.RemoveRange(deleted.Uids) },
-            ObjectDeletedEvent deleted => state with { Inventory = state.Inventory.Remove(deleted.Uid) },
+            ObjectsDeletedEvent deleted => state with
+            {
+                Inventory = state.Inventory.RemoveRange(deleted.Uids),
+                InventoryRevision = state.InventoryRevision + 1,
+            },
+            ObjectDeletedEvent deleted => state with
+            {
+                Inventory = state.Inventory.Remove(deleted.Uid),
+                InventoryRevision = state.InventoryRevision + 1,
+            },
             ObjectMovementEvent moved when state.Inventory.TryGetValue(moved.Uid, out var stack) => state with
             {
                 Inventory = state.Inventory.SetItem(moved.Uid, stack with { Position = moved.Position }),
@@ -180,7 +198,14 @@ public static class CharacterEvents
             LifeRegenEndEvent ended => state with { Life = ended.Life, MaxLife = ended.MaxLife, LifeRegenInterval = null },
             LifeRegenStartEvent started => state with { LifeRegenInterval = started.Interval > 0 ? started.Interval : null },
             KamasUpdateEvent kamas => state with { Kamas = kamas.Kamas },
-            InventoryWeightEvent weight => state with { Weight = weight.Weight, MaxWeight = weight.MaxWeight },
+            InventoryWeightEvent weight => state with
+            {
+                Weight = weight.Weight,
+                MaxWeight = weight.MaxWeight,
+                WeightProvenance = InventoryWeightProvenance.ServerEvent,
+                WeightRevision = state.WeightRevision + 1,
+                WeightInventoryRevision = state.InventoryRevision,
+            },
             JobDescriptionEvent description => state with { Jobs = Described(state.Jobs, description) },
             JobExperiencesEvent experiences => state with { Jobs = Experienced(state.Jobs, experiences) },
             SpellsEvent spells => state with
@@ -352,7 +377,7 @@ public static class CharacterEvents
         {
             var skills = jobs.TryGetValue(job.JobId, out var known) ? known.Skills : [];
 
-            jobs = jobs.SetItem(job.JobId, new CharacterJob(job.JobId, job.Level, job.Experience, job.LevelFloor, job.NextLevelFloor, skills));
+            jobs = jobs.SetItem(job.JobId, new CharacterJob(job.JobId, job.Level, job.Experience, job.LevelFloor, job.NextLevelFloor, skills) { LevelKnown = true });
         }
 
         return jobs;

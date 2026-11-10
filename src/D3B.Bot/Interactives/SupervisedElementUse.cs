@@ -244,6 +244,7 @@ internal static class SupervisedElementUse
                     }
 
                     attempt.InventoryBefore = Carried(context.State, expectedItemId);
+                    attempt.WeightRevisionBefore = context.State.WeightRevision;
                     return true;
                 }
 
@@ -286,6 +287,7 @@ internal static class SupervisedElementUse
                     },
                     Timeout.InfiniteTimeSpan,
                     token).ConfigureAwait(false);
+                attempt.WeightRevisionBefore = context.State.WeightRevision;
                 BotLog.ElementUseFrontierOpen(context.Log, state.Key.CharacterId, elementId);
 
                 var answered = await answer.WaitAsync(context.Delays.Answer, token).ConfigureAwait(false);
@@ -337,6 +339,9 @@ internal static class SupervisedElementUse
 
                 if (finalState.MapId != preparation.MapId || finalState.Cell != preparation.Cell)
                     return new BehaviorVerdict(SupervisedElementUseOutcome.Unconfirmed, "POSITION_CHANGED_AFTER_SEND");
+
+                if (!finalState.IsPositionTrusted)
+                    return new BehaviorVerdict(SupervisedElementUseOutcome.Unconfirmed, "POSITION_NOT_TRUSTED_AFTER_SEND");
 
                 if (bot.View.SessionEpoch != preparation.SessionEpoch)
                     return new BehaviorVerdict(SupervisedElementUseOutcome.Unconfirmed, "SESSION_CHANGED_AFTER_SEND");
@@ -609,7 +614,9 @@ internal static class SupervisedElementUse
             ErrorSkillInstanceId = attempt.ErrorSkillInstanceId,
             EndMapId = endState?.MapId,
             EndCell = endState?.Cell,
+            EndPositionTrusted = endState?.IsPositionTrusted == true,
             EndProvenance = endState?.Provenance ?? CellProvenance.Unknown,
+            WeightRevisionBefore = attempt.WeightRevisionBefore,
         };
 
         return new SupervisedElementUseResult(outcome, reason, evidence, detail);
@@ -648,6 +655,8 @@ internal static class SupervisedElementUse
         public int? InventoryBefore { get; set; }
 
         public int? InventoryAfter { get; set; }
+
+        public long? WeightRevisionBefore { get; set; }
 
         public int? ErrorSkillInstanceId { get; set; }
     }

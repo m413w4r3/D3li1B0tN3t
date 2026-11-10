@@ -1,4 +1,5 @@
 using D3B.Bot.Characters;
+using D3B.Bot.Harvesting;
 using D3B.Bot.Tests.Runtime;
 using D3B.Engine.Maps;
 using D3B.Network.Relay;
@@ -158,6 +159,7 @@ public sealed class CharacterEventsTests
                   "IsWorn": true
                 }
               },
+              "InventoryRevision": 1,
               "Weapon": {
                 "Uid": 30,
                 "ItemId": 2400,
@@ -172,6 +174,9 @@ public sealed class CharacterEventsTests
               "LifeRegenInterval": null,
               "Weight": 770,
               "MaxWeight": 7590,
+              "WeightProvenance": 1,
+              "WeightRevision": 1,
+              "WeightInventoryRevision": 1,
               "Load": 0.10144927536231885,
               "Jobs": {
                 "2": {
@@ -183,7 +188,8 @@ public sealed class CharacterEventsTests
                   "Skills": [
                     6,
                     39
-                  ]
+                  ],
+                  "LevelKnown": true
                 }
               },
               "Spells": {
@@ -307,6 +313,7 @@ public sealed class CharacterEventsTests
             Server(new ObjectQuantityEvent { Object = new ObjectQuantity { Uid = 12, Quantity = 54 } }),
             Server(new ObjectQuantityEvent { Object = new ObjectQuantity { Uid = 999, Quantity = 1 } }),
             Server(new ObjectsDeletedEvent { Uids = { 30 } }),
+            Server(new ObjectDeletedEvent { Uid = 999 }),
             Server(new KamasUpdateEvent { Kamas = 11_000 }),
             Server(new InventoryWeightEvent { Weight = 812, MaxWeight = 7_590 }));
 
@@ -315,6 +322,37 @@ public sealed class CharacterEventsTests
             changed.Inventory.Values);
         Assert.Equal(11_000, changed.Kamas);
         Assert.Equal(812, changed.Weight);
+        Assert.Equal(5, changed.InventoryRevision);
+        Assert.Equal(changed.InventoryRevision, changed.WeightInventoryRevision);
+    }
+
+    [Fact]
+    public void InventoryWeightBecomesStaleAfterInventoryChangesUntilReportedAgain()
+    {
+        var weighted = Apply(_chosen, Server(new InventoryWeightEvent { Weight = 100, MaxWeight = 1_000 }));
+        var stale = Apply(weighted, Server(new ObjectAddedEvent
+        {
+            Object = new InventoryObject { Item = new ObjectItem { Uid = 50, ItemId = 1_844, Quantity = 1 }, Position = 63 },
+        }));
+        var stalePods = HarvestPods.From(stale);
+
+        Assert.Equal(0, weighted.InventoryRevision);
+        Assert.Equal(0, weighted.WeightInventoryRevision);
+        Assert.Equal(1, stale.InventoryRevision);
+        Assert.Equal(0, stale.WeightInventoryRevision);
+        Assert.False(stalePods.Known);
+        Assert.Null(stalePods.Weight);
+        Assert.Null(stalePods.MaxWeight);
+        Assert.Equal("WEIGHT_STALE", stalePods.Blocker);
+
+        var refreshed = Apply(stale, Server(new InventoryWeightEvent { Weight = 105, MaxWeight = 1_000 }));
+        var freshPods = HarvestPods.From(refreshed);
+
+        Assert.Equal(1, refreshed.WeightInventoryRevision);
+        Assert.True(freshPods.Known);
+        Assert.Equal(105, freshPods.Weight);
+        Assert.Equal(1_000, freshPods.MaxWeight);
+        Assert.Null(freshPods.Blocker);
     }
 
     [Fact]
@@ -328,6 +366,7 @@ public sealed class CharacterEventsTests
 
         Assert.Null(takenOff.Weapon);
         Assert.False(takenOff.Inventory.ContainsKey(999));
+        Assert.Equal(standing.InventoryRevision, takenOff.InventoryRevision);
 
         var worn = Apply(takenOff, Server(new ObjectMovementEvent { Uid = 12, Position = InventoryItem.Weapon }));
 

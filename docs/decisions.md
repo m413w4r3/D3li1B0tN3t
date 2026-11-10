@@ -7755,3 +7755,63 @@ Settled questions leave this table, and the decision that settles one says so.
   `tests/D3B.Bot.Tests/Interactives/ElementCandidatesTests.cs`, `ElementCandidatesSessionTests.cs`,
   `SupervisedElementUseConsoleTests.cs`; `docs/P2O_ELEMENT_CANDIDATES_RUNBOOK.md`,
   `docs/P2O_ELEMENT_USE_RUNBOOK.md`, `docs/P2O_ARCHITECTURE.md`.
+
+## D348: D3B-R1 adds an offline harvest mission chain
+
+*2026-11-10, D3B-R1.*
+
+- **Decision**: admit only the four protocol types proven safe by this batch: `lnu` and `ktc` are server types;
+  `kmk` and `kmu` are client types. Each has an empty schema and empty reference field map, so field completeness is
+  vacuous; the observed directions and type identities are supported by the build schema, reference and protocol
+  report. Do not admit `mem`: only `ggpz` is semantically proven; `ggpy` and `ggqa` remain reference-labelled unknown,
+  and account role/security is an excluded family. Keep the regression in which a valid three-field `mem` payload
+  closes movement. The batch reduces blockers from 62 to 58; `mem` remains one of the 58. Do not open the translation
+  latch artificially.
+
+  The offline mission contract uses server-event weight provenance and inventory-revision freshness via
+  `InventoryRevision`/`WeightInventoryRevision`; stale weight is `WEIGHT_STALE`. The post-harvest weight revision is
+  captured at the post-write send barrier. Harvest evidence requires a trusted end position
+  (`EndPositionTrusted`); otherwise it stops with `POSITION_NOT_TRUSTED` or
+  `POSITION_NOT_TRUSTED_AFTER_SEND`. Readiness requires a known job level (unknown is not level 1) and verified target
+  identity; ambiguous evidence blocks, while multiple verified candidates are
+  resolved deterministically by nearest confirmed approach then element id and recorded as
+  `MULTIPLE_TARGETS_RESOLVED_BY_APPROACH`. It plans an approach with `ElementCells` and
+  `CellPathfinder`, travels with `WorldTravel` and per-transition journal evidence, then uses the existing
+  `SupervisedElementUse` one-shot protocol path. Its exact stages are `CHECK_SESSION`, `CHECK_PODS`, `CHECK_JOB`,
+  `PLAN_ROUTE`, `TRAVEL_TO_MAP`, `DISCOVER_TARGET`, `PLAN_APPROACH`, `WALK_TO_USE_CELL`, `REVALIDATE_ALL`,
+  `USE_ELEMENT`, `VERIFY_HARVEST`, `CHECK_PODS_AFTER`, `STOP`. After arrival, the runner rechecks session, translation
+  latch, journal-confirmed final map and position trust, pods and job before discovery; after the approach walk it
+  performs the full revalidation (session, translation latch, position, pods, job, target identity and action readiness).
+  Actual journaled travel transitions are capped by `request.MaxTransitions` at `TRAVEL_TO_MAP` (`TRANSITION_LIMIT`),
+  in addition to `WorldTravel`'s bounded replanning. Harvest evidence requires an attributed start, ordered end,
+  expected item, positive inventory gain still present at verdict, a trusted end position, and consistent session
+  and position; an end event alone cannot pass. The mission does not retry its harvest action and starts no banking,
+  combat or activity. There is no new send path.
+
+  Expose only passive `p2j harvest plan <destinationMapId> <wantedItemId>` in the console. There is no live execution
+  command. `HarvestMissionRunner` remains internal/test-only and is not wired to live execution. Live operation remains
+  **BLOCKED** under D340; this decision grants no GO. Work was performed on `/home/nill/.paseo/worktrees/17r3bypd/d3b-r1-harvest-chain`,
+  branch `d3b-r1-harvest-chain`, based on `5215319a0832eef68aac28ed27bb996aafb9b926`. No commit, push or merge was
+  made; no live action was performed.
+- **Why**: the offline chain can be reviewed end to end while keeping protocol admission narrow and preserving the
+  existing D340 boundary. The unproven `mem` fields and untested live dependencies are not sufficient grounds to
+  permit an action.
+- **Checked**: corrected protocol batch: 4 types; `mem` regression remains blocking. Focused `HarvestMission`: 44/44;
+  harvesting filter: 107/107; console/plan: 26/26; `D3B.Bot.Tests` serialized: 1054/1054 on three consecutive runs;
+  full solution serialized: 2484 total, 2480 passed, 4 skipped (`D3B.Diagnostic`), 0 failed, exit 0 on two consecutive
+  runs. Build: 0 warnings, 0 errors. `dotnet format --verify-no-changes` and `git diff --check`: 0.
+- **Audit repair**: the first independent xhigh audit rejected the tree with four blockers: untrusted end position;
+  a pre-harvest weight event could be accepted; travel could exceed `MaxTransitions`; readiness was not rechecked after
+  travel. All four were fixed and re-tested. The delta audit returned APPROVE with no remaining blocker; the residuals are recorded in docs/D3B_R1_REPORT.md.
+  The two-map integration test confirmed transitions in order and stopped at `TARGET_NOT_FOUND` without a use request.
+  The live scenario was not launched.
+- **Source**: `src/D3B.Bot/Network/NonPositionMessages.cs`;
+  `src/D3B.Bot/Characters/CharacterState.cs`, `CharacterEvents.cs`, `CharacterJob.cs`;
+  `src/D3B.Bot/Harvesting/HarvestPods.cs`, `HarvestJob.cs`, `HarvestResourceTarget.cs`, `HarvestReadiness.cs`,
+  `HarvestApproachPlanner.cs`, `HarvestMissionPlan.cs`, `HarvestMissionRunner.cs`;
+  `src/D3B.Bot/Movement/WorldTravel.cs`, `src/D3B.Engine/Maps/ElementCells.cs`,
+  `src/D3B.Engine/Maps/CellPathfinder.cs`, `src/D3B.Bot/Interactives/SupervisedElementUse.cs`,
+  `SupervisedElementUseSession.cs`, `src/D3B.Bot/Hosting/SupervisedElementUseConsole.cs`;
+  `tests/D3B.Bot.Tests/Harvesting/HarvestMissionIntegrationTests.cs`, `HarvestMissionRefusalTests.cs`,
+  `HarvestMissionTests.cs`, `tests/D3B.Bot.Tests/Interactives/HarvestPlanConsoleTests.cs`,
+  `tests/D3B.Bot.Tests/Network/NonPositionTranslationTests.cs`; `docs/D3B_R1_REPORT.md`.

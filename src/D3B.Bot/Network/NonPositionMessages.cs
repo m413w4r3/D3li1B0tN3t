@@ -10,7 +10,7 @@ namespace D3B.Bot.Network;
 /// whose identity a reference proves field by field, whose family is outside the map, gamemap, the fight, the house, the
 /// haven bag, the game action, the role-play challenge, the NPC map state, the client's verification, BAK/HAAPI and the
 /// account role/security, and whose schema the build's own payload validates under the game's type URL. A listed type
-/// arriving from the side other than GO 1 observed is contradictory and stays latched. The reference is BillBot's
+/// arriving from the side other than the proving GO 1 or S2B observation is contradictory and stays latched. The reference is BillBot's
 /// <c>game_mappings_detailed.json</c>; a field is proven only when the build's schema names every field of the message
 /// and the reference names it, recursively for message-typed fields. A partial match, an anonymous field, a map-like
 /// family or an unidentified type stays out and keeps closing movement.
@@ -28,7 +28,7 @@ internal static class NonPositionMessages
     public const string ClientVersion = "3.7.13.17";
 
     // Each comment gives the schema field names and the reference's name for them. The value is the reference's readable
-    // name and whether GO 1 saw the client send it: a listed type from the other side is contradictory and stays latched.
+    // name and whether the proving GO 1 or S2B observation saw the client send it: a listed type from the other side is contradictory and stays latched.
     private static readonly Dictionary<string, (string Reference, bool FromClient)> _messages = new(StringComparer.Ordinal)
     {
         // TitlesAndOrnamentsEvent: fngc -> ornaments, fngd -> titles.
@@ -57,6 +57,10 @@ internal static class NonPositionMessages
         ["klu"] = ("com.ankama.dofus.server.game.protocol.contact.FriendSetWarnOnLevelGainRequest", true),
         // FriendSetWarnOnConnectionRequest: fzty -> enable.
         ["kmj"] = ("com.ankama.dofus.server.game.protocol.contact.FriendSetWarnOnConnectionRequest", true),
+        // AcquaintanceListRequest: empty schema; the reference names no fields.
+        ["kmk"] = ("com.ankama.dofus.server.game.protocol.contact.AcquaintanceListRequest", true),
+        // FriendListRequest: empty schema; the reference names no fields.
+        ["kmu"] = ("com.ankama.dofus.server.game.protocol.contact.FriendListRequest", true),
         // QueueStatusEvent: fzwj -> position, fzwk -> total. The position is the queue's, not the character's.
         ["kna"] = ("com.ankama.dofus.server.game.protocol.connection.QueueStatusEvent", false),
         // PongEvent: fzwo -> quiet.
@@ -71,8 +75,12 @@ internal static class NonPositionMessages
         ["krm"] = ("com.ankama.dofus.server.game.protocol.character.CharacterExperienceGainEvent", false),
         // CharacterCapabilitiesEvent: gapo -> guild_emblem_symbol_category.
         ["krw"] = ("com.ankama.dofus.server.game.protocol.character.management.CharacterCapabilitiesEvent", false),
+        // CharacterLoadingCompleteEvent: empty schema; the reference names no fields.
+        ["ktc"] = ("com.ankama.dofus.server.game.protocol.character.management.CharacterLoadingCompleteEvent", false),
         // SequenceNumberRequest: gecd -> number.
         ["lnt"] = ("com.ankama.dofus.server.game.protocol.basic.SequenceNumberRequest", true),
+        // SequenceNumberEvent: empty schema; the reference names no fields.
+        ["lnu"] = ("com.ankama.dofus.server.game.protocol.basic.SequenceNumberEvent", false),
         // TimeEvent: geei -> timestamp, geej -> timezone_offset.
         ["lok"] = ("com.ankama.dofus.server.game.protocol.basic.TimeEvent", false),
         // ArenaUpdatePlayerInformationEvent: gesc -> ban_end_date, gesd -> arena_ranks.
@@ -83,7 +91,7 @@ internal static class NonPositionMessages
         ["meq"] = ("com.ankama.dofus.server.game.protocol.account.SessionElapsedDurationEvent", false),
     };
 
-    /// <summary>Gets the build's messages the list holds, with the reference's readable name and whether GO 1 saw the client send it.</summary>
+    /// <summary>Gets the build's messages the list holds, with the reference's readable name and whether the proving GO 1 or S2B observation saw the client send it.</summary>
     public static IReadOnlyDictionary<string, (string Reference, bool FromClient)> Messages => _messages;
 
     /// <summary>Gets whether a build's carried type is one of its proven non-position messages.</summary>

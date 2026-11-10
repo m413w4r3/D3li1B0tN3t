@@ -68,7 +68,8 @@ public sealed class SupervisedElementUseConsoleTests
         await console.RunAsync(new StringReader(string.Empty), output, TestContext.Current.CancellationToken);
 
         Assert.Empty(connection.Sent);
-        Assert.Contains("P2J supervised element use enabled. Commands: p2j element readiness <mapId> <cell> <elementId> <skillId> | p2j element use <mapId> <cell> <elementId> <skillId> | p2j element candidates", output.ToString());
+        Assert.Contains("P2J supervised element use enabled. Commands: p2j element readiness <mapId> <cell> <elementId> <skillId> | p2j element use <mapId> <cell> <elementId> <skillId> | p2j element candidates | p2j harvest plan <destinationMapId> <wantedItemId>", output.ToString());
+        Assert.Contains("The harvest plan is passive; no execution command exists.", output.ToString());
     }
 
     [Fact]

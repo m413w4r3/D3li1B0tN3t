@@ -15,9 +15,11 @@ internal static class TestWalks
     /// <param name="count">The walk's number among D3B's requests.</param>
     /// <param name="beforeResponse">What the server sends between the client's confirmation and its response, such as the map an action cell leads to.</param>
     /// <param name="afterRequestRecorded">A test signal to await before replying to D3B's request.</param>
-    public static async Task<int> WalkedAsync(TestPlay play, TestConnection connection, int count, IMessage? beforeResponse = null, Func<Task>? afterRequestRecorded = null)
+    /// <param name="advance">How much fake time to advance while waiting for the request.</param>
+    /// <param name="timeout">The wall-clock deadline for waiting for the request.</param>
+    public static async Task<int> WalkedAsync(TestPlay play, TestConnection connection, int count, IMessage? beforeResponse = null, Func<Task>? afterRequestRecorded = null, TimeSpan? advance = null, TimeSpan? timeout = null)
     {
-        var request = Assert.IsType<MapMovementRequest>(await SentAsync(play, connection, count));
+        var request = Assert.IsType<MapMovementRequest>(await SentAsync(play, connection, count, advance, timeout));
 
         if (afterRequestRecorded is not null)
             await afterRequestRecorded();
@@ -39,14 +41,14 @@ internal static class TestWalks
     }
 
     /// <summary>Waits until D3B sent a number of requests, the clock moving meanwhile, as after a map change; gives the last.</summary>
-    public static async Task<IMessage> SentAsync(TestPlay play, TestConnection connection, int count)
+    public static async Task<IMessage> SentAsync(TestPlay play, TestConnection connection, int count, TimeSpan? advance = null, TimeSpan? timeout = null)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(10));
 
         while (connection.Sent.Count < count)
         {
             Assert.True(DateTime.UtcNow < deadline, $"D3B sent {connection.Sent.Count} requests, not {count}.");
-            play.Time.Advance(TimeSpan.FromMilliseconds(100));
+            play.Time.Advance(advance ?? TimeSpan.FromMilliseconds(100));
             await Task.Delay(5, TestContext.Current.CancellationToken);
         }
 
