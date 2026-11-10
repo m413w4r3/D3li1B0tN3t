@@ -1,4 +1,5 @@
 using System.Globalization;
+using D3B.Bot.Harvesting;
 using D3B.Bot.Interactives;
 using D3B.Data.Maps;
 using Microsoft.Extensions.Hosting;
@@ -14,7 +15,7 @@ namespace D3B.Bot.Hosting;
 /// </remarks>
 internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
 {
-    private const string Usage = "p2j element readiness <mapId> <cell> <elementId> <skillId> | p2j element use <mapId> <cell> <elementId> <skillId> | p2j element candidates";
+    private const string Usage = "p2j element readiness <mapId> <cell> <elementId> <skillId> | p2j element use <mapId> <cell> <elementId> <skillId> | p2j element candidates | p2j harvest plan <destinationMapId> <wantedItemId>";
     private const string ActionDisabledMessage = "the use action is disabled; set Supervised:ElementUse:ActionEnabled=true only under an explicit one-action GO";
 
     private readonly SupervisedElementUseSession _session;
@@ -78,7 +79,7 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(output);
 
-        await output.WriteLineAsync($"P2J supervised element use enabled. Commands: {Usage} action={Lower(ActionEnabled)}").ConfigureAwait(false);
+        await output.WriteLineAsync($"P2J supervised element use enabled. Commands: {Usage}. The harvest plan is passive; no execution command exists. action={Lower(ActionEnabled)}").ConfigureAwait(false);
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -120,6 +121,14 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
         if (command.Kind is CommandKind.Readiness)
         {
             await PrintPreparationAsync(output, _session.Prepare(command.Target)).ConfigureAwait(false);
+
+            return;
+        }
+
+        if (command.Kind is CommandKind.HarvestPlan)
+        {
+            var plan = _session.PlanHarvest(command.DestinationMapId, command.WantedItemId, thresholdPercent: 90);
+            await PrintHarvestPlanAsync(output, plan, command.WantedItemId).ConfigureAwait(false);
 
             return;
         }
@@ -212,6 +221,28 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
         }
     }
 
+    private async Task PrintHarvestPlanAsync(TextWriter output, HarvestMissionPlan plan, int wantedItemId)
+    {
+        var snapshot = plan.Snapshot;
+        var candidates = plan.Target?.ExpectedItemId == wantedItemId ? 1 : 0;
+        var target = plan.Target is not null
+            ? "IDENTIFIED"
+            : plan.Missing.Contains("TARGET_NOT_VISIBLE_UNTIL_ARRIVAL", StringComparer.Ordinal)
+                ? "NOT_VISIBLE"
+                : "UNKNOWN";
+        var job = plan.Job;
+        var approach = plan.Approach;
+        var line = $"P2J HARVEST PLAN version=1 verdict={plan.Verdict} reason={plan.ReasonCode} start_map={Number(plan.StartMapId)} destination_map={Number(plan.DestinationMapId)} "
+            + $"transitions={Number(plan.PlannedTransitionCount)} transition_types={(plan.PlannedTransitionTypes.Length is 0 ? "unknown" : string.Join(",", plan.PlannedTransitionTypes))} "
+            + $"candidates={Number(candidates)} target={target} job={job?.Status ?? "unknown"} job_level={Number(job?.JobLevel)} required_level={Number(job?.RequiredLevel)} "
+            + $"weight={Number(plan.Pods.Weight)} max_weight={Number(plan.Pods.MaxWeight)} free_pods={Number(plan.Pods.FreePods)} load_percent={Percent(plan.Pods.LoadPercent)} threshold={Number(plan.Pods.ThresholdPercent)} "
+            + $"use_cell={Number(approach?.UseCell)} path={(approach is null ? "unknown" : Numbers(approach.Path))} "
+            + $"translation_blocked={Lower(snapshot?.TranslationBlocked)} missing={(plan.Missing.Length is 0 ? "none" : string.Join(",", plan.Missing))}";
+
+        SupervisedElementUseLog.Plan(_log, line);
+        await output.WriteLineAsync(line).ConfigureAwait(false);
+    }
+
     private static bool TryParse(string line, out Command command, out string problem)
     {
         command = default;
@@ -233,6 +264,33 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
 
             command = new Command(CommandKind.Candidates, default);
 
+            return true;
+        }
+
+        if (tokens.Length >= 3
+            && tokens[0].Equals("p2j", StringComparison.OrdinalIgnoreCase)
+            && tokens[1].Equals("harvest", StringComparison.OrdinalIgnoreCase)
+            && tokens[2].Equals("plan", StringComparison.OrdinalIgnoreCase))
+        {
+            if (tokens.Length is not 5)
+            {
+                problem = "harvest plan requires a destinationMapId and wantedItemId";
+                return false;
+            }
+
+            if (!TryParsePositiveLong(tokens[3], out var destinationMapId))
+            {
+                problem = "destinationMapId must be a positive integer";
+                return false;
+            }
+
+            if (!TryParsePositiveInt(tokens[4], out var wantedItemId))
+            {
+                problem = "wantedItemId must be a positive integer";
+                return false;
+            }
+
+            command = new Command(CommandKind.HarvestPlan, default, destinationMapId, wantedItemId);
             return true;
         }
 
@@ -319,6 +377,11 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
         return value.ToString(CultureInfo.InvariantCulture);
     }
 
+    private static string Percent(double? value)
+    {
+        return value?.ToString("0.##", CultureInfo.InvariantCulture) ?? "unknown";
+    }
+
     private static string Numbers(IEnumerable<int> values)
     {
         var numbers = values.Select(value => value.ToString(CultureInfo.InvariantCulture)).ToArray();
@@ -378,7 +441,8 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
         Readiness,
         Use,
         Candidates,
+        HarvestPlan,
     }
 
-    private readonly record struct Command(CommandKind Kind, ElementUseTarget Target);
+    private readonly record struct Command(CommandKind Kind, ElementUseTarget Target, long DestinationMapId = 0, int WantedItemId = 0);
 }

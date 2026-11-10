@@ -66,6 +66,12 @@ internal sealed record SupervisedElementUseEvidence
     /// <summary>Gets the ending cell from the bot's current state, when known.</summary>
     public int? EndCell { get; init; }
 
+    /// <summary>Gets whether the ending map and cell are trusted for actions.</summary>
+    public bool EndPositionTrusted { get; init; }
+
     /// <summary>Gets the provenance of the ending cell.</summary>
     public CellProvenance EndProvenance { get; init; }
+
+    /// <summary>Gets the inventory weight revision observed at the use request's send barrier.</summary>
+    public long? WeightRevisionBefore { get; init; }
 }

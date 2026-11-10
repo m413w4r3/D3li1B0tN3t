@@ -17,6 +17,9 @@ internal static partial class SupervisedElementUseLog
     [LoggerMessage(Level = LogLevel.Information, Message = "Supervised element use candidates: {Candidates}")]
     public static partial void Candidates(ILogger logger, string candidates);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Supervised harvest plan: {Plan}")]
+    public static partial void Plan(ILogger logger, string plan);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Supervised element use command refused: {Problem}")]
     public static partial void CommandRefused(ILogger logger, string problem);
 

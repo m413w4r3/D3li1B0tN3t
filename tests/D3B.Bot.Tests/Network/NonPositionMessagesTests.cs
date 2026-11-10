@@ -11,8 +11,13 @@ public sealed class NonPositionMessagesTests
         Assert.Contains("knb", NonPositionMessages.Messages);
         Assert.Contains("lok", NonPositionMessages.Messages);
         Assert.Contains("hmd", NonPositionMessages.Messages);
-        Assert.Equal(25, NonPositionMessages.Messages.Count);
-        Assert.Equal(7, NonPositionMessages.Messages.Count(message => message.Value.FromClient));
+        Assert.Contains("kmk", NonPositionMessages.Messages);
+        Assert.Contains("kmu", NonPositionMessages.Messages);
+        Assert.Contains("ktc", NonPositionMessages.Messages);
+        Assert.Contains("lnu", NonPositionMessages.Messages);
+        Assert.DoesNotContain("mem", NonPositionMessages.Messages);
+        Assert.Equal(29, NonPositionMessages.Messages.Count);
+        Assert.Equal(9, NonPositionMessages.Messages.Count(message => message.Value.FromClient));
     }
 
     [Fact]
@@ -23,9 +28,9 @@ public sealed class NonPositionMessagesTests
         string[] expected =
         [
             "hgf:server", "hgg:server", "hgh:server", "hla:server", "hlf:client", "hlw:server", "hmd:server",
-            "kbi:server", "kcf:client", "kes:server", "kkn:client", "klu:client", "kmj:client", "kna:server",
+            "kbi:server", "kcf:client", "kes:server", "kkn:client", "klu:client", "kmj:client", "kmk:client", "kmu:client", "kna:server",
             "knb:server", "kni:server", "kpu:client", "kpv:server", "krm:server", "krw:server", "lnt:client",
-            "lok:server", "lsh:server", "lwn:server", "meq:server",
+            "ktc:server", "lnu:server", "lok:server", "lsh:server", "lwn:server", "meq:server",
         ];
         var actual = NonPositionMessages.Messages
             .Select(message => message.Key + (message.Value.FromClient ? ":client" : ":server"))

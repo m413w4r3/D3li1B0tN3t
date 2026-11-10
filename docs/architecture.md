@@ -250,6 +250,10 @@ seen so.
   why. A fight, a new connection and the player's pause resume it. `HarvestPreviews` reckons what settings lead to for the
   app. Banking waits the client's display time, half a second measured, after the banker's question and after the bank
   opens, so that the client shows its windows before D3B closes them (D132, D151).
+- **D3B-R1 mission planning (D348)**: `p2j harvest plan <destinationMapId> <wantedItemId>` is a passive diagnostic; it
+  reports route, readiness and a visible target without sending a request or moving. `HarvestMissionRunner` is an
+  internal, one-shot orchestration path covered by offline integration tests only; it is not registered with the host
+  and has no live execution command. Live use remains blocked by D340.
 - **Harvesting, grown in 6c**: a resource of `Base`, such as a well's water, is asked for as any other, without a level,
   and placed by the graphics learned (`GameReferences.IsBase`, `PlacesOf`; `GraphicPlaces`, an index of every map's
   graphics built once, D150); a sub-area's maps reached only far round from its main part are isolated and left out
