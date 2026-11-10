@@ -8,18 +8,43 @@ internal sealed class SupervisedElementUseSession
 {
     private readonly Bots _bots;
     private readonly GameTables _tables;
+    private readonly GraphicSkills? _graphics;
+    private readonly Func<int, string?>? _itemName;
     private int _consumed;
+
+    internal bool AttemptConsumed => Volatile.Read(ref _consumed) is not 0;
 
     /// <summary>Initializes a new instance of the <see cref="SupervisedElementUseSession"/> class.</summary>
     /// <param name="bots">The host's bots, among which exactly one must be connected.</param>
     /// <param name="tables">The installed build's game tables.</param>
-    public SupervisedElementUseSession(Bots bots, GameTables tables)
+    /// <param name="graphics">The graphics and skills learned by the host's bots.</param>
+    /// <param name="itemName">Looks up an item's localized name.</param>
+    public SupervisedElementUseSession(
+        Bots bots,
+        GameTables tables,
+        GraphicSkills? graphics = null,
+        Func<int, string?>? itemName = null)
     {
         ArgumentNullException.ThrowIfNull(bots);
         ArgumentNullException.ThrowIfNull(tables);
 
         _bots = bots;
         _tables = tables;
+        _graphics = graphics;
+        _itemName = itemName;
+    }
+
+    /// <summary>Passively reports the current interactive element candidates.</summary>
+    /// <param name="actionEnabled">Whether the supervised action setting is enabled.</param>
+    /// <returns>The current candidate diagnostics, or why no unique bot can be selected.</returns>
+    public ElementCandidateReport Candidates(bool actionEnabled)
+    {
+        var bot = ConnectedBot(out var reason);
+
+        if (bot is null)
+            return ElementCandidateReport.Unavailable(reason, actionEnabled, AttemptConsumed);
+
+        return ElementCandidates.Capture(bot, _tables, _graphics, _itemName, AttemptConsumed, actionEnabled);
     }
 
     /// <summary>Passively prepares one target without consuming the attempt.</summary>

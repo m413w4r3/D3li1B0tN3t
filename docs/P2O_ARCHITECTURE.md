@@ -69,9 +69,14 @@ selected.
   `GuiHostModule` passes the validated admission mode only; it does not register the executor, XTest input, or a capture
   loop.
 - `SupervisedElementUseConsole` and `SupervisedElementUseSession` are wired into `D3B.Host` only, with
-  `Supervised:ElementUse:Enabled` (console/readiness) and `Supervised:ElementUse:ActionEnabled` (the use action), both
+  `Supervised:ElementUse:Enabled` (console/passive commands) and `Supervised:ElementUse:ActionEnabled` (the use action), both
   false by default. The console is not registered by `DefaultModules`; readiness is passive, and the use command is
   refused while the action gate is closed. This is a protocol path, not the GUI `SupervisedOneShot`.
+
+Passive element-candidate discovery reads one BotActor snapshot and current MapData, reusing
+CharacterState.Elements, JobCatalog, and ItemCatalog. GraphicSkills is used only as a labelled hint when server skill
+evidence is absent; it does not establish visual identity. The report keeps target identity separate from action
+availability.
 
 **OPEN — not wired or activated:** real GUI input through the host, automatic activity, the GUI `SupervisedOneShot`,
 host executor registration, and a live action. The protocol `UseElement` console is wired but inactive by default and
