@@ -7713,3 +7713,45 @@ Settled questions leave this table, and the decision that settles one says so.
   `SupervisedElementUseSettings.cs`; `src/D3B.Host/Program.cs`; `docs/P2O_ELEMENT_USE_RUNBOOK.md`;
   `tests/D3B.Bot.Tests/Interactives/SupervisedElementUseTests.cs`, `SupervisedElementUseConsoleTests.cs`,
   `tests/D3B.Bot.Tests/Hosting/SupervisedElementUseModuleTests.cs`.
+
+## D347: D3B-S2A adds passive element-candidate discovery
+
+*2026-11-10, D3B-S2A.*
+
+- **Decision**: add `p2j element candidates` to the existing supervised element-use console. It takes no `ElementId`,
+  reads one coherent `BotActor` snapshot and the current map data, and lists the harvest candidates with
+  server-observed, pack, job/item-catalog and unconfirmed-visual provenance, the session epoch and state revision. It
+  reuses `CharacterState.Elements`, `MapData.Interactives`, `JobCatalog`, `ItemCatalog`, `ElementCells` and the
+  `SupervisedElementUse` preparation; `GraphicSkills` is only a labelled hint for pack-only elements. A graphic hint,
+  a `GfxId`, or a historical identifier is never visual proof. The output separates
+  `TARGET_IDENTIFIED`/`TARGET_AMBIGUOUS`/`TARGET_UNKNOWN` from `ACTION_READY`/`ACTION_BLOCKED`; a closed translation
+  latch keeps the element diagnostics but blocks the action, and a disabled action gate leaves consultation available
+  and `p2j element use` refused. The command sends no gameplay request, moves nothing, uses no skill, starts no
+  activity and does not consume the one-shot. It is registered only with `Supervised:ElementUse:Enabled`; both
+  settings remain false by default. S2B passive observation is prepared but not executed. Live action remains
+  **BLOCKED** under D340; this entry grants no live GO and does not change D340.
+- **Why**: the Walnut's exact identifiers could not be established in P2O without a prior `ElementId`; passive
+  discovery lets an operator see every candidate, its provenance and its action blockers before any real attempt,
+  without creating a second inventory or a new automation path. Keeping identity and action availability separate
+  prevents an identified resource from being mistaken for an authorized harvest.
+- **Checked**: controlled mutation of `ElementCandidates.Build` made 14 of 65 focused tests fail; restoring the exact
+  byte-identical source returned 65/65. Independent audit found one fail-closed defect: a server element with one
+  cataloged harvest skill and one unknown skill could stay `Verified`; the identity rule now marks mixed known/unknown
+  evidence `Ambiguous`, with a targeted red 1/1 then green 1/1 regression test. The independent delta audit returned
+  **APPROVE**; the only-unknown-skill case remains `Unknown`/`SKILL_NOT_IN_CATALOG`. Focused
+  `ElementCandidates`/`SupervisedElementUse` tests: 68/68. `D3B.Bot.Tests`: 967/967. Full solution serialized with the
+  pinned SDK: 2,397 tests, 2,393 passed, 4 skipped (`D3B.Diagnostic`), 0 failed, exit 0. `dotnet build`: 0 warnings/0
+  errors. `dotnet format --verify-no-changes` and `git diff --check`: exit 0. Worktree
+  `/home/nill/.paseo/worktrees/17r3bypd/d3b-s2a-element-candidates`, branch `d3b-s2a-element-candidates`, base
+  `34b3b0538bdef8b6b7a669d68bb703f248bf917d`; no commit, push or merge. No Dofus, relay, host session, click, movement,
+  harvest, use, mapping change or Ankama modification was performed. `docs/P2O_ELEMENT_CANDIDATES_RUNBOOK.md` prepares
+  S2B with a new S2A apphost, observation-only settings, Ankama preflight/backup/restore, passive commands, private
+  evidence and hard-stop rules; it grants no GO.
+- **Source**: `src/D3B.Bot/Interactives/ElementCandidates.cs`, `ElementCandidate.cs`, `ElementCandidateReport.cs`,
+  `ElementCandidateCatalog.cs`, `ElementCandidateIdentity.cs`, `ElementCandidateTargetVerdict.cs`,
+  `ElementCandidateActionVerdict.cs`, `ElementUseSnapshot.cs`, `SupervisedElementUse.cs`,
+  `SupervisedElementUseSession.cs`; `src/D3B.Bot/Hosting/SupervisedElementUseConsole.cs`,
+  `SupervisedElementUseLog.cs`, `SupervisedElementUseModule.cs`;
+  `tests/D3B.Bot.Tests/Interactives/ElementCandidatesTests.cs`, `ElementCandidatesSessionTests.cs`,
+  `SupervisedElementUseConsoleTests.cs`; `docs/P2O_ELEMENT_CANDIDATES_RUNBOOK.md`,
+  `docs/P2O_ELEMENT_USE_RUNBOOK.md`, `docs/P2O_ARCHITECTURE.md`.

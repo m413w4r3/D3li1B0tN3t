@@ -28,63 +28,73 @@ internal static class SupervisedElementUse
         ArgumentNullException.ThrowIfNull(bot);
         ArgumentNullException.ThrowIfNull(tables);
 
+        return Prepare(Capture(bot, failClosedTranslation: false), tables, target, attemptConsumed);
+    }
+
+    /// <summary>Captures the actor's published state and the current map for passive element diagnostics.</summary>
+    internal static ElementUseSnapshot Capture(BotActor bot, bool failClosedTranslation = true)
+    {
+        ArgumentNullException.ThrowIfNull(bot);
+
+        var translationBlockedBeforeView = failClosedTranslation && bot.IsMovementTranslationBlocked;
         var view = bot.View;
+        var translationBlockedAfterView = bot.IsMovementTranslationBlocked;
+        var translationBlocked = failClosedTranslation
+            ? translationBlockedBeforeView || view.IsTranslationBlocked || translationBlockedAfterView
+            : translationBlockedAfterView;
         var state = view.State;
         var session = bot.Session;
-        var connected = view.IsConnected;
-        var sessionAttached = session is not null;
-        var translationBlocked = bot.IsMovementTranslationBlocked;
-        var paused = view.IsPaused;
-        var acting = bot.IsActing;
-        var inputMode = session?.InputMode ?? GameInputMode.ProtocolInjection;
+        MapData? map = null;
+
+        if (state.MapId is { } mapId && bot.Maps.TryGet(mapId, out var found))
+            map = found;
+
+        return new ElementUseSnapshot(
+            state,
+            map,
+            view.Revision,
+            view.SessionEpoch,
+            view.IsConnected,
+            session is not null,
+            translationBlocked,
+            view.IsPaused,
+            bot.IsActing,
+            session?.InputMode ?? GameInputMode.ProtocolInjection);
+    }
+
+    /// <summary>Prepares one exact target against a previously captured actor snapshot.</summary>
+    internal static ElementUsePreparation Prepare(
+        ElementUseSnapshot snapshot,
+        GameTables tables,
+        ElementUseTarget target,
+        bool attemptConsumed = false)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(tables);
+
+        var state = snapshot.State;
         var preparation = new ElementUsePreparation
         {
             State = ElementUsePreparationState.Ready,
             Reason = "READY",
             Target = target,
             AttemptConsumed = attemptConsumed,
-            SessionEpoch = view.SessionEpoch,
-            StateRevision = view.Revision,
-            Connected = connected,
-            SessionAttached = sessionAttached,
-            TranslationBlocked = translationBlocked,
-            Paused = paused,
-            Acting = acting,
-            InputMode = inputMode,
+            SessionEpoch = snapshot.SessionEpoch,
+            StateRevision = snapshot.Revision,
+            Connected = snapshot.Connected,
+            SessionAttached = snapshot.SessionAttached,
+            TranslationBlocked = snapshot.TranslationBlocked,
+            Paused = snapshot.Paused,
+            Acting = snapshot.Acting,
+            InputMode = snapshot.InputMode,
             MapId = state.MapId,
             Cell = state.Cell,
             Provenance = state.Provenance,
             PositionTrusted = state.IsPositionTrusted,
         };
 
-        if (!connected)
-            return Decided(preparation, ElementUsePreparationState.Blocked, "DISCONNECTED");
-
-        if (session is null)
-            return Decided(preparation, ElementUsePreparationState.Blocked, "NO_SESSION");
-
-        if (translationBlocked)
-            return Decided(preparation, ElementUsePreparationState.Blocked, "TRANSLATION_LATCH_CLOSED");
-
-        if (paused)
-            return Decided(preparation, ElementUsePreparationState.Blocked, "BOT_PAUSED");
-
-        if (acting)
-            return Decided(preparation, ElementUsePreparationState.Blocked, "BOT_ACTING");
-
-        if (attemptConsumed)
-            return Decided(preparation, ElementUsePreparationState.Blocked, "ATTEMPT_ALREADY_CONSUMED");
-
-        if (inputMode is not GameInputMode.ProtocolInjection)
-            return Decided(preparation, ElementUsePreparationState.Blocked, "INPUT_MODE_NOT_PROTOCOL_INJECTION");
-
-        if (state.IsInHavenBag)
-            return Decided(preparation, ElementUsePreparationState.Blocked, "HAVEN_BAG");
-
-        var guard = MovementGuard.Refuse(state, connected);
-
-        if (guard is not MovementRefusal.None)
-            return Decided(preparation, ElementUsePreparationState.Blocked, MovementReadiness.CodeOf(guard));
+        if (SessionBlocker(snapshot, attemptConsumed) is { } blocker)
+            return Decided(preparation, ElementUsePreparationState.Blocked, blocker);
 
         if (target.MapId <= 0 || target.Cell is < 0 or >= MapData.CellCount || target.ElementId < 0 || target.SkillId <= 0)
             return Decided(preparation, ElementUsePreparationState.Blocked, "INVALID_TARGET");
@@ -95,13 +105,52 @@ internal static class SupervisedElementUse
         if (state.Cell != target.Cell)
             return Decided(preparation, ElementUsePreparationState.Blocked, "CELL_CHANGED");
 
-        var resolution = ResolveElement(bot.Maps, tables, state, target);
+        var resolution = ResolveElement(snapshot, tables, target);
         preparation = WithResolution(preparation, resolution);
 
         if (resolution.FailureReason is { } reason)
             return Decided(preparation, resolution.FailureState, reason);
 
         return preparation;
+    }
+
+    /// <summary>Returns the first session or movement blocker for a passive snapshot.</summary>
+    internal static string? SessionBlocker(ElementUseSnapshot snapshot, bool attemptConsumed)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var state = snapshot.State;
+
+        if (!snapshot.Connected)
+            return "DISCONNECTED";
+
+        if (!snapshot.SessionAttached)
+            return "NO_SESSION";
+
+        if (snapshot.TranslationBlocked)
+            return "TRANSLATION_LATCH_CLOSED";
+
+        if (snapshot.Paused)
+            return "BOT_PAUSED";
+
+        if (snapshot.Acting)
+            return "BOT_ACTING";
+
+        if (attemptConsumed)
+            return "ATTEMPT_ALREADY_CONSUMED";
+
+        if (snapshot.InputMode is not GameInputMode.ProtocolInjection)
+            return "INPUT_MODE_NOT_PROTOCOL_INJECTION";
+
+        if (state.IsInHavenBag)
+            return "HAVEN_BAG";
+
+        var guard = MovementGuard.Refuse(state, snapshot.Connected);
+
+        if (guard is not MovementRefusal.None)
+            return MovementReadiness.CodeOf(guard);
+
+        return null;
     }
 
     /// <summary>Runs the one request attempt described by a ready preparation.</summary>
@@ -391,7 +440,19 @@ internal static class SupervisedElementUse
         if (state.Cell != preparation.Cell)
             return "CELL_CHANGED";
 
-        var resolution = ResolveElement(context.Maps, tables, state, preparation.Target);
+        MapData? map = context.Maps.TryGet(preparation.Target.MapId, out var found) ? found : null;
+        var snapshot = new ElementUseSnapshot(
+            state,
+            map,
+            0,
+            0,
+            context.IsConnected,
+            true,
+            false,
+            false,
+            false,
+            GameInputMode.ProtocolInjection);
+        var resolution = ResolveElement(snapshot, tables, preparation.Target);
 
         if (resolution.FailureReason is { } reason)
             return reason;
@@ -405,11 +466,12 @@ internal static class SupervisedElementUse
         return null;
     }
 
-    private static ElementUseResolution ResolveElement(GameMaps maps, GameTables tables, CharacterState state, ElementUseTarget target)
+    private static ElementUseResolution ResolveElement(ElementUseSnapshot snapshot, GameTables tables, ElementUseTarget target)
     {
         var resolution = new ElementUseResolution();
+        var state = snapshot.State;
 
-        if (!maps.TryGet(target.MapId, out var map))
+        if (snapshot.Map is not { } map || map.Id != target.MapId)
         {
             resolution.Fail(ElementUsePreparationState.Unavailable, "MAP_DATA_UNKNOWN");
             return resolution;

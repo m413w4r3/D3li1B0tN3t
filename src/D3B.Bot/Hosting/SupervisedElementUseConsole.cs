@@ -14,7 +14,7 @@ namespace D3B.Bot.Hosting;
 /// </remarks>
 internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
 {
-    private const string Usage = "p2j element readiness <mapId> <cell> <elementId> <skillId> | p2j element use <mapId> <cell> <elementId> <skillId>";
+    private const string Usage = "p2j element readiness <mapId> <cell> <elementId> <skillId> | p2j element use <mapId> <cell> <elementId> <skillId> | p2j element candidates";
     private const string ActionDisabledMessage = "the use action is disabled; set Supervised:ElementUse:ActionEnabled=true only under an explicit one-action GO";
 
     private readonly SupervisedElementUseSession _session;
@@ -110,6 +110,13 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
             return;
         }
 
+        if (command.Kind is CommandKind.Candidates)
+        {
+            await PrintCandidatesAsync(output, _session.Candidates(ActionEnabled)).ConfigureAwait(false);
+
+            return;
+        }
+
         if (command.Kind is CommandKind.Readiness)
         {
             await PrintPreparationAsync(output, _session.Prepare(command.Target)).ConfigureAwait(false);
@@ -169,12 +176,65 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
         await output.WriteLineAsync(line).ConfigureAwait(false);
     }
 
+    private async Task PrintCandidatesAsync(TextWriter output, ElementCandidateReport report)
+    {
+        var snapshot = report.Snapshot;
+        var state = snapshot?.State;
+        var header = $"P2J ELEMENT CANDIDATES version=1 reason={report.Reason} "
+            + $"session_epoch={Number(snapshot?.SessionEpoch)} state_revision={Number(snapshot?.Revision)} "
+            + $"connected={Lower(snapshot?.Connected ?? false)} session={Lower(snapshot?.SessionAttached ?? false)} "
+            + $"translation_blocked={Lower(snapshot?.TranslationBlocked ?? false)} paused={Lower(snapshot?.Paused ?? false)} "
+            + $"acting={Lower(snapshot?.Acting ?? false)} input_mode={snapshot?.InputMode.ToString() ?? "unknown"} "
+            + $"action_enabled={Lower(report.ActionEnabled)} consumed={Lower(report.AttemptConsumed)} "
+            + $"map={Number(state?.MapId)} cell={Number(state?.Cell)} provenance={state?.Provenance.ToString() ?? "unknown"} "
+            + $"trusted={Lower(state?.IsPositionTrusted ?? false)} candidates={report.Candidates.Length} "
+            + $"target={TargetName(report.Target)} action={ActionName(report.Action)} action_reason={report.ActionReason}";
+
+        SupervisedElementUseLog.Candidates(_log, header);
+        await output.WriteLineAsync(header).ConfigureAwait(false);
+
+        foreach (var candidate in report.Candidates)
+        {
+            var line = $"P2J ELEMENT CANDIDATE version=1 element={Number(candidate.ElementId)} map={Number(candidate.MapId)} "
+                + $"server_known={Lower(candidate.ServerKnown)} pack_known={Lower(candidate.PackKnown)} "
+                + $"interactive={Number(candidate.InteractiveId)} server_cell={Number(candidate.ServerCell)} "
+                + $"pack_cell={Number(candidate.PackCell)} gfx={Number(candidate.GfxId)} state={Number(candidate.ElementState)} "
+                + $"skill={Number(candidate.SkillId)} instance={Number(candidate.SkillInstanceId)} "
+                + $"skills={Numbers(candidate.SkillIds)} skill_enabled={Lower(candidate.SkillEnabled)} catalog={candidate.Catalog} "
+                + $"item={Number(candidate.GatheredItemId)} item_name={Quoted(candidate.GatheredItemName)} "
+                + $"possible_items={Numbers(candidate.PossibleItemIds)} min_level={Number(candidate.SkillMinLevel)} "
+                + $"uses_from_current_cell={Lower(candidate.UsesFromCurrentCell)} identity={candidate.Identity} "
+                + $"identity_source={candidate.IdentitySource} cell_conflict={Lower(candidate.CellConflict)} "
+                + $"visual_identity=unconfirmed prep={candidate.PreparationState} prep_reason={candidate.PreparationReason}";
+
+            SupervisedElementUseLog.Candidates(_log, line);
+            await output.WriteLineAsync(line).ConfigureAwait(false);
+        }
+    }
+
     private static bool TryParse(string line, out Command command, out string problem)
     {
         command = default;
         problem = "invalid syntax";
 
         var tokens = line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (tokens.Length >= 3
+            && tokens[0].Equals("p2j", StringComparison.OrdinalIgnoreCase)
+            && tokens[1].Equals("element", StringComparison.OrdinalIgnoreCase)
+            && tokens[2].Equals("candidates", StringComparison.OrdinalIgnoreCase))
+        {
+            if (tokens.Length is not 3)
+            {
+                problem = "candidates takes no arguments";
+
+                return false;
+            }
+
+            command = new Command(CommandKind.Candidates, default);
+
+            return true;
+        }
 
         if (tokens.Length is not 7
             || !tokens[0].Equals("p2j", StringComparison.OrdinalIgnoreCase)
@@ -234,6 +294,11 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
         return value ? "true" : "false";
     }
 
+    private static string Lower(bool? value)
+    {
+        return value?.ToString().ToLowerInvariant() ?? "unknown";
+    }
+
     private static string Number(long? value)
     {
         return value?.ToString(CultureInfo.InvariantCulture) ?? "unknown";
@@ -252,6 +317,42 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
     private static string Number(int value)
     {
         return value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string Numbers(IEnumerable<int> values)
+    {
+        var numbers = values.Select(value => value.ToString(CultureInfo.InvariantCulture)).ToArray();
+
+        return numbers.Length is 0 ? "unknown" : string.Join(",", numbers);
+    }
+
+    private static string Quoted(string? value)
+    {
+        if (value is null)
+            return "unknown";
+
+        var escaped = value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+
+        return $"\"{escaped}\"";
+    }
+
+    private static string TargetName(ElementCandidateTargetVerdict target)
+    {
+        return target switch
+        {
+            ElementCandidateTargetVerdict.Identified => "TARGET_IDENTIFIED",
+            ElementCandidateTargetVerdict.Ambiguous => "TARGET_AMBIGUOUS",
+            _ => "TARGET_UNKNOWN",
+        };
+    }
+
+    private static string ActionName(ElementCandidateActionVerdict action)
+    {
+        return action switch
+        {
+            ElementCandidateActionVerdict.Ready => "ACTION_READY",
+            _ => "ACTION_BLOCKED",
+        };
     }
 
     private async Task LoopAsync(TextReader input, TextWriter output, CancellationToken cancellationToken)
@@ -276,6 +377,7 @@ internal sealed class SupervisedElementUseConsole : IHostedService, IDisposable
     {
         Readiness,
         Use,
+        Candidates,
     }
 
     private readonly record struct Command(CommandKind Kind, ElementUseTarget Target);

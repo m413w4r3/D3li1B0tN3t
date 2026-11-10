@@ -18,15 +18,16 @@ and never retries. It is not a GUI click and does not provide the GUI calibratio
 
 Two independent settings gate it, both false by default:
 
-- `Supervised:ElementUse:Enabled` registers the console and its passive readiness command.
-- `Supervised:ElementUse:ActionEnabled` permits the `p2j element use` action. The readiness command remains available
-  when this gate is closed.
+- `Supervised:ElementUse:Enabled` registers the console and both passive commands: `p2j element candidates` and
+  `p2j element readiness`.
+- `Supervised:ElementUse:ActionEnabled` permits the `p2j element use` action. Both passive commands remain
+  available when this gate is closed.
 
 The two authorizations are:
 
 1. **Observation-only.** `Supervised:ElementUse:Enabled=true`, `Supervised:ElementUse:ActionEnabled=false`. Only
-   `p2j element readiness ...` may be issued. `p2j element use ...` is refused by the action gate and must never be
-   called. No gameplay command, no movement, no click, no activity.
+   `p2j element candidates` and `p2j element readiness ...` may be issued. `p2j element use ...` is refused by the
+   action gate and must never be called. No gameplay command, no movement, no click, no activity.
 2. **One-action GO.** After reviewing the observation evidence, a separate explicit owner GO names the exact session,
    build, map, cell, element, skill instance and expected item. Only then may `Supervised:ElementUse:ActionEnabled=true`
    be set for that host session; the host is restarted, exactly one `p2j element use ...` is sent, and no retry follows.
@@ -36,7 +37,19 @@ The two authorizations are:
 Preconditions: exact client build, private Ankama snapshot/verify/backup, relay and host started with the two settings
 above, no other D3B command and no activity. Keep the operator present.
 
-Allowed command:
+Allowed passive commands:
+
+~~~text
+p2j element candidates
+~~~
+
+It takes no ElementId and lists candidates on the current map with their server, pack, catalog, and labelled graphics
+provenance. It never sends, moves, starts an activity, or consumes the one-shot. Its target identity verdict and action
+availability verdict are independent; ACTION_BLOCKED is expected while the action gate remains closed. See
+[P2O_ELEMENT_CANDIDATES_RUNBOOK.md](P2O_ELEMENT_CANDIDATES_RUNBOOK.md) for the full S2B protocol and private relevé
+format.
+
+Readiness is also passive:
 
 ```text
 p2j element readiness <mapId> <cell> <elementId> <skillId>

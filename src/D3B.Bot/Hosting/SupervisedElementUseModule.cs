@@ -2,6 +2,8 @@ using D3B.Bot.Interactives;
 using D3B.Bot.Runtime;
 using D3B.Core.Modules;
 using D3B.Data;
+using D3B.Data.Packs;
+using D3B.Data.Texts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -25,7 +27,9 @@ public sealed class SupervisedElementUseModule : IModule
 
         bot.Services.AddSingleton(services => new SupervisedElementUseSession(
             services.GetRequiredService<Bots>(),
-            services.GetRequiredService<GameTables>()));
+            services.GetRequiredService<GameTables>(),
+            services.GetRequiredService<GraphicSkills>(),
+            ItemNames(services)));
 
         if (!settings.Enabled)
             return;
@@ -37,5 +41,36 @@ public sealed class SupervisedElementUseModule : IModule
             ActionEnabled = settings.ActionEnabled,
         });
         bot.Services.AddHostedService(services => services.GetRequiredService<SupervisedElementUseConsole>());
+    }
+
+    private static Func<int, string?> ItemNames(IServiceProvider services)
+    {
+        var texts = services.GetRequiredService<GameTexts>();
+        var pack = services.GetRequiredService<GamePack>();
+        var tables = services.GetRequiredService<GameTables>();
+        var languages = TextLanguages.All
+            .Where(language => pack.Contains(TextTable.EntryName(language)))
+            .ToArray();
+
+        return itemId =>
+        {
+            try
+            {
+                if (!tables.Items.TryGetItem(itemId, out var item))
+                    return null;
+
+                foreach (var language in languages)
+                {
+                    if (texts.TryGet(language, item.NameId, out var name))
+                        return name;
+                }
+            }
+            catch (Exception exception) when (exception is KeyNotFoundException or PackFormatException)
+            {
+                return null;
+            }
+
+            return null;
+        };
     }
 }
